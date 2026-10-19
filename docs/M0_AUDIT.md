@@ -172,19 +172,27 @@ Berdasarkan pengujian langsung pada sesi desktop macOS yang sedang berjalan (`Ko
 | 7 | **Drag Fisik Ikon Finder** | Seret (drag) file desktop ke posisi lain secara manual. | `[ ] Menunggu observasi fisik pengguna` |
 | 8 | **Seleksi Marquee Finder** | Drag area kosong desktop membentuk kotak seleksi biru Finder. | `[ ] Menunggu observasi fisik pengguna` |
 | 9 | **Visual Riak Air & Option+Klik** | Dalam Mode Interaksi, klik desktop untuk melihat riak cyan dan Option+klik untuk riak oranye secara kasat mata. | `[ ] Menunggu observasi fisik pengguna` |
-| 10 | **Navigasi Virtual Spaces** | Berpindah antar Space/Desktop (tiga jari geser atau Ctrl+Panah) untuk memastikan kolam tetap menetap di setiap virtual desktop tanpa glitch. | `[ ] Menunggu observasi fisik pengguna` |
+| 10 | **Navigasi Virtual Spaces** | Berpindah antar Space/Desktop (tiga jari geser atau Ctrl+Panah). Hasil observasi langsung pengguna: **wallpaper sedikit berkedip saat transisi**. | **DITEMUKAN GLITCH VISUAL** (Berkedip saat transisi Space) |
 | 11 | **Show Desktop & Mission Control** | Menjalankan gesture/tombol Show Desktop dan Mission Control untuk memastikan jendela kolam tidak terbang/bergeser. | `[ ] Menunggu observasi fisik pengguna` |
-| 12 | **Aplikasi Fullscreen Lain** | Membuka aplikasi lain ke mode native Fullscreen untuk memastikan tidak ada visual kolam yang bocor ke space fullscreen tersebut. | `[ ] Menunggu observasi fisik pengguna` |
+| 12 | **Aplikasi Fullscreen Lain** | Membuka aplikasi lain ke mode native Fullscreen. Hasil observasi langsung pengguna: **wallpaper sedikit berkedip saat transisi ke/dari app fullscreen**. | **DITEMUKAN GLITCH VISUAL** (Berkedip saat beralih ke app fullscreen) |
 | 13 | **Hardware Sleep & Wake Fisik** | Kunci Mac (`Ctrl + Cmd + Q`) atau tutup lid laptop selama ~15 detik, lalu buka kembali untuk memastikan app tetap stabil tanpa lonjakan. | `[ ] Menunggu observasi fisik pengguna` |
 
 ---
 
 ## 6. Keputusan Penerimaan Milestone M0
 
-> **STATUS SAAT INI: IMPLEMENTASI M0 TERSEDIA, PENERIMAAN DESKTOP MASIH TERTUNDA**
+> **STATUS SAAT INI: BELUM SELESAI (PENERIMAAN M0 TERTUNDA - DITEMUKAN ISU)**
 >
 > **Rincian Evaluasi:**
-> - **Kriteria Lulus (Terverifikasi Penuh)**: Fondasi bundle `.app`, konfigurasi NSWindow borderless non-activating, hierarki Window Server layer `-2147483623` di bawah Finder `-2147483603`, sinkronisasi menu bar status item (`🐟` <-> `🐟⚡`), transisi layer interaksi live (`-2147483602`), sinkronisasi status jeda manual di menu bar, pencegahan perebutan fokus aplikasi, sinkronisasi pause/resume timer view tanpa lompatan waktu, dan audit arsitektur izin TCC.
-> - **Kriteria Tertunda (Menunggu Observasi Fisik)**: Respons mouse/trackpad fisik pengguna pada ikon dan marquee Finder, persepsi visual riak air di layar, navigasi virtual Spaces, Mission Control/Show Desktop, visualisasi fullscreen aplikasi lain, serta sleep/wake perangkat keras fisik.
+> - **Kriteria Lulus (Terverifikasi)**: Fondasi bundle `.app`, konfigurasi NSWindow borderless non-activating, hierarki Window Server layer `-2147483623` di bawah Finder `-2147483603`, sinkronisasi menu bar status item (`🐟` <-> `🐟⚡`), transisi layer interaksi live (`-2147483602`), sinkronisasi status jeda manual di menu bar, pencegahan perebutan fokus aplikasi, sinkronisasi pause/resume timer view tanpa lompatan waktu, dan audit arsitektur izin TCC.
+> - **Kriteria Gagal / Ditemukan Isu (Teramati Nyata oleh Pengguna)**:
+>   - **Navigasi Virtual Spaces**: Wallpaper sedikit berkedip saat berpindah space desktop.
+>   - **Aplikasi Fullscreen Lain**: Wallpaper sedikit berkedip saat transisi masuk/keluar aplikasi fullscreen.
+>   - *Akar masalah teknis*:
+>     1. `WallpaperWindow.animationBehavior` masih bernilai `.default`, sehingga macOS WindowServer menerapkan transisi fade standar.
+>     2. `WallpaperWindow.backgroundColor` belum diset ke warna dasar kolam (masih default sistem), sehingga surface backing sempat mengekspos warna dasar sebelum render view.
+>     3. `WallpaperView.layer?.backgroundColor` belum diset di level CALayer GPU (hanya mengandalkan `drawRect:` software).
+>     4. `collectionBehavior` memasukkan `.fullScreenAuxiliary`, menyebabkan WindowServer mencoba menempelkan layer desktop ke private space aplikasi fullscreen pihak ketiga.
+> - **Kriteria Masih Tertunda**: Klik/drag/marquee fisik Finder, visualisasi riak air di layar fisik, Show Desktop / Mission Control, dan hardware sleep/wake fisik laptop.
 >
-> Sesuai aturan proyek, milestone M0 **belum dapat dinyatakan selesai** sampai pengamatan fisik desktop di atas telah dikonfirmasi oleh pengguna. Pekerjaan milestone M1 (simulasi kolam koi) **tidak dimulai** sebelum penerimaan M0 disetujui.
+> Sesuai kriteria penerimaan, milestone M0 **belum dapat diterima** sampai isu perkedipan visual ini ditangani dan kriteria desktop tervalidasi mulus. Milestone M1 **tidak dimulai**.
