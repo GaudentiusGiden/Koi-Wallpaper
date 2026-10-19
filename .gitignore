@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Swift Package Manager
+.build/
+Packages/
+
+# Local build artifacts
+build/
+DerivedData/
+
+# Xcode user data
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
