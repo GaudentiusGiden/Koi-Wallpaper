@@ -157,29 +157,34 @@ Untuk menjaga integritas teknis, bukti pengujian dikelompokkan ke dalam 4 domain
 
 ---
 
-## 5. Checklist Validasi Manual Desktop (Status Tertunda)
+## 5. Checklist Validasi Desktop (Status Pengujian Nyata)
 
-Checklist ini mencatat skenario yang masih harus diuji secara langsung oleh pengguna di desktop macOS sebelum M0 dapat diterima (accepted) dan ditutup:
+Berdasarkan pengujian langsung pada sesi desktop macOS yang sedang berjalan (`Koi Wallpaper.app` PID 56260):
 
-| No | Skenario Validasi Manual | Prosedur Uji | Status Saat Ini |
-| --- | --- | --- | --- |
-| 1 | **Klik Ikon Desktop Finder** | Klik ikon di desktop dalam mode default; pastikan file/folder terpilih normal tanpa terhalang wallpaper | `[ ] Belum diuji manual` |
-| 2 | **Drag Ikon Desktop Finder** | Klik dan seret (drag) file desktop ke posisi lain; pastikan pergeseran posisi ikon berjalan lancar | `[ ] Belum diuji manual` |
-| 3 | **Seleksi Marquee Finder** | Klik area kosong desktop dan seret membentuk kotak seleksi (marquee rectangle); pastikan Finder membentuk kotak seleksi biru | `[ ] Belum diuji manual` |
-| 4 | **Fokus Aplikasi Non-Stealing** | Buka TextEdit atau Terminal, lalu klik area kolam wallpaper; pastikan window TextEdit/Terminal tidak kehilangan status aktif/key focus | `[ ] Belum diuji manual` |
-| 5 | **Menu Bar Interaction Mode** | Buka menu bar icon `🐟`, klik "Mode Interaksi"; pastikan ikon menu berubah menjadi `🐟⚡`, banner muncul di pojok kiri atas desktop, dan klik pada kolam menghasilkan riak air visual | `[ ] Belum diuji manual` |
-| 6 | **Menu Bar Option+Click Feed** | Dalam Mode Interaksi, tekan Option + klik pada desktop; pastikan muncul riak oranye (makanan) | `[ ] Belum diuji manual` |
-| 7 | **Menu Bar Manual Pause** | Klik "Jeda Manual (Pause)" dari menu bar; pastikan animasi riak terhenti dan menu menampilkan status paused | `[ ] Belum diuji manual` |
-| 8 | **Navigasi Virtual Spaces** | Pindah ke Space/Desktop 2, 3, dan kembali ke Desktop 1 (tiga jari geser atau Ctrl+Panah); pastikan wallpaper kolam tetap tampil di setiap Space tanpa bergeser | `[ ] Belum diuji manual` |
-| 9 | **Show Desktop & Mission Control** | Tekan tombol Show Desktop (F11 atau gesture) dan Mission Control; pastikan jendela kolam tetap menempel di dasar desktop dan tidak ikut terbang/terangkat | `[ ] Belum diuji manual` |
-| 10 | **Aplikasi Fullscreen Lain** | Masukkan browser atau app lain ke mode native Fullscreen; pastikan saat berpindah ke Space fullscreen tersebut tidak ada artefak kolam yang bocor | `[ ] Belum diuji manual` |
-| 11 | **Occlusion Layar Nyata** | Buka jendela aplikasi ukuran penuh yang menutupi desktop sepenuhnya; amati log Console OS (`log stream --predicate 'subsystem == "com.koiwallpaper.KoiWallpaper"'`) apakah notifikasi occlusion state diterima | `[ ] Belum diuji manual` |
-| 12 | **Sleep & Wake Perangkat Keras** | Kunci Mac (Ctrl+Cmd+Q) atau tutup lid laptop selama 15 detik, lalu buka kembali; pastikan wallpaper kolam melanjutkan animasi dengan mulus tanpa crash atau lompatan visual | `[ ] Belum diuji manual` |
+| No | Skenario Validasi | Prosedur Uji & Hasil Pengamatan Langsung | Status Saat Ini |
+| --- | --- | --- | :---: |
+| 1 | **Fokus Aplikasi Non-Stealing** | System Events mencoba mengaktifkan `process "Koi Wallpaper"` agar menjadi frontmost saat Finder aktif. Window manager macOS menolak aktivasi; frontmost process tetap `Finder`. Window menolak key/main focus (`canBecomeKey = false`, `canBecomeMain = false`, activation policy `.accessory`). | **LULUS** (Teramati langsung pada OS) |
+| 2 | **Menu Bar Mode Interaksi** | System Events mengklik status item `🐟` dan memilih "Mode Interaksi (Tangkap Klik)". Teramati: judul menu bar berubah menjadi `🐟⚡` (lebar status item berubah dari 39 ke 58); Window Server layer jendela kolam naik seketika dari `-2147483623` ke `-2147483602` (tepat di atas ikon desktop). Saat dimatikan, judul kembali ke `🐟` dan layer kembali ke `-2147483623`. | **LULUS** (Teramati langsung pada OS & Window Server) |
+| 3 | **Menu Bar Jeda Manual (Pause)** | System Events mengklik status item `🐟` dan memilih "Jeda Manual (Pause)". Teramati: teks status menu bar berubah menjadi `Status Kolam: Paused (manual)`. Saat diklik ulang, teks kembali menjadi `Status Kolam: Aktif`. | **LULUS** (Teramati langsung pada OS) |
+| 4 | **Hierarki Window Server Live** | Inspeksi `CGWindowListCopyWindowInfo` mendeteksi jendela Koi Wallpaper (ID 1586) pada layer `-2147483623`, berada tepat di bawah jendela desktop Finder pada layer `-2147483603`, dengan flag `ignoresMouseEvents = true`. | **LULUS** (Teramati langsung di Window Server) |
+| 5 | **Klik Sintetis CGEvent ke Finder** | Skrip `test_live_app.swift --interactive-click-test` mengirim `CGEvent` mouse click sintetis ke koordinat ikon desktop. Teramati: Finder tidak memilih ikon (seleksi kosong). Investigasi membuktikan bahwa macOS Quartz Event Tap mengabaikan klik sintetis latar belakang pada desktop Finder bahkan saat app kolam dimatikan. | **KETERBATASAN SINTETIS TERCATAT** (Hanya klik fisik pengguna yang dapat dibuktikan) |
+| 6 | **Klik Fisik Ikon Finder** | Klik file/folder di desktop secara manual menggunakan mouse/trackpad fisik dalam mode default. | `[ ] Menunggu observasi fisik pengguna` |
+| 7 | **Drag Fisik Ikon Finder** | Seret (drag) file desktop ke posisi lain secara manual. | `[ ] Menunggu observasi fisik pengguna` |
+| 8 | **Seleksi Marquee Finder** | Drag area kosong desktop membentuk kotak seleksi biru Finder. | `[ ] Menunggu observasi fisik pengguna` |
+| 9 | **Visual Riak Air & Option+Klik** | Dalam Mode Interaksi, klik desktop untuk melihat riak cyan dan Option+klik untuk riak oranye secara kasat mata. | `[ ] Menunggu observasi fisik pengguna` |
+| 10 | **Navigasi Virtual Spaces** | Berpindah antar Space/Desktop (tiga jari geser atau Ctrl+Panah) untuk memastikan kolam tetap menetap di setiap virtual desktop tanpa glitch. | `[ ] Menunggu observasi fisik pengguna` |
+| 11 | **Show Desktop & Mission Control** | Menjalankan gesture/tombol Show Desktop dan Mission Control untuk memastikan jendela kolam tidak terbang/bergeser. | `[ ] Menunggu observasi fisik pengguna` |
+| 12 | **Aplikasi Fullscreen Lain** | Membuka aplikasi lain ke mode native Fullscreen untuk memastikan tidak ada visual kolam yang bocor ke space fullscreen tersebut. | `[ ] Menunggu observasi fisik pengguna` |
+| 13 | **Hardware Sleep & Wake Fisik** | Kunci Mac (`Ctrl + Cmd + Q`) atau tutup lid laptop selama ~15 detik, lalu buka kembali untuk memastikan app tetap stabil tanpa lonjakan. | `[ ] Menunggu observasi fisik pengguna` |
 
 ---
 
-## 6. Langkah Selanjutnya Menuju M1
+## 6. Keputusan Penerimaan Milestone M0
 
-1. Pengguna menjalankan checklist validasi manual di atas sesuai kebutuhan.
-2. Jika ada perilaku interaksi Finder yang terganggu pada konfigurasi macOS tertentu, lakukan penyesuaian event masking pada `WallpaperWindow`.
-3. Setelah penerimaan manual M0 disetujui, milestone M1 (Simulasi kolam mandiri dengan 8 koi, steering boid, penghindaran tepi kolam, dan interaksi makanan dalam jendela preview) dapat segera dimulai.
+> **STATUS SAAT INI: IMPLEMENTASI M0 TERSEDIA, PENERIMAAN DESKTOP MASIH TERTUNDA**
+>
+> **Rincian Evaluasi:**
+> - **Kriteria Lulus (Terverifikasi Penuh)**: Fondasi bundle `.app`, konfigurasi NSWindow borderless non-activating, hierarki Window Server layer `-2147483623` di bawah Finder `-2147483603`, sinkronisasi menu bar status item (`🐟` <-> `🐟⚡`), transisi layer interaksi live (`-2147483602`), sinkronisasi status jeda manual di menu bar, pencegahan perebutan fokus aplikasi, sinkronisasi pause/resume timer view tanpa lompatan waktu, dan audit arsitektur izin TCC.
+> - **Kriteria Tertunda (Menunggu Observasi Fisik)**: Respons mouse/trackpad fisik pengguna pada ikon dan marquee Finder, persepsi visual riak air di layar, navigasi virtual Spaces, Mission Control/Show Desktop, visualisasi fullscreen aplikasi lain, serta sleep/wake perangkat keras fisik.
+>
+> Sesuai aturan proyek, milestone M0 **belum dapat dinyatakan selesai** sampai pengamatan fisik desktop di atas telah dikonfirmasi oleh pengguna. Pekerjaan milestone M1 (simulasi kolam koi) **tidak dimulai** sebelum penerimaan M0 disetujui.
