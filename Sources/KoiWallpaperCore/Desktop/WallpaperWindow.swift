@@ -24,14 +24,21 @@ public final class WallpaperWindow: NSWindow {
         self.hasShadow = false
         self.hidesOnDeactivate = false
         self.isReleasedWhenClosed = false
+        self.animationBehavior = .none
+        self.backgroundColor = NSColor(
+            calibratedRed: 0.05,
+            green: 0.16,
+            blue: 0.14,
+            alpha: 1.0
+        )
 
         // Ensure the window appears on all Spaces, stays stationary during Mission Control / Expose,
-        // and does not participate in Cmd+` window cycling.
+        // does not participate in Cmd+` window cycling, and does not conflict with fullscreen spaces.
         self.collectionBehavior = [
             .canJoinAllSpaces,
             .stationary,
             .ignoresCycle,
-            .fullScreenAuxiliary
+            .fullScreenNone
         ]
 
         applyMode(.clickThrough)

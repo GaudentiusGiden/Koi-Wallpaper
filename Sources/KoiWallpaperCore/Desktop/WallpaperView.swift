@@ -10,6 +10,7 @@ public final class WallpaperView: NSView {
         alpha: 1.0
     ) {
         didSet {
+            layer?.backgroundColor = backgroundColor.cgColor
             needsDisplay = true
         }
     }
@@ -54,11 +55,15 @@ public final class WallpaperView: NSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        layer?.backgroundColor = backgroundColor.cgColor
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         wantsLayer = true
+        layer?.backgroundColor = backgroundColor.cgColor
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
     }
 
     public override func draw(_ dirtyRect: NSRect) {

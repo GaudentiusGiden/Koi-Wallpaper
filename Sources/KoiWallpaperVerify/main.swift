@@ -55,10 +55,6 @@ let windowController = DesktopWindowController(screen: screen)
 let window = windowController.window
 
 let isBorderless = window.styleMask.contains(.borderless)
-let hasStationary = window.collectionBehavior.contains(.stationary)
-let hasCanJoinAllSpaces = window.collectionBehavior.contains(.canJoinAllSpaces)
-let hasIgnoresCycle = window.collectionBehavior.contains(.ignoresCycle)
-let hasAuxiliary = window.collectionBehavior.contains(.fullScreenAuxiliary)
 let canBecomeKey = window.canBecomeKey
 let canBecomeMain = window.canBecomeMain
 let defaultIgnoresMouse = window.ignoresMouseEvents
@@ -71,11 +67,17 @@ recordTest(
     details: "borderless=\(isBorderless), canBecomeKey=\(canBecomeKey), canBecomeMain=\(canBecomeMain) (Live focus retention requires desktop validation)"
 )
 
+let hasStationary = window.collectionBehavior.contains(.stationary)
+let hasCanJoinAllSpaces = window.collectionBehavior.contains(.canJoinAllSpaces)
+let hasIgnoresCycle = window.collectionBehavior.contains(.ignoresCycle)
+let hasFullScreenNone = window.collectionBehavior.contains(.fullScreenNone)
+let hasNoAnimation = window.animationBehavior == .none
+
 recordTest(
     .config,
     "T1.2 Collection Behavior Flags (Spaces & Mission Control)",
-    passed: hasStationary && hasCanJoinAllSpaces && hasIgnoresCycle && hasAuxiliary,
-    details: "stationary=\(hasStationary), canJoinAllSpaces=\(hasCanJoinAllSpaces), ignoresCycle=\(hasIgnoresCycle), auxiliary=\(hasAuxiliary) (Live Spaces/Expose behavior requires desktop validation)"
+    passed: hasStationary && hasCanJoinAllSpaces && hasIgnoresCycle && hasFullScreenNone && hasNoAnimation,
+    details: "stationary=\(hasStationary), canJoinAllSpaces=\(hasCanJoinAllSpaces), ignoresCycle=\(hasIgnoresCycle), fullScreenNone=\(hasFullScreenNone), animationBehavior=\(window.animationBehavior.rawValue)"
 )
 
 let expectedDesktopLevel = Int(CGWindowLevelForKey(.desktopWindow))
