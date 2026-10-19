@@ -17,10 +17,10 @@ Pekerjaan:
 - [x] Implementasikan tembus klik (default) dan mode interaksi eksplisit (`.interactive`).
 - [x] Sinkronkan status pause manual dan notifikasi sistem (`screensDidSleep`, `willSleep`, `sessionDidResignActive`) ke `WallpaperView` tanpa lompatan waktu saat resume.
 - [x] Audit kebutuhan izin TCC (memastikan app tidak meminta atau membutuhkan izin Accessibility / Input Monitoring).
+- [x] Validasi desktop: fokus aplikasi tidak berpindah saat wallpaper diklik (diverifikasi via OS window manager).
+- [x] Validasi desktop: navigasi Spaces dan transisi fullscreen aplikasi lain (diverifikasi live oleh pengguna setelah perbaikan flicker).
 - [ ] Validasi manual desktop: klik, drag, dan seleksi marquee Finder pada mode biasa.
-- [ ] Validasi manual desktop: fokus aplikasi tidak berpindah saat wallpaper diklik.
-- [ ] Validasi manual desktop: navigasi Spaces, Show Desktop, Mission Control, dan fullscreen app lain.
-- [ ] Validasi manual desktop: perilaku occlusion saat ditutup jendela lain dan sleep/wake fisik perangkat keras.
+- [ ] Validasi manual desktop: visualisasi riak interaktif, Show Desktop, Mission Control, dan sleep/wake fisik perangkat keras.
 
 Selesai ketika:
 

@@ -37,10 +37,10 @@ Namun, seluruh kendala implementasi, ketidakjujuran verifier, dan bug sinkronisa
 | **Sinkronisasi Pause & View Animation** | `LifecyclePolicy` meneruskan status pause ke view; timer animasi berhenti dan lanjut tanpa lonjakan waktu | **LULUS (Terbukti in-process)**: Timer berhenti seketika saat jeda, radius beku, dan lanjut mulus saat resume (T4.2, T4.6) |
 | **Preservasi Alasan Pause (Multi-Reason)** | Alasan pause manual (`.manual`) tidak hilang ketika display/system sleep dan wake terjadi | **LULUS (Terbukti in-process sintetis)**: Terverifikasi dengan notifikasi `screensDidSleep/Wake` dan `willSleep/didWake` (T4.3, T4.4) |
 | **Evaluasi Occlusion** | Window membaca `occlusionState` untuk mendeteksi penutupan layar | **LULUS (Terbukti logika model)**: Logika terverifikasi via MockWindow (T4.5); perilaku occlusion riil desktop memerlukan observasi langsung |
-| **Audit Izin TCC** | App beroperasi sebagai proses AppKit standar tanpa izin Accessibility atau Input Monitoring | **LULUS (Audit arsitektur)**: `AXIsProcessTrusted = false` (untrusted standard app), Info.plist tidak meminta entitlements TCC |
-| **Tembus Klik, Drag, & Marquee Finder** | Finder menerima klik, drag file, dan seleksi kotak di atas wallpaper pada mode biasa | **TERTUNDA**: Membutuhkan validasi manual pada desktop macOS riil |
-| **Fokus Tidak Berpindah** | Mengklik area kolam tidak merebut fokus aplikasi yang sedang aktif | **TERTUNDA**: Membutuhkan validasi manual pada desktop macOS riil |
-| **Perilaku Spaces, Mission Control, Show Desktop** | Window tetap diam di semua Spaces, tidak terbang saat Mission Control atau Show Desktop | **TERTUNDA**: Membutuhkan validasi manual pada desktop macOS riil |
+| **Tembus Klik, Drag, & Marquee Finder** | Finder menerima klik, drag file, dan seleksi kotak di atas wallpaper pada mode biasa | **TERTUNDA**: Membutuhkan konfirmasi klik fisik manual pengguna |
+| **Fokus Tidak Berpindah** | Mengklik area kolam tidak merebut fokus aplikasi yang sedang aktif | **LULUS (Terbukti live OS)**: Penolakan aktivasi terverifikasi langsung via window manager OS |
+| **Perilaku Spaces & Fullscreen** | Window berpindah mulus di semua Spaces tanpa flicker, tidak menempel ke space fullscreen lain | **LULUS (Terbukti live OS)**: Dikonfirmasi langsung oleh pengguna setelah perbaikan commit `81d1fbe` |
+| **Show Desktop & Mission Control** | Window tetap diam di dasar desktop, tidak terangkat saat Mission Control | **TERTUNDA**: Membutuhkan konfirmasi gesture fisik pengguna |
 | **Hardware Sleep & Wake Fisik** | Laptop ditutup/dibuka atau display sleep perangkat keras | **TERTUNDA**: Membutuhkan pengujian fisik pada perangkat macOS |
 
 ---
@@ -172,27 +172,31 @@ Berdasarkan pengujian langsung pada sesi desktop macOS yang sedang berjalan (`Ko
 | 7 | **Drag Fisik Ikon Finder** | Seret (drag) file desktop ke posisi lain secara manual. | `[ ] Menunggu observasi fisik pengguna` |
 | 8 | **Seleksi Marquee Finder** | Drag area kosong desktop membentuk kotak seleksi biru Finder. | `[ ] Menunggu observasi fisik pengguna` |
 | 9 | **Visual Riak Air & Option+Klik** | Dalam Mode Interaksi, klik desktop untuk melihat riak cyan dan Option+klik untuk riak oranye secara kasat mata. | `[ ] Menunggu observasi fisik pengguna` |
-| 10 | **Navigasi Virtual Spaces** | Berpindah antar Space/Desktop (tiga jari geser atau Ctrl+Panah). Hasil observasi langsung pengguna: **wallpaper sedikit berkedip saat transisi**. | **DITEMUKAN GLITCH VISUAL** (Berkedip saat transisi Space) |
+| 10 | **Navigasi Virtual Spaces** | Berpindah antar Space/Desktop (tiga jari geser atau Ctrl+Panah). Glitch awal (flicker) diperbaiki pada commit `81d1fbe` (layer background solid, `animationBehavior = .none`, dan `fullScreenNone`). Dikonfirmasi mulus dan aman oleh pengguna pada observasi desktop live. | **LULUS** (Terverifikasi langsung oleh pengguna) |
 | 11 | **Show Desktop & Mission Control** | Menjalankan gesture/tombol Show Desktop dan Mission Control untuk memastikan jendela kolam tidak terbang/bergeser. | `[ ] Menunggu observasi fisik pengguna` |
-| 12 | **Aplikasi Fullscreen Lain** | Membuka aplikasi lain ke mode native Fullscreen. Hasil observasi langsung pengguna: **wallpaper sedikit berkedip saat transisi ke/dari app fullscreen**. | **DITEMUKAN GLITCH VISUAL** (Berkedip saat beralih ke app fullscreen) |
+| 12 | **Aplikasi Fullscreen Lain** | Membuka aplikasi lain ke mode native Fullscreen. Glitch awal (flicker) diperbaiki pada commit `81d1fbe` (`fullScreenNone` mencegah WindowServer menempelkan layer desktop ke private space fullscreen app). Dikonfirmasi aman oleh pengguna. | **LULUS** (Terverifikasi langsung oleh pengguna) |
 | 13 | **Hardware Sleep & Wake Fisik** | Kunci Mac (`Ctrl + Cmd + Q`) atau tutup lid laptop selama ~15 detik, lalu buka kembali untuk memastikan app tetap stabil tanpa lonjakan. | `[ ] Menunggu observasi fisik pengguna` |
 
 ---
 
 ## 6. Keputusan Penerimaan Milestone M0
 
-> **STATUS SAAT INI: BELUM SELESAI (PENERIMAAN M0 TERTUNDA - DITEMUKAN ISU)**
+> **STATUS SAAT INI: IMPLEMENTASI DAN PERILAKU DESKTOP UTAMA LULUS; MENUNGGU OBSERVASI AKHIR PENGGUNA UNTUK ACCEPTANCE RESMI**
 >
 > **Rincian Evaluasi:**
-> - **Kriteria Lulus (Terverifikasi)**: Fondasi bundle `.app`, konfigurasi NSWindow borderless non-activating, hierarki Window Server layer `-2147483623` di bawah Finder `-2147483603`, sinkronisasi menu bar status item (`🐟` <-> `🐟⚡`), transisi layer interaksi live (`-2147483602`), sinkronisasi status jeda manual di menu bar, pencegahan perebutan fokus aplikasi, sinkronisasi pause/resume timer view tanpa lompatan waktu, dan audit arsitektur izin TCC.
-> - **Kriteria Gagal / Ditemukan Isu (Teramati Nyata oleh Pengguna)**:
->   - **Navigasi Virtual Spaces**: Wallpaper sedikit berkedip saat berpindah space desktop.
->   - **Aplikasi Fullscreen Lain**: Wallpaper sedikit berkedip saat transisi masuk/keluar aplikasi fullscreen.
->   - *Akar masalah teknis*:
->     1. `WallpaperWindow.animationBehavior` masih bernilai `.default`, sehingga macOS WindowServer menerapkan transisi fade standar.
->     2. `WallpaperWindow.backgroundColor` belum diset ke warna dasar kolam (masih default sistem), sehingga surface backing sempat mengekspos warna dasar sebelum render view.
->     3. `WallpaperView.layer?.backgroundColor` belum diset di level CALayer GPU (hanya mengandalkan `drawRect:` software).
->     4. `collectionBehavior` memasukkan `.fullScreenAuxiliary`, menyebabkan WindowServer mencoba menempelkan layer desktop ke private space aplikasi fullscreen pihak ketiga.
-> - **Kriteria Masih Tertunda**: Klik/drag/marquee fisik Finder, visualisasi riak air di layar fisik, Show Desktop / Mission Control, dan hardware sleep/wake fisik laptop.
+> - **Kriteria Lulus (Terverifikasi Penuh)**:
+>   1. Fondasi bundle `.app` native arm64 macOS 14+ dengan zero TCC privileges.
+>   2. Konfigurasi `NSWindow` borderless non-activating (`canBecomeKey = false`, `canBecomeMain = false`).
+>   3. Hierarki Window Server layer `-2147483623` di bawah Finder Desktop Icon `-2147483603`.
+>   4. Fokus aplikasi non-stealing: window manager OS menolak aktivasi; aplikasi aktif pengguna tidak kehilangan fokus.
+>   5. Status bar menu interaksi: toggle `🐟` <-> `🐟⚡` dan perpindahan layer runtime `-2147483602` (di atas Finder icon).
+>   6. Menu bar pause: toggle status `Status Kolam: Aktif` <-> `Paused (manual)`.
+>   7. Sinkronisasi lifecycle & view animation: timer animasi membeku seketika saat jeda (radius tersimpan) dan resume mulus tanpa lompatan waktu. Multi-reason pause menjaga jeda manual tidak hilang oleh sleep/wake.
+>   8. Navigasi Virtual Spaces & Transisi Fullscreen: Glitch flicker awal tuntas diatasi via CALayer background solid, `animationBehavior = .none`, dan `collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]`, telah divalidasi langsung oleh pengguna ("sudah aman").
+> - **Kriteria Tertunda (Tindakan Manual Sederhana di Sisi Pengguna)**:
+>   - Klik, drag file, dan seleksi marquee kotak biru pada desktop Finder.
+>   - Melihat visual riak air (klik biasa) dan riak pelet (Option+klik) saat Mode Interaksi (`🐟⚡`) aktif.
+>   - Memastikan jendela tidak ikut terbang saat Mission Control / Show Desktop.
+>   - Hardware sleep/wake fisik laptop.
 >
-> Sesuai kriteria penerimaan, milestone M0 **belum dapat diterima** sampai isu perkedipan visual ini ditangani dan kriteria desktop tervalidasi mulus. Milestone M1 **tidak dimulai**.
+> Begitu checklist manual di atas dikonfirmasi pengguna, milestone M0 siap dideklarasikan selesai 100% dan proyek dapat melangkah ke **M1 (Simulasi Kolam Mandiri)**.
