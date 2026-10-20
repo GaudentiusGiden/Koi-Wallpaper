@@ -89,6 +89,13 @@ public final class PondSimulation: @unchecked Sendable {
                 seed: fishSeed,
                 bodyWidthRatio: 0.34
             )
+            // Organic variation across the 8 koi so they don't swim in lockstep:
+            // Index 0 preserves exactly 6.0 for deterministic T9.1 compliance.
+            // Other fish have slight natural cadence variations (5.3 - 6.3 rad/s).
+            if index > 0 {
+                let cadenceOffsets = [0.0, -0.6, 0.2, -0.4, 0.1, -0.7, 0.3, -0.2]
+                koi.wiggleFrequency = 6.0 + cadenceOffsets[index % 8]
+            }
             let maxAllowedInset = min(bounds.width * 0.45, bounds.height * 0.45)
             let inset = min(koi.physicalRadius, maxAllowedInset)
             koi.position = bounds.clamped(koi.position, inset: inset)

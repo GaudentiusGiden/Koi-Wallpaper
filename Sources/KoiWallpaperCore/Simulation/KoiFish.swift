@@ -91,19 +91,45 @@ public struct KoiFish: Identifiable, Sendable {
 
     /// Articulated spine control points in fish local space, shared identically between
     /// simulation collision geometry and visual CoreGraphics vector rendering.
+    /// When `wigglePhase` is provided, a smooth, natural traveling wave creates fluid S-curve swimming.
     public static func localSpinePoints(
         length: Double,
-        flex: Double
+        flex: Double,
+        wigglePhase: Double? = nil
     ) -> (p0: PondVector, p1: PondVector, p2: PondVector, p3: PondVector, p4: PondVector, p5: PondVector, p6: PondVector) {
         let bend = flex * length / 48.0
+        let scale = length / 48.0
+
+        let w2: Double
+        let w3: Double
+        let w4: Double
+        let w5: Double
+        let w6: Double
+
+        if let phase = wigglePhase {
+            // Fluid backward-traveling undulatory wave:
+            // Amplitudes and phase lags create a gentle, natural S-curve swimming stroke.
+            w2 = sin(phase - 0.25) * 0.35 * scale
+            w3 = sin(phase - 0.75) * 1.05 * scale
+            w4 = sin(phase - 1.45) * 2.20 * scale
+            w5 = sin(phase - 2.15) * 3.60 * scale
+            w6 = sin(phase - 2.85) * 5.60 * scale
+        } else {
+            w2 = 0.0
+            w3 = 0.0
+            w4 = 0.0
+            w5 = 0.0
+            w6 = 0.0
+        }
+
         return (
             p0: PondVector(x: length * 0.48, y: 0.0),
             p1: PondVector(x: length * 0.32, y: 0.0),
-            p2: PondVector(x: length * 0.12, y: bend * 1.5),
-            p3: PondVector(x: -length * 0.10, y: bend * 3.5),
-            p4: PondVector(x: -length * 0.30, y: bend * 6.5),
-            p5: PondVector(x: -length * 0.46, y: bend * 10.5),
-            p6: PondVector(x: -length * 0.68, y: bend * 15.0)
+            p2: PondVector(x: length * 0.12, y: bend * 1.5 + w2),
+            p3: PondVector(x: -length * 0.10, y: bend * 3.5 + w3),
+            p4: PondVector(x: -length * 0.30, y: bend * 6.5 + w4),
+            p5: PondVector(x: -length * 0.46, y: bend * 10.5 + w5),
+            p6: PondVector(x: -length * 0.68, y: bend * 15.0 + w6)
         )
     }
 
@@ -111,7 +137,7 @@ public struct KoiFish: Identifiable, Sendable {
     /// from mouth (p0) to caudal peduncle (p5). Used for exact collision detection and separation.
     public var bodyCapsules: [KoiBodyCapsule] {
         let hw = width * 0.5
-        let spine = KoiFish.localSpinePoints(length: length, flex: spineCurvature)
+        let spine = KoiFish.localSpinePoints(length: length, flex: spineCurvature, wigglePhase: wigglePhase)
 
         let cosH = cos(heading)
         let sinH = sin(heading)
@@ -200,12 +226,12 @@ public struct KoiFish: Identifiable, Sendable {
         // 2. Compute Steering Forces
         var steeringForce = PondVector.zero
 
-        // A. Wander Force
-        wanderAngle += Double.random(in: -1.2...1.2, using: &rng) * dt * 3.0
+        // A. Wander Force: Calm, smooth wandering with gentle drift
+        wanderAngle += Double.random(in: -0.4...0.4, using: &rng) * dt * 1.6
         wanderAngle = normalizeAngle(wanderAngle)
         let wanderCircleCenter = position + PondVector.fromAngle(heading, length: 70.0)
-        let wanderDisplacement = PondVector.fromAngle(heading + wanderAngle, length: 35.0)
-        let wanderForce = (wanderCircleCenter + wanderDisplacement - position).normalized() * 0.8
+        let wanderDisplacement = PondVector.fromAngle(heading + wanderAngle, length: 32.0)
+        let wanderForce = (wanderCircleCenter + wanderDisplacement - position).normalized() * 0.75
         steeringForce += wanderForce
 
         // B. Target Seeking Force (if active)
@@ -224,7 +250,7 @@ public struct KoiFish: Identifiable, Sendable {
         let socialRadius = length * 1.5
         let physicalBarrier = length * 0.90
         var separationForce = PondVector.zero
-        var obstacleAhead = false
+        var forwardObstacleCloseness = 0.0
         var closestNeighborDist = Double.infinity
         let forwardVector = PondVector.fromAngle(heading, length: 1.0)
 
@@ -246,11 +272,15 @@ public struct KoiFish: Identifiable, Sendable {
                 separationForce += diff.normalized() * weight
             }
 
-            // Check if neighbor is directly in front of this fish in its swim path
-            if dist < physicalBarrier * 1.25 {
+            // Smooth evaluation of neighbor in front of this fish in its swim path
+            if dist < physicalBarrier * 1.35 {
                 let toOtherNorm = (other.position - position) / dist
-                if forwardVector.dot(with: toOtherNorm) > 0.50 {
-                    obstacleAhead = true
+                let dot = forwardVector.dot(with: toOtherNorm)
+                if dot > 0.35 {
+                    let distFactor = 1.0 - (dist / (physicalBarrier * 1.35))
+                    let alignmentFactor = (dot - 0.35) / 0.65
+                    let closeness = distFactor * alignmentFactor
+                    forwardObstacleCloseness = max(forwardObstacleCloseness, closeness)
                 }
             }
         }
@@ -272,7 +302,7 @@ public struct KoiFish: Identifiable, Sendable {
         )
         steeringForce += boundaryForce
 
-        // 3. Smooth Heading & Turning
+        // 3. Smooth Heading & Shortest Turn Interpolation
         let desiredHeading: Double
         if steeringForce.lengthSquared > 0.0001 {
             desiredHeading = steeringForce.angle
@@ -281,8 +311,22 @@ public struct KoiFish: Identifiable, Sendable {
         }
 
         let angleDiff = normalizeAngle(desiredHeading - heading)
-        let maxTurnThisStep = maxTurnRate * dt
-        let turnStep = min(max(angleDiff, -maxTurnThisStep), maxTurnThisStep)
+        let avoidanceUrgency = min(1.0, (separationForce.length / 2.5) + (boundaryForce.length / 2.5))
+        let stateUrgency: Double
+        switch state {
+        case .seekingFood: stateUrgency = 1.0
+        case .investigatingClick: stateUrgency = 0.5
+        case .wandering: stateUrgency = 0.0
+        }
+        let urgency = max(avoidanceUrgency, stateUrgency)
+        let calmTurnRate = max(0.9, maxTurnRate * 0.50)
+        let effectiveTurnRate = calmTurnRate + (maxTurnRate - calmTurnRate) * urgency
+
+        let maxTurnThisStep = effectiveTurnRate * dt
+        let absDiff = abs(angleDiff)
+        let easeFactor = min(1.0, max(0.12, absDiff / 0.28))
+        let turnStepMag = min(absDiff, maxTurnThisStep * easeFactor)
+        let turnStep = (angleDiff >= 0.0 ? 1.0 : -1.0) * turnStepMag
         heading = normalizeAngle(heading + turnStep)
 
         // 4. Smooth Speed Control
@@ -293,17 +337,19 @@ public struct KoiFish: Identifiable, Sendable {
         case .seekingFood:
             targetSpeed = maxSpeed
         case .investigatingClick:
-            targetSpeed = baseSpeed * 1.4
+            targetSpeed = baseSpeed * 1.35
         }
 
-        // If another fish is directly ahead in our path, yield and decelerate to avoid collision
-        if obstacleAhead {
-            targetSpeed = min(targetSpeed, baseSpeed * 0.35)
+        // Smoothly yield and decelerate if another fish is directly ahead in our path
+        if forwardObstacleCloseness > 0.001 {
+            let slowdownFactor = 1.0 - (forwardObstacleCloseness * 0.60)
+            targetSpeed = min(targetSpeed, baseSpeed * slowdownFactor)
         }
 
-        let speedChangeRate = (targetSpeed > speed) ? 60.0 : 40.0
+        let speedChangeRate = (targetSpeed > speed) ? 50.0 : 35.0
         let speedDiff = targetSpeed - speed
-        speed += min(max(speedDiff, -speedChangeRate * dt), speedChangeRate * dt)
+        let maxSpeedStep = speedChangeRate * dt
+        speed += min(max(speedDiff, -maxSpeedStep), maxSpeedStep)
 
         // 5. Update Position and Hard Clamp
         velocity = PondVector.fromAngle(heading, length: speed)
@@ -314,16 +360,17 @@ public struct KoiFish: Identifiable, Sendable {
         let inset = min(physicalRadius, maxAllowedInset)
         position = bounds.clamped(position, inset: inset)
 
-        // 6. Sinusoidal Swimming Wiggle & Spine Curvature
+        // 6. Sinusoidal Swimming Wiggle & Smooth Spine Curvature
         let wiggleRate = (speed / baseSpeed) * wiggleFrequency
         wigglePhase += wiggleRate * dt
         if wigglePhase > 2.0 * .pi {
             wigglePhase -= 2.0 * .pi
         }
 
-        // Turn curvature bias gives realistic body flexion during turns
-        let turnBias = (turnStep / (maxTurnThisStep + 0.0001)) * 0.35
-        let naturalWiggle = sin(wigglePhase) * 0.45
-        spineCurvature = min(max(turnBias + naturalWiggle, -1.0), 1.0)
+        // Smooth turn curvature (body flexion) during turns
+        let targetCurvature = min(max((turnStep / (maxTurnThisStep + 0.0001)) * 0.45, -0.65), 0.65)
+        let curvatureRelaxRate = 5.5
+        spineCurvature += (targetCurvature - spineCurvature) * min(1.0, curvatureRelaxRate * dt)
+        spineCurvature = min(max(spineCurvature, -1.0), 1.0)
     }
 }

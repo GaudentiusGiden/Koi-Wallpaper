@@ -8,7 +8,7 @@ public enum KoiArtwork {
         context.saveGState()
         let length = CGFloat(fish.length)
         let halfWidth = CGFloat(fish.width / 2)
-        let s = KoiFish.localSpinePoints(length: fish.length, flex: fish.spineCurvature)
+        let s = KoiFish.localSpinePoints(length: fish.length, flex: fish.spineCurvature, wigglePhase: fish.wigglePhase)
         let spine = [s.p0, s.p1, s.p2, s.p3, s.p4, s.p5, s.p6].map { CGPoint(x: $0.x, y: $0.y) }
         let shadowOffset = drawShadowOnly ? CGPoint(x: length * 0.085, y: -length * 0.105) : .zero
         context.translateBy(x: CGFloat(fish.position.x) + shadowOffset.x, y: CGFloat(fish.position.y) + shadowOffset.y)
@@ -36,14 +36,16 @@ public enum KoiArtwork {
         default: base = cream
         }
 
-        // Broad translucent fins, with a different angle on each swim stroke.
+        // Broad translucent fins with gentle swim stroke flutter and turn steering flare.
         context.setFillColor(base.copy(alpha: 0.66)!)
-        let flutter = CGFloat(sin(fish.wigglePhase)) * 0.12
+        let flutter = CGFloat(sin(fish.wigglePhase)) * 0.10
+        let turnFinBias = CGFloat(fish.spineCurvature) * 0.10
         for side: CGFloat in [-1, 1] {
             let p = spine[2]
             let fin = CGMutablePath()
+            let finSpan = side * (flutter + turnFinBias * side)
             fin.move(to: CGPoint(x: p.x + length * 0.04, y: p.y + side * halfWidth * 0.45))
-            fin.addQuadCurve(to: CGPoint(x: p.x - length * 0.20, y: p.y + side * halfWidth * (1.55 + flutter)),
+            fin.addQuadCurve(to: CGPoint(x: p.x - length * 0.20, y: p.y + side * halfWidth * (1.55 + finSpan)),
                              control: CGPoint(x: p.x - length * 0.06, y: p.y + side * halfWidth * 1.8))
             fin.addQuadCurve(to: CGPoint(x: p.x - length * 0.23, y: p.y + side * halfWidth * 0.45),
                              control: CGPoint(x: p.x - length * 0.25, y: p.y + side * halfWidth * 0.9))
