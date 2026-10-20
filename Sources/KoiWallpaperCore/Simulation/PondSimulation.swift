@@ -22,7 +22,15 @@ public final class PondSimulation: @unchecked Sendable {
     public let fixedDeltaTime: Double
     public let maxCatchUpDelta: Double
     private var timeAccumulator: Double = 0.0
+    /// Active fixed-step time shared by visual layers; freezes on pause and resets with the pond.
+    public private(set) var elapsedTime: Double = 0.0
     public var rng: SeededRandomNumberGenerator
+    private var usesResponsiveFishSizes = false
+    private static let silhouetteFractions = [0.12, 0.15, 0.13, 0.17, 0.14, 0.18, 0.16, 0.125]
+
+    private func productionLength(at index: Int) -> Double {
+        min(bounds.width, bounds.height) * Self.silhouetteFractions[index % 8] / 1.16
+    }
 
     // Capacity limits
     public let maxPellets: Int = 48
@@ -55,6 +63,7 @@ public final class PondSimulation: @unchecked Sendable {
 
     /// Initializes exactly 8 koi fish, one of each variety, dispersed evenly.
     public func initializeEightKoi() {
+        usesResponsiveFishSizes = true
         fish.removeAll()
         let varieties = KoiVariety.allEightVarieties
 
@@ -68,7 +77,7 @@ public final class PondSimulation: @unchecked Sendable {
             let posX = centerX + cos(angle) * spawnRadiusX + Double.random(in: -20...20, using: &rng)
             let posY = centerY + sin(angle) * spawnRadiusY + Double.random(in: -20...20, using: &rng)
             let fishHeading = angle + .pi * 0.5 + Double.random(in: -0.3...0.3, using: &rng)
-            let fishLength = 44.0 + Double(index % 4) * 4.0 // Lengths 44 to 56
+            let fishLength = productionLength(at: index)
             let fishSeed = rng.next()
 
             var koi = KoiFish(
@@ -77,13 +86,15 @@ public final class PondSimulation: @unchecked Sendable {
                 heading: fishHeading,
                 length: fishLength,
                 baseSpeed: 45.0 + Double(index % 3) * 6.0,
-                seed: fishSeed
+                seed: fishSeed,
+                bodyWidthRatio: 0.34
             )
             let maxAllowedInset = min(bounds.width * 0.45, bounds.height * 0.45)
             let inset = min(koi.physicalRadius, maxAllowedInset)
             koi.position = bounds.clamped(koi.position, inset: inset)
             fish.append(koi)
         }
+        resolveFishSeparation()
     }
 
     public func reset() {
@@ -91,27 +102,31 @@ public final class PondSimulation: @unchecked Sendable {
         ripples.removeAll()
         clickTargets.removeAll()
         timeAccumulator = 0.0
+        elapsedTime = 0.0
         initializeEightKoi()
     }
 
     public func resize(width: Double, height: Double) {
         guard width > 10.0 && height > 10.0 else { return }
         let oldBounds = bounds
+        // Capture positions before bounds.didSet clamps the previous world.
+        let positions = fish.map(\.position)
+        let pelletPositions = pellets.map(\.position)
         bounds = PondBounds(width: width, height: height, margin: bounds.margin)
 
         let scaleX = width / oldBounds.width
         let scaleY = height / oldBounds.height
 
         for i in 0..<fish.count {
-            fish[i].position.x *= scaleX
-            fish[i].position.y *= scaleY
+            fish[i].position = PondVector(x: positions[i].x * scaleX, y: positions[i].y * scaleY)
+            if usesResponsiveFishSizes { fish[i].length = productionLength(at: i) }
         }
         for i in 0..<pellets.count {
-            pellets[i].position.x *= scaleX
-            pellets[i].position.y *= scaleY
+            pellets[i].position = PondVector(x: pelletPositions[i].x * scaleX, y: pelletPositions[i].y * scaleY)
         }
 
         clampAllEntitiesToBounds()
+        resolveFishSeparation()
     }
 
     public func clampAllEntitiesToBounds() {
@@ -240,6 +255,7 @@ public final class PondSimulation: @unchecked Sendable {
 
     /// Executes a single discrete physics update step.
     public func stepSimulation(dt: Double) {
+        elapsedTime += dt
         // 1. Update Pellets
         for i in 0..<pellets.count {
             pellets[i].update(dt: dt, bounds: bounds)

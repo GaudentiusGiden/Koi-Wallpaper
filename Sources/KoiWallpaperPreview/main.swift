@@ -5,6 +5,7 @@ import KoiWallpaperCore
 final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var previewView: KoiPondPreviewView?
+    private var reviewRecording: Process?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let defaultWidth: CGFloat = 1024
@@ -16,13 +17,15 @@ final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Koi Pond Simulation Preview — M1"
+        window.title = "Koi Pond Preview"
         window.isRestorable = false
         window.minSize = NSSize(width: 480, height: 320)
         window.setContentSize(NSSize(width: defaultWidth, height: defaultHeight))
         window.center()
 
-        let preview = KoiPondPreviewView(frame: window.contentLayoutRect)
+        let review = CommandLine.arguments.contains("--review-style")
+        let reviewSimulation = review ? PondSimulation(bounds: PondBounds(width: Double(defaultWidth), height: Double(defaultHeight)), seed: 42) : nil
+        let preview = KoiPondPreviewView(frame: window.contentLayoutRect, simulation: reviewSimulation)
         window.contentView = preview
 
         window.makeKeyAndOrderFront(nil)
@@ -33,6 +36,11 @@ final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
         self.previewView = preview
 
         print("[KoiWallpaperPreview] Preview window launched: frame=\(window.frame), contentBounds=\(preview.bounds). Controls: Click=Splash, Opt+Click=Feed, Space=Pause, R=Reset, H=HUD.")
+
+        if review {
+            runStyleReview(window: window, preview: preview)
+            return
+        }
 
         if CommandLine.arguments.contains("--validate-collision") {
             let simBounds = PondBounds(width: Double(defaultWidth), height: Double(defaultHeight))
@@ -62,6 +70,70 @@ final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
 
         if CommandLine.arguments.contains("--validate-visual") {
             runAutomatedVisualValidation(window: window, preview: preview)
+        }
+    }
+
+    /// Reproducible native review: stable seed, HUD-free screenshots and a 25s
+    /// WindowServer recording. Normal preview behavior is unaffected by this flag.
+    private func runStyleReview(window: NSWindow, preview: KoiPondPreviewView) {
+        preview.showHUD = false
+        preview.needsDisplay = true
+        // Keep the requested capture rectangle occupied by this window while the
+        // review runs, including when Stage Manager changes the active application.
+        window.level = .floating
+        let destination = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/visual-review")
+        try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let id = window.windowNumber
+        func foreground() {
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        func capture(_ name: String) {
+            foreground()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                process.arguments = ["-x", "-o", "-l\(id)", destination.appendingPathComponent(name + ".png").path]
+                try? process.run()
+            }
+        }
+        let startFrames = preview.totalRenderedFrames
+        let startTime = CACurrentMediaTime()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 14) {
+            let cadence = Double(preview.totalRenderedFrames - startFrames) / (CACurrentMediaTime() - startTime)
+            print(String(format: "[Style Review] Native scene submissions: %.1f Hz (AppKit updates, not display VSYNC)", cadence))
+        }
+        foreground()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            let recording = Process()
+            recording.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            let movie = destination.appendingPathComponent("native-preview.mov")
+            try? FileManager.default.removeItem(at: movie)
+            // -l selects a window for stills, but is ignored by video capture.
+            let top = NSScreen.screens.first?.frame.maxY ?? window.frame.maxY
+            let f = window.frame
+            let region = "\(Int(f.minX)),\(Int(top - f.maxY)),\(Int(f.width)),\(Int(f.height))"
+            recording.arguments = ["-v", "-V25", "-R\(region)", movie.path]
+            do { try recording.run(); self?.reviewRecording = recording }
+            catch { print("[Style Review] Recording unavailable: \(error)") }
+            capture("native-preview-start")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { preview.simulation.handleWaterClick(at: preview.simulation.bounds.center) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { preview.simulation.handleFoodDrop(at: preview.simulation.bounds.center) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            preview.simulation.isPaused = true
+            capture("native-preview-paused")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 17) { preview.simulation.isPaused = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 23) { capture("native-preview-final") }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 28) { [weak self] in
+            if let recording = self?.reviewRecording {
+                if recording.isRunning { recording.terminate() }
+                else { print("[Style Review] Recording exit status: \(recording.terminationStatus)") }
+            }
+            print("[Style Review] Artifacts: \(destination.path)")
+            NSApplication.shared.terminate(nil)
         }
     }
 
@@ -352,6 +424,10 @@ final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if reviewRecording?.isRunning == true { reviewRecording?.terminate() }
     }
 }
 

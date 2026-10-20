@@ -5,6 +5,10 @@ import KoiWallpaperCore
 public final class KoiPondPreviewView: NSView {
     public let simulation: PondSimulation
     public let renderer: PondRenderer
+    private lazy var sceneLayer = PondSceneLayer(renderer: renderer)
+    private let overlayView = PondOverlayView(frame: .zero)
+    public private(set) var totalRenderedFrames: Int = 0
+    public override var wantsUpdateLayer: Bool { true }
 
     private var displayTimer: Timer?
     private var lastFrameTime: TimeInterval = 0.0
@@ -35,6 +39,7 @@ public final class KoiPondPreviewView: NSView {
 
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        configureSceneLayers()
         startAnimationTimer()
     }
 
@@ -46,6 +51,7 @@ public final class KoiPondPreviewView: NSView {
 
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        configureSceneLayers()
         startAnimationTimer()
     }
 
@@ -56,6 +62,7 @@ public final class KoiPondPreviewView: NSView {
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         simulation.resize(width: Double(newSize.width), height: Double(newSize.height))
+        needsDisplay = true
     }
 
     private func startAnimationTimer() {
@@ -74,8 +81,10 @@ public final class KoiPondPreviewView: NSView {
                 self.currentFPS = self.currentFPS * 0.9 + instantFPS * 0.1
             }
 
-            self.simulation.advance(deltaTime: dt)
-            self.needsDisplay = true
+            if !self.simulation.isPaused {
+                self.simulation.advance(deltaTime: dt)
+                self.needsDisplay = true
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.displayTimer = timer
@@ -83,16 +92,38 @@ public final class KoiPondPreviewView: NSView {
 
     // MARK: - Drawing
 
-    public override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        // Render full layered pond simulation
-        renderer.render(simulation: simulation, in: context, rect: bounds, phase: timeOfDayPhase)
-
-        // Draw HUD overlay if active
-        if showHUD {
-            drawHUD(in: context)
+    private func configureSceneLayers() {
+        layer?.insertSublayer(sceneLayer, at: 0)
+        overlayView.frame = overlayFrame
+        overlayView.autoresizingMask = []
+        overlayView.wantsLayer = true
+        overlayView.drawOverlay = { [weak self] context in
+            guard let self, self.showHUD else { return }
+            context.translateBy(x: -self.overlayView.frame.minX, y: -self.overlayView.frame.minY)
+            self.drawHUD(in: context)
         }
+        addSubview(overlayView)
+    }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        layer?.contentsScale = window?.backingScaleFactor ?? 1
+        needsDisplay = true
+    }
+
+    private var overlayFrame: CGRect {
+        CGRect(x: 0, y: max(0, bounds.height - 130), width: min(520, bounds.width), height: min(130, bounds.height))
+    }
+
+    public override func draw(_ dirtyRect: NSRect) { updateLayer() }
+
+    public override func updateLayer() {
+        sceneLayer.update(simulation: simulation, bounds: bounds,
+                          backingScale: window?.backingScaleFactor ?? 1, phase: timeOfDayPhase)
+        totalRenderedFrames += 1
+        overlayView.frame = overlayFrame
+        overlayView.isHidden = !showHUD
+        if !overlayView.isHidden { overlayView.needsDisplay = true }
     }
 
     private func drawHUD(in context: CGContext) {
@@ -125,11 +156,11 @@ public final class KoiPondPreviewView: NSView {
             .foregroundColor: NSColor.systemTeal.withAlphaComponent(0.9)
         ]
 
-        "Koi Pond Preview (M1) — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
+        "Koi Pond Preview — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
         statusText.draw(at: NSPoint(x: hudRect.minX + 185, y: hudRect.maxY - 22), withAttributes: statusAttrs)
 
         let stats = String(
-            format: "FPS: %.0f  ·  Koi: %d  ·  Pellets: %d/%d  ·  Ripples: %d/%d",
+            format: "Timer: %.0f Hz  ·  Koi: %d  ·  Pellets: %d/%d  ·  Ripples: %d/%d",
             currentFPS,
             simulation.fish.count,
             simulation.pellets.count,

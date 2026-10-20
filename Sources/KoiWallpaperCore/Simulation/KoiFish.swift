@@ -19,8 +19,9 @@ public struct KoiFish: Identifiable, Sendable {
     public let baseSpeed: Double
     public let maxSpeed: Double
     public let maxTurnRate: Double // Radians per second
-    public let length: Double
-    public var width: Double { length * 0.28 }
+    public internal(set) var length: Double
+    public let bodyWidthRatio: Double
+    public var width: Double { length * bodyWidthRatio }
 
     public var wigglePhase: Double
     public var wiggleFrequency: Double
@@ -41,7 +42,8 @@ public struct KoiFish: Identifiable, Sendable {
         baseSpeed: Double = 50.0,
         maxSpeed: Double = 120.0,
         maxTurnRate: Double = 2.4,
-        seed: UInt64? = nil
+        seed: UInt64? = nil,
+        bodyWidthRatio: Double = 0.28
     ) {
         self.id = id
         self.variety = variety
@@ -53,6 +55,7 @@ public struct KoiFish: Identifiable, Sendable {
         self.speed = baseSpeed
         self.velocity = PondVector.fromAngle(heading, length: baseSpeed)
         self.length = length
+        self.bodyWidthRatio = min(0.4, max(0.2, bodyWidthRatio))
 
         let initialSeed = seed ?? UInt64(truncatingIfNeeded: id.hashValue)
         var prng = SeededRandomNumberGenerator(seed: initialSeed)
@@ -80,7 +83,10 @@ public struct KoiFish: Identifiable, Sendable {
     /// Maximum physical radius from the fish position to the furthest extent of artwork
     /// (mouth 0.48L, tail tip 0.72L, pectoral fins 0.15L, plus swimming articulation).
     public var physicalRadius: Double {
-        length * 0.72 + 6.0
+        // A fixed envelope covers the complete tail stroke. A radius based on the
+        // current stroke could grow after the position clamp later in update().
+        let tailY = length * 15.0 / 48.0 + width * 0.42
+        return max(length * 0.72 + 6.0, hypot(length * 0.70, tailY) + 2.0)
     }
 
     /// Articulated spine control points in fish local space, shared identically between
@@ -89,14 +95,15 @@ public struct KoiFish: Identifiable, Sendable {
         length: Double,
         flex: Double
     ) -> (p0: PondVector, p1: PondVector, p2: PondVector, p3: PondVector, p4: PondVector, p5: PondVector, p6: PondVector) {
-        (
+        let bend = flex * length / 48.0
+        return (
             p0: PondVector(x: length * 0.48, y: 0.0),
             p1: PondVector(x: length * 0.32, y: 0.0),
-            p2: PondVector(x: length * 0.12, y: flex * 1.5),
-            p3: PondVector(x: -length * 0.10, y: flex * 3.5),
-            p4: PondVector(x: -length * 0.30, y: flex * 6.5),
-            p5: PondVector(x: -length * 0.46, y: flex * 10.5),
-            p6: PondVector(x: -length * 0.68, y: flex * 15.0)
+            p2: PondVector(x: length * 0.12, y: bend * 1.5),
+            p3: PondVector(x: -length * 0.10, y: bend * 3.5),
+            p4: PondVector(x: -length * 0.30, y: bend * 6.5),
+            p5: PondVector(x: -length * 0.46, y: bend * 10.5),
+            p6: PondVector(x: -length * 0.68, y: bend * 15.0)
         )
     }
 

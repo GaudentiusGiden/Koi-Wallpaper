@@ -8,5 +8,6 @@ Status: implementasi fondasi aplikasi macOS M0 dan bundle lokal `.app` sudah ter
 - [Analisis referensi dan rancangan teknis](docs/REA.md)
 - [Temuan dari REA CLI dan bukti interaksi](docs/REA_FINDINGS.md)
 - [Tahapan implementasi dan kriteria penerimaan](docs/IMPLEMENTATION_PLAN.md)
+- [Fondasi visual M3.5, perbandingan acuan, dan review native](docs/VISUAL_FOUNDATION.md)
 
 Implementasi saat ini memakai Swift dan AppKit untuk macOS 14+ pada arsitektur Apple Silicon. SpriteKit, simulasi gerak koi, dan penyimpanan lokal berada pada milestone berikutnya (M1 & M2).

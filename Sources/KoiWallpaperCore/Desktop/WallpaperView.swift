@@ -2,10 +2,15 @@ import AppKit
 import Foundation
 
 public final class WallpaperView: NSView {
+    public static let targetFramesPerSecond: Double = 30
     public var inputCoordinator: InputCoordinator?
 
     public let simulation: PondSimulation
     public let renderer: PondRenderer
+    private lazy var sceneLayer = PondSceneLayer(renderer: renderer)
+    private let overlayView = PondOverlayView(frame: .zero)
+    public private(set) var totalRenderedFrames: Int = 0
+    public override var wantsUpdateLayer: Bool { true }
 
     public var timeOfDayPhase: TimeOfDayPhase = .day {
         didSet {
@@ -61,7 +66,7 @@ public final class WallpaperView: NSView {
 
     /// Measured frequency (Hz or ticks/sec) of the RunLoop animation timer callbacks.
     /// Note: This measures timer invocation cadence, NOT display VSYNC hardware frame presentation.
-    public private(set) var timerCadenceFPS: Double = 60.0
+    public private(set) var timerCadenceFPS: Double = WallpaperView.targetFramesPerSecond
 
     /// Backward-compatible alias for timer callback cadence.
     public var currentFPS: Double {
@@ -80,6 +85,7 @@ public final class WallpaperView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         layer?.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        configureSceneLayers()
         startAnimationTimer()
     }
 
@@ -92,6 +98,7 @@ public final class WallpaperView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         layer?.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        configureSceneLayers()
         startAnimationTimer()
     }
 
@@ -109,6 +116,7 @@ public final class WallpaperView: NSView {
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         simulation.resize(width: Double(newSize.width), height: Double(newSize.height))
+        needsDisplay = true
     }
 
     // MARK: - Animation Loop & Stasis Control
@@ -117,11 +125,11 @@ public final class WallpaperView: NSView {
         guard animationTimer == nil, !isPaused else { return }
         lastFrameTime = CACurrentMediaTime()
 
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / Self.targetFramesPerSecond, repeats: true) { [weak self] _ in
             guard let self = self, !self.isPaused else { return }
             self.totalTimerTicks += 1
             let now = CACurrentMediaTime()
-            let dt = (self.lastFrameTime > 0) ? (now - self.lastFrameTime) : (1.0 / 60.0)
+            let dt = (self.lastFrameTime > 0) ? (now - self.lastFrameTime) : (1.0 / Self.targetFramesPerSecond)
             self.lastFrameTime = now
 
             if dt > 0.005 && dt < 0.10 {
@@ -148,27 +156,33 @@ public final class WallpaperView: NSView {
 
     // MARK: - Drawing & Layer Composition
 
-    public override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        // Render full layered pond simulation with active time of day lighting
-        renderer.render(
-            simulation: simulation,
-            in: context,
-            rect: bounds,
-            phase: timeOfDayPhase
-        )
-
-        // Draw interaction banner when in explicit interactive capture mode
-        if isInteractionMode {
-            drawInteractionModeBanner()
+    private func configureSceneLayers() {
+        layer?.insertSublayer(sceneLayer, at: 0)
+        overlayView.frame = overlayFrame
+        overlayView.autoresizingMask = []
+        overlayView.wantsLayer = true
+        overlayView.drawOverlay = { [weak self] context in
+            guard let self else { return }
+            context.translateBy(x: -self.overlayView.frame.minX, y: -self.overlayView.frame.minY)
+            if self.isInteractionMode { self.drawInteractionModeBanner() }
+            if self.showHUD { self.drawHUD(in: context) }
         }
+        addSubview(overlayView)
+    }
 
-        // Draw diagnostic HUD if enabled
-        if showHUD {
-            drawHUD(in: context)
-        }
+    private var overlayFrame: CGRect {
+        CGRect(x: 0, y: max(0, bounds.height - 130), width: min(520, bounds.width), height: min(130, bounds.height))
+    }
+
+    public override func draw(_ dirtyRect: NSRect) { updateLayer() }
+
+    public override func updateLayer() {
+        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 1
+        sceneLayer.update(simulation: simulation, bounds: bounds, backingScale: scale, phase: timeOfDayPhase)
+        totalRenderedFrames += 1
+        overlayView.frame = overlayFrame
+        overlayView.isHidden = !showHUD && !isInteractionMode
+        if !overlayView.isHidden { overlayView.needsDisplay = true }
     }
 
     private func drawInteractionModeBanner() {

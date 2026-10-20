@@ -594,6 +594,86 @@ recordSimTest(
 )
 
 // -------------------------------------------------------------
+// TEST 11: Responsive Production Geometry
+// -------------------------------------------------------------
+print("\n--- 11. Responsive Koi Geometry ---")
+let geometryWorld = PondSimulation(bounds: PondBounds(width: 1024, height: 640), seed: 1100)
+let originalIDs = geometryWorld.fish.map(\.id)
+let originalLengths = geometryWorld.fish.map(\.length)
+let originalCenters = geometryWorld.fish.map(\.position)
+let sizedForViewport = geometryWorld.fish.allSatisfy {
+    let silhouette = $0.length * 1.16 / 640
+    return silhouette >= 0.119 && silhouette <= 0.181 && abs($0.width / $0.length - 0.34) < 0.00001
+}
+geometryWorld.resize(width: 1536, height: 960)
+let scaledGeometry = geometryWorld.fish.enumerated().allSatisfy { index, fish in
+    abs(fish.length / originalLengths[index] - 1.5) < 0.00001 &&
+    fish.position.distance(to: originalCenters[index] * 1.5) < 0.01
+}
+let custom = KoiFish(variety: KoiVariety.allEightVarieties[0], position: PondVector(x: 500, y: 320), length: 52, seed: 1101)
+let customWorld = PondSimulation(bounds: PondBounds(width: 1024, height: 640), initialFish: [custom], seed: 1102)
+customWorld.resize(width: 480, height: 320)
+let explicitGeometryPreserved = customWorld.fish[0].length == 52 && abs(customWorld.fish[0].width / 52 - 0.28) < 0.00001
+recordSimTest("T11.1 Responsive Geometry, Identity and Custom Fixture Compatibility",
+              passed: sizedForViewport && scaledGeometry && geometryWorld.fish.map(\.id) == originalIDs && explicitGeometryPreserved,
+              details: "productionProportions=\(sizedForViewport), proportionalResize=\(scaledGeometry), customDimensionsPreserved=\(explicitGeometryPreserved)")
+
+let stressBounds = PondBounds(width: 1024, height: 640)
+let production = PondSimulation(bounds: stressBounds, seed: 1200).fish
+var profileStressPassed = true
+var stressDetails: [String] = []
+for scenario in 0..<5 {
+    let center = stressBounds.center
+    var fixtures: [KoiFish] = []
+    let count = scenario == 2 || scenario == 3 ? 3 : 2
+    for i in 0..<count {
+        var fish = production[(i * 3 + scenario) % 8]
+        switch scenario {
+        case 0:
+            fish.position = center + PondVector(x: i == 0 ? -130 : 130, y: 0)
+            fish.heading = i == 0 ? 0 : .pi
+        case 1:
+            fish.position = center + (i == 0 ? PondVector(x: -180, y: 0) : PondVector(x: 0, y: -180))
+            fish.heading = i == 0 ? 0 : .pi / 2
+        case 2, 3:
+            let angle = Double(i) * 2 * Double.pi / 3
+            fish.position = center + PondVector.fromAngle(angle, length: 150)
+            fish.heading = angle + .pi
+        default:
+            fish.position = PondVector(x: 95 + Double(i) * 75, y: 260)
+            fish.heading = i == 0 ? 0 : .pi
+        }
+        fixtures.append(fish)
+    }
+    let world = PondSimulation(bounds: stressBounds, initialFish: fixtures, seed: UInt64(1300 + scenario))
+    world.clampAllEntitiesToBounds()
+    world.resolveFishSeparation()
+    if scenario == 2 { world.handleWaterClick(at: center) }
+    if scenario == 3 { world.handleFoodDrop(at: center) }
+    var minClearance = Double.infinity
+    var stayedInside = true
+    var clear = true
+    for frame in 0..<600 {
+        if scenario == 4 && frame == 240 { world.resize(width: 720, height: 480) }
+        world.advance(deltaTime: 1.0 / 60)
+        for fish in world.fish {
+            if !world.bounds.contains(fish.position, inset: min(fish.physicalRadius, min(world.bounds.width, world.bounds.height) * 0.45) - 0.01) { stayedInside = false }
+        }
+        for i in world.fish.indices {
+            for j in (i + 1)..<world.fish.count {
+                let result = evaluateIndependentClearance(fish1: world.fish[i], fish2: world.fish[j])
+                minClearance = min(minClearance, result.minClearance)
+                if result.hasPenetration || world.fish[i].bodyCollision(with: world.fish[j]).maxOverlap > 0.01 { clear = false }
+            }
+        }
+    }
+    profileStressPassed = profileStressPassed && stayedInside && clear
+    stressDetails.append(String(format: "scenario%d(clear=%@, bounds=%@, clearance=%.2fpt)", scenario, String(clear), String(stayedInside), minClearance))
+}
+recordSimTest("T11.2 Production-Size Collision and Resize Stress (Independent Oracle)",
+              passed: profileStressPassed, details: stressDetails.joined(separator: "; "))
+
+// -------------------------------------------------------------
 // SUMMARY & RESULTS
 // -------------------------------------------------------------
 print("\n=======================================================")

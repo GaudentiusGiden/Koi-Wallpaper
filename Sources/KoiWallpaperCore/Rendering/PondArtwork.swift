@@ -9,97 +9,70 @@ public enum PondArtwork {
 
     public static func drawWater(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase = .day) {
         context.saveGState()
-
-        // 1. Base Gradient: Atmospheric pond water tuned per phase
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let gradientColors: CFArray
-
+        context.translateBy(x: rect.minX, y: rect.minY)
+        let w = rect.width, h = rect.height
+        let colors: [CGColor]
         switch phase {
-        case .dawn:
-            gradientColors = [
-                CGColor(red: 0.07, green: 0.16, blue: 0.18, alpha: 1.0),
-                CGColor(red: 0.03, green: 0.09, blue: 0.12, alpha: 1.0)
-            ] as CFArray
         case .day:
-            gradientColors = [
-                CGColor(red: 0.04, green: 0.14, blue: 0.16, alpha: 1.0),
-                CGColor(red: 0.02, green: 0.08, blue: 0.10, alpha: 1.0)
-            ] as CFArray
-        case .dusk:
-            gradientColors = [
-                CGColor(red: 0.12, green: 0.09, blue: 0.18, alpha: 1.0),
-                CGColor(red: 0.05, green: 0.04, blue: 0.10, alpha: 1.0)
-            ] as CFArray
-        case .night:
-            gradientColors = [
-                CGColor(red: 0.02, green: 0.05, blue: 0.12, alpha: 1.0),
-                CGColor(red: 0.01, green: 0.02, blue: 0.05, alpha: 1.0)
-            ] as CFArray
-        }
-
-        let locations: [CGFloat] = [0.0, 1.0]
-
-        if let gradient = CGGradient(colorsSpace: colorSpace, colors: gradientColors, locations: locations) {
-            let center = CGPoint(x: rect.midX, y: rect.midY)
-            let radius = max(rect.width, rect.height) * 0.75
-            context.drawRadialGradient(
-                gradient,
-                startCenter: center,
-                startRadius: 0,
-                endCenter: center,
-                endRadius: radius,
-                options: [.drawsAfterEndLocation]
-            )
-        } else {
-            context.setFillColor(red: 0.03, green: 0.10, blue: 0.12, alpha: 1.0)
-            context.fill(rect)
-        }
-
-        // 2. Soft Underwater Caustics & Shimmer Bands tuned per phase
-        drawCaustics(in: context, rect: rect, phase: phase)
-
-        context.restoreGState()
-    }
-
-    private static func drawCaustics(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase = .day) {
-        context.saveGState()
-
-        let causticColor: CGColor
-        switch phase {
+            colors = [CGColor(red: 0.42, green: 0.72, blue: 0.57, alpha: 1), CGColor(red: 0.18, green: 0.43, blue: 0.32, alpha: 1), CGColor(red: 0.08, green: 0.26, blue: 0.21, alpha: 1)]
         case .dawn:
-            causticColor = CGColor(red: 0.45, green: 0.40, blue: 0.32, alpha: 0.16)
-        case .day:
-            causticColor = CGColor(red: 0.12, green: 0.40, blue: 0.38, alpha: 0.14)
+            colors = [CGColor(red: 0.47, green: 0.61, blue: 0.44, alpha: 1), CGColor(red: 0.20, green: 0.36, blue: 0.29, alpha: 1), CGColor(red: 0.06, green: 0.21, blue: 0.19, alpha: 1)]
         case .dusk:
-            causticColor = CGColor(red: 0.50, green: 0.30, blue: 0.38, alpha: 0.15)
+            colors = [CGColor(red: 0.28, green: 0.29, blue: 0.35, alpha: 1), CGColor(red: 0.13, green: 0.16, blue: 0.23, alpha: 1), CGColor(red: 0.06, green: 0.09, blue: 0.16, alpha: 1)]
         case .night:
-            causticColor = CGColor(red: 0.22, green: 0.35, blue: 0.52, alpha: 0.12)
+            colors = [CGColor(red: 0.07, green: 0.15, blue: 0.23, alpha: 1), CGColor(red: 0.025, green: 0.07, blue: 0.13, alpha: 1), CGColor(red: 0.01, green: 0.03, blue: 0.07, alpha: 1)]
+        }
+        let space = CGColorSpaceCreateDeviceRGB()
+        context.setFillColor(colors[2])
+        context.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        if let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: [0, 0.50, 1]) {
+            context.drawRadialGradient(gradient, startCenter: CGPoint(x: w * 0.36, y: h * 0.96), startRadius: 0,
+                                       endCenter: CGPoint(x: w * 0.53, y: h * 0.42), endRadius: max(w, h) * 0.87,
+                                       options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        }
+        // Overlapping, oblique pools of light give the water spatial depth.
+        let gain: CGFloat = phase == .day ? 1 : (phase == .dawn ? 0.60 : 0.16)
+        func light(_ x: CGFloat, _ y: CGFloat, _ rx: CGFloat, _ ry: CGFloat, _ angle: CGFloat, _ alpha: CGFloat) {
+            context.saveGState()
+            context.translateBy(x: x * w, y: y * h)
+            context.rotate(by: angle)
+            context.scaleBy(x: rx * w, y: ry * h)
+            if let glow = CGGradient(colorsSpace: space, colors: [
+                CGColor(red: 0.69, green: 1, blue: 0.83, alpha: alpha * gain),
+                CGColor(red: 0.46, green: 0.91, blue: 0.69, alpha: alpha * 0.26 * gain),
+                CGColor(red: 0.46, green: 0.91, blue: 0.69, alpha: 0)
+            ] as CFArray, locations: [0, 0.48, 1]) {
+                context.drawRadialGradient(glow, startCenter: .zero, startRadius: 0,
+                                           endCenter: .zero, endRadius: 1, options: [])
+            }
+            context.restoreGState()
+        }
+        light(0.17, 0.40, 0.13, 0.74, -0.43, 0.78)
+        light(0.43, 0.94, 0.34, 0.22, -0.18, 0.82)
+        light(0.73, 0.78, 0.10, 0.55, -0.52, 0.30)
+        light(0.96, 0.18, 0.19, 0.37, -0.48, 0.16)
+        // A chain of feathered pools follows a curved light shaft. Its center
+        // is also soft; a translucent stroked path would leave a hard ribbon edge.
+        for index in 0..<24 {
+            let t = CGFloat(index) / 23
+            let u = 1 - t
+            let x = u * u * u * (-0.10) + 3 * u * u * t * 0.10 + 3 * u * t * t * 0.25 + t * t * t * 0.48
+            let y = u * u * u * (-0.10) + 3 * u * u * t * 0.40 + 3 * u * t * t * 0.58 + t * t * t * 1.12
+            light(x, y, 0.045, 0.11, -0.43, 0.16)
         }
 
-        context.setStrokeColor(causticColor)
-        context.setLineWidth(24.0)
-        context.setLineCap(.round)
-
-        let w = rect.width
-        let h = rect.height
-
-        // Flowing curved caustic bands
-        let path1 = CGMutablePath()
-        path1.move(to: CGPoint(x: w * 0.15, y: h * 0.2))
-        path1.addCurve(to: CGPoint(x: w * 0.85, y: h * 0.4),
-                       control1: CGPoint(x: w * 0.4, y: h * 0.1),
-                       control2: CGPoint(x: w * 0.6, y: h * 0.5))
-        context.addPath(path1)
-        context.strokePath()
-
-        let path2 = CGMutablePath()
-        path2.move(to: CGPoint(x: w * 0.1, y: h * 0.75))
-        path2.addCurve(to: CGPoint(x: w * 0.9, y: h * 0.65),
-                       control1: CGPoint(x: w * 0.35, y: h * 0.85),
-                       control2: CGPoint(x: w * 0.65, y: h * 0.55))
-        context.addPath(path2)
-        context.strokePath()
-
+        // Original, seeded flecks sit below the smooth water surface. They are
+        // generated only on cache rebuild and do not animate like screen noise.
+        var random = SeededRandomNumberGenerator(seed: 405)
+        let unit = min(w, h) / 270
+        for index in 0..<3000 {
+            let x = CGFloat(Double.random(in: 0...1, using: &random)) * w
+            let y = CGFloat(Double.random(in: 0...1, using: &random)) * h
+            let size = CGFloat(Double.random(in: 0.4...1.4, using: &random)) * unit
+            if index % 3 == 0 { context.setFillColor(red: 0.61, green: 0.85, blue: 0.60, alpha: 0.065 * gain) }
+            else { context.setFillColor(red: 0.04, green: 0.25, blue: 0.18, alpha: 0.065 * gain) }
+            context.fill(CGRect(x: x, y: y, width: size, height: size))
+        }
         context.restoreGState()
     }
 
@@ -202,183 +175,16 @@ public enum PondArtwork {
         context.restoreGState()
     }
 
-    // MARK: - Lily Pads & Flowers (Pond Flora)
+    // MARK: - Shoreline artwork (also used by the renderer's cropped cache)
 
-    public static func drawLilyPads(in context: CGContext, bounds: PondBounds) {
-        context.saveGState()
-
-        let w = CGFloat(bounds.width)
-        let h = CGFloat(bounds.height)
-
-        // Cluster 1: Top-Left Corner
-        drawSingleLilyPad(
-            in: context,
-            center: CGPoint(x: w * 0.08, y: h * 0.85),
-            radius: 46.0,
-            notchAngle: 0.4,
-            hasFlower: true
-        )
-        drawSingleLilyPad(
-            in: context,
-            center: CGPoint(x: w * 0.14, y: h * 0.88),
-            radius: 34.0,
-            notchAngle: -0.8,
-            hasFlower: false
-        )
-        drawSingleLilyPad(
-            in: context,
-            center: CGPoint(x: w * 0.06, y: h * 0.74),
-            radius: 38.0,
-            notchAngle: 1.8,
-            hasFlower: false
-        )
-
-        // Cluster 2: Bottom-Right Corner
-        drawSingleLilyPad(
-            in: context,
-            center: CGPoint(x: w * 0.90, y: h * 0.14),
-            radius: 52.0,
-            notchAngle: -2.2,
-            hasFlower: true
-        )
-        drawSingleLilyPad(
-            in: context,
-            center: CGPoint(x: w * 0.84, y: h * 0.10),
-            radius: 36.0,
-            notchAngle: 1.1,
-            hasFlower: false
-        )
-        drawSingleLilyPad(
-            in: context,
-            center: CGPoint(x: w * 0.93, y: h * 0.24),
-            radius: 40.0,
-            notchAngle: -0.5,
-            hasFlower: false
-        )
-
-        // Cluster 3: Single pad near mid-bottom edge
-        drawSingleLilyPad(
-            in: context,
-            center: CGPoint(x: w * 0.48, y: h * 0.06),
-            radius: 42.0,
-            notchAngle: 2.5,
-            hasFlower: false
-        )
-
-        context.restoreGState()
-    }
-
-    private static func drawSingleLilyPad(
-        in context: CGContext,
-        center: CGPoint,
-        radius: CGFloat,
-        notchAngle: CGFloat,
-        hasFlower: Bool
-    ) {
-        context.saveGState()
-
-        // 1. Soft Drop Shadow onto Pond Floor
-        let shadowPath = CGMutablePath()
-        let shadowCenter = CGPoint(x: center.x + 8.0, y: center.y - 12.0)
-        shadowPath.addArc(
-            center: shadowCenter,
-            radius: radius,
-            startAngle: notchAngle + 0.25,
-            endAngle: notchAngle - 0.25 + 2.0 * .pi,
-            clockwise: false
-        )
-        shadowPath.addLine(to: shadowCenter)
-        shadowPath.closeSubpath()
-
-        context.setFillColor(red: 0.01, green: 0.05, blue: 0.06, alpha: 0.38)
-        context.addPath(shadowPath)
-        context.fillPath()
-
-        // 2. Lily Pad Leaf Body (Deep Forest / Jade Green)
-        let leafPath = CGMutablePath()
-        leafPath.addArc(
-            center: center,
-            radius: radius,
-            startAngle: notchAngle + 0.22,
-            endAngle: notchAngle - 0.22 + 2.0 * .pi,
-            clockwise: false
-        )
-        leafPath.addLine(to: center)
-        leafPath.closeSubpath()
-
-        context.setFillColor(red: 0.12, green: 0.36, blue: 0.22, alpha: 0.95)
-        context.addPath(leafPath)
-        context.fillPath()
-
-        // 3. Subtle Leaf Vein Ribs
-        context.setStrokeColor(red: 0.18, green: 0.48, blue: 0.30, alpha: 0.6)
-        context.setLineWidth(1.0)
-        for i in 0..<7 {
-            let veinAngle = notchAngle + 0.45 + CGFloat(i) * ((2.0 * .pi - 0.9) / 6.0)
-            context.move(to: center)
-            let veinEnd = CGPoint(
-                x: center.x + cos(veinAngle) * (radius * 0.88),
-                y: center.y + sin(veinAngle) * (radius * 0.88)
-            )
-            context.addLine(to: veinEnd)
-        }
-        context.strokePath()
-
-        // 4. Edge highlight ring
-        context.setStrokeColor(red: 0.22, green: 0.54, blue: 0.34, alpha: 0.5)
-        context.setLineWidth(1.2)
-        context.addPath(leafPath)
-        context.strokePath()
-
-        // 5. Water Lily Flower (Lotus)
-        if hasFlower {
-            drawLotusFlower(in: context, center: CGPoint(x: center.x + radius * 0.2, y: center.y + radius * 0.15))
-        }
-
-        context.restoreGState()
-    }
-
-    private static func drawLotusFlower(in context: CGContext, center: CGPoint) {
-        context.saveGState()
-
-        let petalCount = 8
-        let petalLen: CGFloat = 13.0
-        let petalWidth: CGFloat = 5.5
-
-        // Petals (Blush white/pink gradient)
-        context.setFillColor(red: 0.98, green: 0.94, blue: 0.96, alpha: 0.95)
-        context.setStrokeColor(red: 0.92, green: 0.72, blue: 0.80, alpha: 0.7)
-        context.setLineWidth(0.8)
-
-        for i in 0..<petalCount {
-            let angle = (CGFloat(i) / CGFloat(petalCount)) * 2.0 * .pi
+    public static func drawLilyPads(in context: CGContext, bounds: PondBounds, time: Double = 0) {
+        let short = CGFloat(min(bounds.width, bounds.height))
+        for (index, anchor) in PondFloraArtwork.anchors.enumerated() {
             context.saveGState()
-            context.translateBy(x: center.x, y: center.y)
-            context.rotate(by: angle)
-
-            let petalPath = CGMutablePath()
-            petalPath.move(to: .zero)
-            petalPath.addCurve(to: CGPoint(x: petalLen, y: 0),
-                               control1: CGPoint(x: petalLen * 0.4, y: petalWidth),
-                               control2: CGPoint(x: petalLen * 0.8, y: petalWidth * 0.6))
-            petalPath.addCurve(to: .zero,
-                               control1: CGPoint(x: petalLen * 0.8, y: -petalWidth * 0.6),
-                               control2: CGPoint(x: petalLen * 0.4, y: -petalWidth))
-            petalPath.closeSubpath()
-
-            context.addPath(petalPath)
-            context.fillPath()
-            context.addPath(petalPath)
-            context.strokePath()
-
+            context.translateBy(x: anchor.x * CGFloat(bounds.width), y: anchor.y * CGFloat(bounds.height))
+            context.rotate(by: CGFloat(sin(time * 0.20 + Double(index))) * 0.006)
+            PondFloraArtwork.drawCluster(index, in: context, shortSide: short)
             context.restoreGState()
         }
-
-        // Flower Center (Golden Stamen)
-        context.setFillColor(red: 0.96, green: 0.82, blue: 0.24, alpha: 1.0)
-        let centerR: CGFloat = 4.0
-        context.fillEllipse(in: CGRect(x: center.x - centerR, y: center.y - centerR, width: centerR * 2, height: centerR * 2))
-
-        context.restoreGState()
     }
 }

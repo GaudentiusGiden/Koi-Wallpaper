@@ -430,47 +430,49 @@ func spinRunLoop(for duration: TimeInterval) {
     }
 }
 
+// Isolate timer behavior from asynchronous desktop occlusion notifications.
+let animationView = WallpaperView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
 // Radius Freeze & Resume Progression Test
-testView.isPaused = false
-testView.addRipple(at: CGPoint(x: 150, y: 150), isFood: false)
+animationView.isPaused = false
+animationView.addRipple(at: CGPoint(x: 150, y: 150), isFood: false)
 
 // Wait until first animation step progresses ripple radius past initial 4.0 pt (up to 1.0s)
 let startT = Date()
 while Date().timeIntervalSince(startT) < 1.0 {
     RunLoop.current.run(until: Date().addingTimeInterval(0.02))
-    if let r = testView.firstRippleRadius, r > 4.0 {
+    if let r = animationView.firstRippleRadius, r > 4.0 {
         break
     }
 }
 
-let initialRadius = testView.firstRippleRadius ?? 0.0
-let hasInitialAnimation = testView.isAnimating && initialRadius > 4.0
+let initialRadius = animationView.firstRippleRadius ?? 0.0
+let hasInitialAnimation = animationView.isAnimating && initialRadius > 4.0
 
 // Pause view
-let timerTicksBeforePause = testView.totalTimerTicks
-testView.isPaused = true
-let pausedAnimationStopped = !testView.isAnimating
+let timerTicksBeforePause = animationView.totalTimerTicks
+animationView.isPaused = true
+let pausedAnimationStopped = !animationView.isAnimating
 spinRunLoop(for: 0.10)
-let radiusDuringPause = testView.firstRippleRadius ?? 0.0
+let radiusDuringPause = animationView.firstRippleRadius ?? 0.0
 let pausedStatePreserved = (radiusDuringPause == initialRadius)
-let pauseFlagStayedSet = testView.isPaused
-let timerTicksAfterPause = testView.totalTimerTicks
+let pauseFlagStayedSet = animationView.isPaused
+let timerTicksAfterPause = animationView.totalTimerTicks
 let timerStayedStopped = (timerTicksAfterPause == timerTicksBeforePause)
 
 // Resume view
-testView.isPaused = false
-let resumedAnimationRestarted = testView.isAnimating
+animationView.isPaused = false
+let resumedAnimationRestarted = animationView.isAnimating
 
 // Wait until resumed animation progresses ripple radius further (up to 1.0s)
 let resumeT = Date()
 while Date().timeIntervalSince(resumeT) < 1.0 {
     RunLoop.current.run(until: Date().addingTimeInterval(0.02))
-    if let r = testView.firstRippleRadius, r > radiusDuringPause {
+    if let r = animationView.firstRippleRadius, r > radiusDuringPause {
         break
     }
 }
 
-let radiusAfterResume = testView.firstRippleRadius ?? 0.0
+let radiusAfterResume = animationView.firstRippleRadius ?? 0.0
 let resumedRadiusProgressed = (radiusAfterResume > radiusDuringPause)
 
 recordTest(
@@ -479,7 +481,7 @@ recordTest(
     passed: hasInitialAnimation && pausedAnimationStopped && pausedStatePreserved && pauseFlagStayedSet && timerStayedStopped && resumedAnimationRestarted && resumedRadiusProgressed,
     details: "initial=\(initialRadius), frozen=\(radiusDuringPause), resumed=\(radiusAfterResume), pauseTicks=\(timerTicksBeforePause)->\(timerTicksAfterPause), pausedDuringFreeze=\(pauseFlagStayedSet), timerStopped=\(pausedAnimationStopped). Radius and timer remain frozen during pause, then radius increases after resume."
 )
-testView.isPaused = true
+animationView.isPaused = true
 testWindowController.teardown()
 
 // -------------------------------------------------------------
@@ -1244,9 +1246,11 @@ let dualDeltaMB = max(0.0, dualMemMB - activeMemMB)
 let pwr = getPowerSourceInfo()
 
 // Multi-Metric Assertion Verification (Strict thresholds reflecting genuine Apple M1 profile)
-let cadenceHealthy = (timerCallbackCadence >= 50.0 && timerCallbackCadence <= 70.0 && elapsedTicks >= 20)
+let cadenceHealthy = (timerCallbackCadence >= 25.0 && timerCallbackCadence <= 35.0 && elapsedTicks >= 10)
 let operationalCpuBounded = (operationalCpuPercent >= 0.0 && operationalCpuPercent <= 20.0)
-let fpsThroughputMet = (measuredThroughputFPS >= 95.0)
+// Offscreen export is a compatibility path; live frame budgets are checked on
+// the CALayer compositor in T7.7 rather than against the former CPU renderer.
+let fpsThroughputMet = (measuredThroughputFPS >= 30.0)
 let throughputCpuActive = (throughputPeakCpuPercent >= 75.0)
 let memEfficient = (activeMemMB >= 20.0 && activeMemMB <= 220.0)
 let dualSimOverheadBounded = (dualDeltaMB <= 5.0)
@@ -1295,6 +1299,140 @@ recordAudit(
     "M3 Hardware & Energy Status",
     details: "1 Physical Screen verified live. Multi-display hot-plug verified via in-process synthetic displays (physical multi-display pending external hardware). GPU load is an informative engine activity metric. Quantitative energy (Watts) pending root powermetrics; verified efficiency proxy is CPU timer halt (stasis at \(String(format: "%.2f", pausedCpuPercent))% CPU)."
 )
+
+// Exercise the same frame preparation and CALayer updates used by both views.
+// Warm-cache CPU timings measure submission headroom, not GPU presentation/VSYNC.
+var styleBudgetsPassed = true
+var styleBudgetDetails: [String] = []
+for (width, height, targetFPS) in [(1024, 640, 60.0), (1680, 1050, 30.0)] {
+    let world = PondSimulation(bounds: PondBounds(width: Double(width), height: Double(height)), seed: 42)
+    let styleRenderer = PondRenderer()
+    let nativeScene = PondSceneLayer(renderer: styleRenderer)
+    let viewport = CGRect(x: 0, y: 0, width: width, height: height)
+    for _ in 0..<5 { nativeScene.update(simulation: world, bounds: viewport, backingScale: 2) }
+    var samples: [Double] = []
+    for _ in 0..<60 {
+        let start = CACurrentMediaTime()
+        world.advance(deltaTime: 1 / targetFPS)
+        nativeScene.update(simulation: world, bounds: viewport, backingScale: 2)
+        samples.append((CACurrentMediaTime() - start) * 1000)
+    }
+    samples.sort()
+    let p95 = samples[Int(Double(samples.count) * 0.95)]
+    styleBudgetsPassed = styleBudgetsPassed && p95 < 1000 / targetFPS
+    styleBudgetDetails.append(String(format: "%dx%dpt @2x p95=%.2fms / %.2fms", width, height, p95, 1000 / targetFPS))
+}
+recordTest(.m3Resource, "T7.7 Native Retina Frame Preparation and Layer Submission Budgets",
+           passed: styleBudgetsPassed, details: styleBudgetDetails.joined(separator: "; ") + " (native layer submission CPU; not VSYNC)")
+
+// Isolate ambient animation from fish, food and input: an empty pond must move,
+// freeze byte-for-byte on pause, and restart the ambient clock on reset.
+let ambientWorld = PondSimulation(bounds: PondBounds(width: 800, height: 600), initialFish: [], seed: 42)
+let ambientRenderer = PondRenderer()
+func ambientPixels() -> Data {
+    ambientRenderer.render(simulation: ambientWorld, in: testCtx, rect: CGRect(x: 0, y: 0, width: 800, height: 600))
+    return testCtx.makeImage()!.dataProvider!.data! as Data
+}
+let originalAmbient = ambientPixels()
+for _ in 0..<240 { ambientWorld.advance(deltaTime: 1.0 / 60) }
+let movingAmbient = ambientPixels()
+ambientWorld.isPaused = true
+let pausedTime = ambientWorld.elapsedTime
+ambientWorld.advance(deltaTime: 3600)
+let frozenAmbient = ambientPixels()
+let froze = ambientWorld.elapsedTime == pausedTime && movingAmbient == frozenAmbient
+ambientWorld.isPaused = false
+ambientWorld.advance(deltaTime: 3600)
+let resumedWithinClamp = ambientWorld.elapsedTime > pausedTime && ambientWorld.elapsedTime - pausedTime <= ambientWorld.maxCatchUpDelta + 0.00001
+ambientWorld.reset()
+let resetClock = ambientWorld.elapsedTime == 0
+recordTest(.viewState, "T7.8 Ambient Motion, Pause Freeze and Resume Clamp",
+           passed: originalAmbient != movingAmbient && froze && resumedWithinClamp && resetClock,
+           details: "emptyPondMoves=\(originalAmbient != movingAmbient), pausedPixelsIdentical=\(froze), resumeClamped=\(resumedWithinClamp), clockReset=\(resetClock)")
+
+// Rendering decorative schools must never change the real world's RNG or state.
+let renderedWorld = PondSimulation(bounds: PondBounds(width: 800, height: 600), seed: 9100)
+let untouchedWorld = PondSimulation(bounds: PondBounds(width: 800, height: 600), seed: 9100)
+let worldIDs = renderedWorld.fish.map(\.id)
+let isolationRenderer = PondRenderer()
+for _ in 0..<120 {
+    renderedWorld.advance(deltaTime: 1.0 / 60)
+    untouchedWorld.advance(deltaTime: 1.0 / 60)
+    isolationRenderer.render(simulation: renderedWorld, in: testCtx, rect: CGRect(x: 0, y: 0, width: 800, height: 600))
+}
+let visualIsolation = renderedWorld.fish.count == 8 && renderedWorld.fish.map(\.id) == worldIDs &&
+    renderedWorld.rng.state == untouchedWorld.rng.state && renderedWorld.pellets.isEmpty && renderedWorld.clickTargets.isEmpty &&
+    zip(renderedWorld.fish, untouchedWorld.fish).allSatisfy { a, b in
+        a.position == b.position && a.velocity == b.velocity && a.rng.state == b.rng.state
+    }
+let boundedScene = PondSceneLayer(renderer: isolationRenderer)
+for _ in 0..<100 { renderedWorld.handleWaterClick(at: renderedWorld.bounds.center) }
+boundedScene.update(simulation: renderedWorld, bounds: CGRect(x: 0, y: 0, width: 800, height: 600), backingScale: 2)
+let surfaceNodeCount = boundedScene.sublayers?.flatMap { $0.sublayers ?? [] }.count ?? 0
+for _ in 0..<100 {
+    renderedWorld.advance(deltaTime: 1.0 / 30)
+    renderedWorld.handleWaterClick(at: renderedWorld.bounds.center)
+    boundedScene.update(simulation: renderedWorld, bounds: CGRect(x: 0, y: 0, width: 800, height: 600), backingScale: 2)
+}
+let finalSurfaceNodeCount = boundedScene.sublayers?.flatMap { $0.sublayers ?? [] }.count ?? 0
+let noAnimation = (boundedScene.sublayers ?? []).allSatisfy { layer in
+    (layer.animationKeys() ?? []).isEmpty && (layer.sublayers ?? []).allSatisfy { ($0.animationKeys() ?? []).isEmpty }
+}
+recordTest(.viewState, "T7.9 Decorative Schooling Isolation and Bounded Native Layers",
+           passed: visualIsolation && surfaceNodeCount <= 140 && finalSurfaceNodeCount <= 140 && noAnimation,
+           details: "worldUnchangedByRendering=\(visualIsolation), surfaceNodes=\(surfaceNodeCount)->\(finalSurfaceNodeCount)/140, noAutonomousAnimations=\(noAnimation)")
+
+// A concrete composition constraint catches the sparse shoreline of the first revision.
+let compositionWidth = 1024, compositionHeight = 640
+let floraBitmap = CGContext(data: nil, width: compositionWidth, height: compositionHeight, bitsPerComponent: 8, bytesPerRow: 0,
+                           space: benchColorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+PondArtwork.drawLilyPads(in: floraBitmap, bounds: PondBounds(width: Double(compositionWidth), height: Double(compositionHeight)))
+let floraBytes = floraBitmap.data!.assumingMemoryBound(to: UInt8.self)
+var vegetationPixels = 0, clearCenterPixels = 0, centerPixels = 0
+for y in 0..<compositionHeight {
+    for x in 0..<compositionWidth {
+        let alpha = floraBytes[y * floraBitmap.bytesPerRow + x * 4 + 3]
+        if alpha >= 180 { vegetationPixels += 1 }
+        if x >= compositionWidth / 4 && x < compositionWidth * 3 / 4 && y >= compositionHeight / 5 && y < compositionHeight * 4 / 5 {
+            centerPixels += 1
+            if alpha < 20 { clearCenterPixels += 1 }
+        }
+    }
+}
+let vegetationCoverage = Double(vegetationPixels) / Double(compositionWidth * compositionHeight)
+let openCenter = Double(clearCenterPixels) / Double(centerPixels)
+recordTest(.viewState, "T7.10 Shoreline Mass and Open Swimming Area",
+           passed: vegetationCoverage >= 0.20 && vegetationCoverage <= 0.30 && openCenter >= 0.95,
+           details: String(format: "vegetation=%.2f%% (20–30%%), openCenter=%.2f%% (>=95%%)", vegetationCoverage * 100, openCenter * 100))
+
+// Backing-scale changes must preserve an integer pixel grid and click routing.
+let overlayTestView = WallpaperView(frame: CGRect(x: 0, y: 0, width: 1024, height: 640))
+overlayTestView.isPaused = true
+overlayTestView.showHUD = true
+overlayTestView.isInteractionMode = true
+overlayTestView.updateLayer()
+let overlay = overlayTestView.subviews.first as? PondOverlayView
+let hudPoint = CGPoint(x: 30, y: overlayTestView.bounds.height - 35)
+let passesThrough = overlayTestView.hitTest(hudPoint) === overlayTestView && overlay?.hitTest(.zero) == nil
+let croppedHUD = (overlay?.frame.height ?? 0) <= 130 && (overlay?.frame.width ?? 0) <= 520
+var gridIntact = true
+for (width, height, scale) in [(480, 320, 1.0), (1440, 900, 2.0), (481, 321, 2.0)] {
+    let host = PondSceneLayer(renderer: PondRenderer())
+    let world = PondSimulation(bounds: PondBounds(width: Double(width), height: Double(height)), seed: 9200)
+    host.update(simulation: world, bounds: CGRect(x: 0, y: 0, width: width, height: height), backingScale: scale)
+    if let pixelLayer = host.sublayers?.first(where: { $0.magnificationFilter == .nearest }),
+       let contents = pixelLayer.contents, CFGetTypeID(contents as CFTypeRef) == CGImage.typeID {
+        let image = contents as! CGImage
+        let magnification = pixelLayer.bounds.width / Double(image.width) * scale
+        gridIntact = gridIntact && abs(magnification - magnification.rounded()) < 0.00001 && magnification >= 1
+    } else { gridIntact = false }
+    for phase in TimeOfDayPhase.allCases {
+        host.update(simulation: world, bounds: CGRect(x: 0, y: 0, width: width, height: height), backingScale: scale, phase: phase)
+    }
+}
+recordTest(.viewState, "T7.11 Native Pixel Grid, Cropped HUD and Input Passthrough",
+           passed: passesThrough && croppedHUD && gridIntact && overlayTestView.wantsUpdateLayer,
+           details: "integerBackingGrid=\(gridIntact), HUDPassesClicks=\(passesThrough), croppedHUD=\(croppedHUD), layerOnlyUpdates=\(overlayTestView.wantsUpdateLayer)")
 
 // -------------------------------------------------------------
 // SUMMARY & EVIDENCE SCOPE DISCLOSURE
