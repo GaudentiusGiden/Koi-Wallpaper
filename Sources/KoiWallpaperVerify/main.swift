@@ -398,7 +398,7 @@ recordTest(
     details: "Hidden window sets .covered reason; visible window removes .covered (Live desktop occlusion requires desktop validation)"
 )
 
-// Animation Freeze & Resume Continuity Test
+// Radius Freeze & Resume Progression Test
 testView.isPaused = false
 testView.addRipple(at: CGPoint(x: 150, y: 150), isFood: false)
 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
@@ -418,13 +418,13 @@ testView.isPaused = false
 let resumedAnimationRestarted = testView.isAnimating
 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
 let radiusAfterResume = testView.firstRippleRadius ?? 0.0
-let resumedContinuityValid = (radiusAfterResume > radiusDuringPause)
+let resumedRadiusProgressed = (radiusAfterResume > radiusDuringPause)
 
 recordTest(
     .viewState,
-    "T4.6 Animation Freeze & Discontinuity-Free Resume",
-    passed: hasInitialAnimation && pausedAnimationStopped && pausedStatePreserved && resumedAnimationRestarted && resumedContinuityValid,
-    details: "initial=\(initialRadius), frozen=\(radiusDuringPause), resumed=\(radiusAfterResume). Timer stops cleanly on pause and resumes without resetting or jumping."
+    "T4.6 Animation Freeze & Resume Radius Progression",
+    passed: hasInitialAnimation && pausedAnimationStopped && pausedStatePreserved && resumedAnimationRestarted && resumedRadiusProgressed,
+    details: "initial=\(initialRadius), frozen=\(radiusDuringPause), resumed=\(radiusAfterResume). Radius is preserved during pause and increases after resume."
 )
 
 // -------------------------------------------------------------
@@ -435,11 +435,11 @@ print("\n--- Section 5: Architectural Permissions & TCC Audit ---")
 let isAXTrusted = AXIsProcessTrustedWithOptions(nil)
 recordAudit(
     "TCC Privileges Audit",
-    details: "AXIsProcessTrusted=\(isAXTrusted) (untrusted, as expected for standard userland app). No Accessibility or Input Monitoring entitlements/prompts required by M0 host architecture."
+    details: "Test runner process AXIsProcessTrusted=\(isAXTrusted). Note: measures only the verifier process (KoiWallpaperVerify), not KoiWallpaper.app runtime permissions. Architecture does not declare Accessibility or Input Monitoring entitlements."
 )
 
 // -------------------------------------------------------------
-// SUMMARY & DESKTOP VALIDATION CHECKLIST
+// SUMMARY & EVIDENCE SCOPE DISCLOSURE
 // -------------------------------------------------------------
 print("\n=======================================================")
 let passCount = results.filter { $0.passed }.count
@@ -454,15 +454,11 @@ All tests above verified in-memory AppKit object configurations, state
 coordinators, synthetic NSEvent dispatch, and synthetic notification handling.
 THEY DO NOT PROVE REAL macOS DESKTOP WINDOW SERVER INTEGRATION.
 
-Pending Desktop Integration Checklist (Requires Live Manual Validation):
-  [ ] 1. Finder Desktop Click-Through: Click, drag, and select desktop icons
-  [ ] 2. Focus Non-Stealing: Verify clicking pond never steals key/main focus
-  [ ] 3. Status Bar Menu: Toggle Interaction Mode & Manual Pause via UI
-  [ ] 4. macOS Spaces: Verify window remains stationary on all virtual desktops
-  [ ] 5. Show Desktop & Mission Control: Verify window does not fly away
-  [ ] 6. Native Fullscreen Apps: Verify behavior when another app goes fullscreen
-  [ ] 7. Live Desktop Occlusion: Observe occlusion state when covered by windows
-  [ ] 8. Hardware Sleep & Wake: Observe actual system/display sleep & lid close/open
+Real macOS desktop integration (Finder interaction, window layering, focus
+behavior, Spaces/fullscreen transitions, occlusion, and hardware sleep/wake)
+is outside the scope of this in-process test suite.
+Refer to docs/M0_AUDIT.md Section 5 for the live desktop validation checklist
+and latest verified status.
 --------------------------------------------------------------------------------
 """)
 

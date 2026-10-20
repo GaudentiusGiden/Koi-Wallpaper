@@ -15,6 +15,14 @@ let package = Package(
             name: "KoiWallpaperVerify",
             targets: ["KoiWallpaperVerify"]
         ),
+        .executable(
+            name: "KoiWallpaperPreview",
+            targets: ["KoiWallpaperPreview"]
+        ),
+        .executable(
+            name: "KoiWallpaperSimTest",
+            targets: ["KoiWallpaperSimTest"]
+        ),
         .library(
             name: "KoiWallpaperCore",
             targets: ["KoiWallpaperCore"]
@@ -34,6 +42,16 @@ let package = Package(
             name: "KoiWallpaperVerify",
             dependencies: ["KoiWallpaperCore"],
             path: "Sources/KoiWallpaperVerify"
+        ),
+        .executableTarget(
+            name: "KoiWallpaperPreview",
+            dependencies: ["KoiWallpaperCore"],
+            path: "Sources/KoiWallpaperPreview"
+        ),
+        .executableTarget(
+            name: "KoiWallpaperSimTest",
+            dependencies: ["KoiWallpaperCore"],
+            path: "Sources/KoiWallpaperSimTest"
         )
     ]
 )

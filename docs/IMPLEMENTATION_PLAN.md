@@ -1,53 +1,63 @@
 # Rencana implementasi Koi Wallpaper
 
-Rencana ini mengikuti [analisis referensi](REA.md) dan [hasil REA CLI](REA_FINDINGS.md). Fondasi native M0 kini tersedia dan berhasil dibangun (executable `KoiWallpaper`, bundle `.app`, dan test suite `KoiWallpaperVerify`). Suite in-process (15 uji) serta inspeksi Window Server safe mode lulus tanpa error. Namun, integrasi desktop nyata (klik/drag/marquee Finder, fokus non-stealing, Spaces, Mission Control, Show Desktop, occlusion riil, dan hardware sleep/wake) belum divalidasi manual di GUI macOS. Status rinci, batas verifikasi, dan checklist manual tersisa dicatat di [audit M0](M0_AUDIT.md).
+Rencana ini mengikuti [analisis referensi](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/REA.md) dan [hasil REA CLI](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/REA_FINDINGS.md). Fondasi native M0 telah dibangun, diverifikasi (executable `KoiWallpaper`, bundle `.app`, dan suite verifikasi `KoiWallpaperVerify`), dan **resmi diterima pada 20 Oktober 2026 (Asia/Jakarta)** dengan batasan platform WindowServer macOS yang disepakati (Koi Wallpaper terbukti tidak mengambil fokus; klik fisik pada kolam desktop dapat mengaktifkan Finder dan mendefokuskan aplikasi sebelumnya). Milestone **M1 (Simulasi Kolam Mandiri)** telah selesai diimplementasikan, diverifikasi melalui unit test in-process 17/17 lulus (termasuk 4 uji regresi geometri kapsul tirus T0.1–T0.4 dan uji non-penetrasi geometri kapsul multi-langkah deterministik T3.1 pada 5 skenario benturan ekstrim dengan oracle independen), dan divalidasi secara visual melalui 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis berhadapan pada jendela GUI macOS WindowServer dengan perbaikan tuntas pada cacat penumpukan makan, pembagian target sirkumferensial klik air, relaksasi posisi kapsul tulang belakang, dan pemotongan batas resize (status visual temporal kolam diklasifikasikan parsial untuk ketiadaan kerumunan jangka panjang). Milestone berikutnya adalah **M2 (Wallpaper yang Dapat Dipakai)**. Status dan rincian keputusan M0 dicatat di [audit M0](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/M0_AUDIT.md).
 
 ## Urutan kerja
 
 ### M0 — Buktikan integrasi desktop
 
-Status: implementasi M0 tersedia, verifikasi in-process lulus, penerimaan desktop M0 masih tertunda. Struktur window, menu, input routing, dan lifecycle policy telah terintegrasi dengan view (timer animasi berhenti saat pause dan lanjut tanpa lompatan saat resume; alasan manual pause tidak hilang oleh sleep/wake). Bukti integrasi Window Server (layer -2147483623 di bawah Finder -2147483603) telah terkonfirmasi secara safe/read-only. Validasi manual interaksi desktop riil menjadi prasyarat penerimaan akhir M0. Lihat [audit M0](M0_AUDIT.md).
+Status: **DITERIMA** (Keputusan pengguna 20 Oktober 2026, Asia/Jakarta, dengan batasan platform yang disepakati). Implementasi M0 tersedia dan verifikasi in-process lulus. Integrasi Window Server (layer -2147483623 di bawah Finder -2147483603) dan pengujian interaksi pengguna (Finder, Mode Interaksi, Spaces/fullscreen, Show Desktop, Mission Control, occlusion `.covered`, dan hardware sleep/wake) telah diverifikasi. Kriteria non-stealing terbukti penuh (Koi Wallpaper tidak pernah mengambil fokus atau menu bar). Keterbatasan WindowServer macOS (klik desktop mengaktifkan Finder dan mendefokuskan aplikasi aktif sebelumnya) diterima secara formal sebagai batasan platform M0 tanpa mengklaim retensi fokus aplikasi sebelumnya lulus. Proyek resmi melangkah ke M1. Lihat [audit M0](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/M0_AUDIT.md).
 
 Tujuan: memastikan aplikasi bisa menjadi wallpaper dan tetap nyaman dipakai bersama Finder sebelum membuat artwork serta simulasi lengkap.
 
 Pekerjaan:
 
 - [x] Buat app macOS minimal dengan menu bar dan jendela borderless berwarna statis.
-- [x] Konfigurasi tingkat jendela, perpindahan Spaces, dan collection behavior (`.stationary`, `.canJoinAllSpaces`, `.ignoresCycle`, `.fullScreenAuxiliary`).
+- [x] Konfigurasi tingkat jendela, perpindahan Spaces, dan collection behavior (`.stationary`, `.canJoinAllSpaces`, `.ignoresCycle`, `.fullScreenNone`, `animationBehavior = .none`).
 - [x] Implementasikan tembus klik (default) dan mode interaksi eksplisit (`.interactive`).
-- [x] Sinkronkan status pause manual dan notifikasi sistem (`screensDidSleep`, `willSleep`, `sessionDidResignActive`) ke `WallpaperView` tanpa lompatan waktu saat resume.
-- [x] Audit kebutuhan izin TCC (memastikan app tidak meminta atau membutuhkan izin Accessibility / Input Monitoring).
-- [x] Validasi desktop: fokus aplikasi tidak berpindah saat wallpaper diklik (diverifikasi via OS window manager).
-- [x] Validasi desktop: navigasi Spaces dan transisi fullscreen aplikasi lain (diverifikasi live oleh pengguna setelah perbaikan flicker).
-- [ ] Validasi manual desktop: klik, drag, dan seleksi marquee Finder pada mode biasa.
-- [ ] Validasi manual desktop: visualisasi riak interaktif, Show Desktop, Mission Control, dan sleep/wake fisik perangkat keras.
+- [x] Sinkronkan status pause manual dan notifikasi sistem (`screensDidSleep`, `willSleep`, `sessionDidResignActive`) ke `WallpaperView` (radius membeku saat jeda dan bertambah setelah resume).
+- [x] Audit kebutuhan izin TCC (memastikan app tidak mendeklarasikan entitlement Accessibility / Input Monitoring).
+- [x] Validasi desktop non-stealing: Koi Wallpaper menolak key/main window dan tidak pernah mengambil alih fokus/menu bar saat wallpaper diklik (diverifikasi via OS window manager dan observasi UI).
+- [x] Keputusan retensi fokus aplikasi aktif: Diselesaikan pada 20 Oktober 2026 (Asia/Jakarta) dengan penerimaan batasan platform WindowServer macOS oleh pengguna (klik area kolam dapat mengaktifkan Finder dan mendefokuskan aplikasi sebelumnya; Koi Wallpaper sendiri terbukti tidak mengambil fokus; retensi fokus aplikasi aktif tidak diklaim lulus).
+- [x] Validasi desktop: navigasi Spaces dan transisi fullscreen aplikasi lain (diverifikasi live oleh pengguna bebas flicker setelah commit `81d1fbe`).
+- [x] Validasi manual desktop: klik, drag, dan seleksi marquee Finder pada mode biasa (diverifikasi live oleh pengguna).
+- [x] Validasi manual desktop: visualisasi riak interaktif, Show Desktop, Mission Control, live desktop occlusion (`.covered`), dan sleep/wake fisik perangkat keras (diverifikasi live oleh pengguna).
 
 Selesai ketika:
 
-- Ikon Finder dapat diklik, dipindah, dan diseleksi dalam mode biasa.
-- Jendela tidak mengambil fokus aplikasi saat dipasang sebagai wallpaper.
-- Mode interaksi bisa diaktifkan dan dihentikan dengan jelas dari menu.
-- Perilaku pause saat tertutup sudah diketahui, termasuk keterbatasannya.
-- Keputusan input akhir tercatat; jika klik langsung belum aman, keterbatasan tersebut tetap terlihat dalam cakupan MVP.
+- [x] Ikon Finder dapat diklik, dipindah, dan diseleksi dalam mode biasa (terkonfirmasi via observasi fisik pengguna).
+- [x] Jendela Koi Wallpaper tidak mengambil fokus aplikasi saat dipasang sebagai wallpaper (terkonfirmasi via penolakan programatik dan observasi UI).
+- [x] Keputusan batasan platform fokus aplikasi aktif: Diterima oleh pengguna pada 20 Oktober 2026 (Koi Wallpaper tidak mengambil fokus; klik fisik kolam dapat mengaktifkan Finder dan mendefokuskan aplikasi sebelumnya; batasan platform diterima tanpa mengklaim retensi fokus aplikasi sebelumnya lulus).
+- [x] Mode interaksi bisa diaktifkan dan dihentikan dengan jelas dari menu (terkonfirmasi via observasi live pengguna).
+- [x] Perilaku pause saat tertutup sudah diketahui (`.covered` aktif saat tertutup 100% dan kembali `Aktif` saat dibuka, terkonfirmasi via observasi live pengguna).
+- [x] Temuan pengujian dan batasan arsitektur input desktop telah didokumentasikan secara transparan; M0 diterima dengan batasan platform yang jelas dan M1 menjadi milestone berikutnya.
 
 ### M1 — Simulasi kolam mandiri
+
+Status: **IMPLEMENTASI INTI & PENGUJIAN LULUS, VALIDASI VISUAL TEMPORAL PARSIAL** (Simulasi inti dan artwork CoreGraphics mandiri selesai, unit test in-process 17/17 assertion lulus termasuk uji regresi geometri kapsul tirus T0.1–T0.4 dan pemisahan fisik multi-langkah T3.1 deterministik dengan oracle independen, jendela preview `KoiWallpaperPreview` tervalidasi via 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis pada jarak minimum aktual; status visual live wandering diklasifikasikan parsial karena satu rekaman simulasi acak tidak membuktikan ketiadaan kerumunan sepanjang masa simulasi tanpa batas).
 
 Tujuan: membuat perilaku inti yang dapat dilihat terlebih dahulu dalam jendela preview biasa.
 
 Pekerjaan:
 
-- Implementasikan dunia, steering, penghindaran tepi, dan jarak antarikan.
-- Buat artwork awal sendiri untuk air, koi, tanaman, bayangan, dan riak.
-- Tambahkan animasi ekor/sirip, target panggilan, makanan, serta konsumsi pelet.
-- Pisahkan input, update dunia, dan render; batasi objek efek.
+- [x] Implementasikan dunia simulasi mandiri terpisah dari AppKit (`PondSimulation`, `PondBounds`, `PondVector`).
+- [x] Implementasikan PRNG deterministik ber-seed (SplitMix64 via `SeededRandomNumberGenerator`) untuk menjamin keterulangan 100% pada seluruh skenario pengujian simulasi.
+- [x] Implementasikan autonomous steering: wandering halus, penghindaran tepi kolam (soft margin), pemisahan target klik perimeter riak ($R = 42$ pt), dan relaksasi posisi non-penetrasi fisik geometri kapsul tirus 5 segmen antarikan (`resolveFishSeparation` dengan safety margin $0.5$ pt dan kompensasi batas kolam). Model kapsul tirus adalah proxy konservatif massa tubuh utama (bukan kesetaraan analitik kurva Bézier visual).
+- [x] Buat artwork CoreGraphics prosedural proyek sendiri untuk air, koi (8 varietas Jepang dengan artikulasi tulang & sirip hidrodinamis), tanaman teratai, bayangan, dan riak air, berbagi model geometri penampang melintang tulang belakang dengan simulasi.
+- [x] Tambahkan animasi renang sinus/ekor/sirip, target sementara klik air sirkumferensial, pemberian pelet makanan via Option+klik, dan konsumsi pelet atomik sekali makan.
+- [x] Pisahkan dunia simulasi, penanganan input, update fisika timestep tetap (catch-up clamping), dan visual renderer; batasi kuota pelet (48) dan riak (64).
+- [x] Buat preview GUI mandiri (`KoiWallpaperPreview`) dengan jendela biasa, HUD diagnostik, mode validasi otomatis (--validate-visual), dan mode validasi benturan dinamis (--validate-collision) dengan deteksi titik belok jarak minimum.
+- [x] Buat suite pengujian unit simulasi in-process (`KoiWallpaperSimTest`) dengan 17 assertion lulus 100% (termasuk 4 regresi geometri kapsul tirus dan oracle independen disk chain).
 
 Selesai ketika:
 
-- Delapan koi berenang dan berbelok secara halus tanpa keluar dari kolam.
-- Klik mengundang ikan dan Option + klik menaruh makanan pada lokasi yang sesuai.
-- Ikan mendekati dan mengonsumsi makanan; satu pelet tidak bisa dikonsumsi dua kali.
-- Input berulang tidak membuat jumlah pelet atau riak tumbuh tanpa batas.
-- Kecepatan simulasi tetap konsisten ketika frame rate berubah.
+- [~] Tampilan dan kontrol interaksi di jendela preview GUI diverifikasi secara visual melalui event GUI sintetis `NSEvent` via `window.sendEvent` (inspeksi 14 tangkapan layar alur kerja Retina aktual sekuensial 2048×1336 / 1440×976 dan 3 tangkapan layar benturan berhadapan dinamis `m1_collision_*.png`; 8 varietas koi, sirip hidrodinamis, bayangan, teratai, riak, pelet, atraksi klik biasa terpisah sirkumferensial, Option+klik makanan, konsumsi atomik dengan HUD akurat, pemisahan teramati, penyebaran keluar sekuensial, pembekuan pause 0.8s, resume bebas lonjakan, penyesuaian batas proporsional tanpa clipping pada resize jendela, dan reset elips acak terbukti bekerja). Ditandai **Parsial** karena inspeksi frame tunggal/sekuensial membuktikan lintasan yang diuji, namun bukan pembuktian ketiadaan kerumunan sepanjang masa simulasi tanpa batas (*infinite wandering*).
+- [x] Pemisahan fisik dan ketiadaan penetrasi geometri tubuh antarikan terbukti secara deterministik pada model 5 kapsul tulang belakang berartikulasi dan diverifikasi silang dengan oracle independen (terverifikasi via `KoiWallpaperSimTest` T3.1 pada 5 skenario benturan: head-on clearance 35.5pt, crossing 90° clearance 11.8pt, click convergence 3 koi clearance 33.3pt, food convergence 3 koi clearance 0.5pt, near-wall clearance 46.5pt dan stayedInBounds=true; seluruhnya overlap $\le 0.0$ pt).
+- [x] Delapan koi berenang dan berbelok secara halus tanpa keluar dari kolam (terverifikasi via `KoiWallpaperSimTest` T1.1–T1.3, T2.1, T2.2).
+- [x] Klik mengundang ikan dan Option + klik menaruh makanan pada lokasi yang sesuai (terverifikasi via `KoiWallpaperSimTest` T4.1, T5.1).
+- [x] Ikan mendekati dan mengonsumsi makanan; satu pelet tidak bisa dikonsumsi dua kali (terverifikasi via `KoiWallpaperSimTest` T6.1).
+- [x] Input berulang tidak membuat jumlah pelet atau riak tumbuh tanpa batas (terverifikasi via `KoiWallpaperSimTest` T7.1).
+- [x] Update memakai timestep tetap saat frame rate input berbeda dan membatasi catch-up setelah lag (T9.1 memeriksa kemajuan fase renang pada 30/60 FPS untuk durasi simulasi sama; T10.1 memeriksa catch-up clamp). Lintasan wandering acak tidak dibandingkan.
 
 ### M2 — Wallpaper yang dapat dipakai
 
@@ -140,12 +150,9 @@ Nama modul dan metode build ditetapkan ketika implementasi native dimulai. Satu 
 
 ## Skenario validasi yang belum selesai
 
-Validasi yang direncanakan, belum dijalankan:
+Validasi yang belum selesai:
 
-- Perilaku dunia: konsumsi pelet tunggal, batas objek, kedaluwarsa, dan gerak pada delta waktu berbeda.
-- Memori: penggabungan sesi, peluruhan, restart, slot waktu melintasi tengah malam, batas hari sapaan 04:00, pergantian zona waktu, dan data rusak.
-- Lifecycle: kombinasi alasan pause dan resume dari sleep.
-- Integrasi desktop manual: ikon Finder, drag, Show Desktop, Spaces, Mission Control, fullscreen aplikasi lain, dan hot-plug monitor.
-- Pengukuran: aktif, tertutup, pause manual, baterai, serta satu/beberapa monitor dengan kondisi yang dicatat.
+- M2/M4 (Memori & Lifecycle): penggabungan sesi, peluruhan, restart, slot waktu melintasi tengah malam, batas hari sapaan 04:00, pergantian zona waktu, dan data rusak.
+- M3 (Pengukuran & Multi-monitor): aktif, tertutup, pause manual, baterai, serta satu/beberapa monitor dengan kondisi yang dicatat, dan hot-plug monitor.
 
 Perilaku Finder, urutan window server, dan pemakaian energi tidak dapat dibuktikan hanya melalui pengujian unit.
