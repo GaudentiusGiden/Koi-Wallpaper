@@ -18,6 +18,7 @@ public final class DesktopWindowController {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         window.updateFrame(for: screen)
         wallpaperView.frame = NSRect(origin: .zero, size: screen.frame.size)
+        wallpaperView.simulation.resize(width: Double(screen.frame.width), height: Double(screen.frame.height))
         wallpaperView.needsDisplay = true
     }
 

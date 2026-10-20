@@ -5,6 +5,7 @@ import Combine
 /// Multiple reasons can be active simultaneously, and the wallpaper will only resume when all reasons are cleared.
 public enum PauseReason: String, CaseIterable, Hashable, Sendable {
     case manual = "manual"
+    case battery = "battery"
     case covered = "covered"
     case displaySleep = "displaySleep"
     case systemSleep = "systemSleep"
@@ -20,6 +21,15 @@ public protocol LifecyclePolicyDelegate: AnyObject {
 /// and session state to govern when wallpaper activities should pause and resume.
 public final class LifecyclePolicy {
     public weak var delegate: LifecyclePolicyDelegate?
+    public let powerMonitor: PowerSourceMonitoring
+
+    public var pauseOnBattery: Bool = false {
+        didSet {
+            if oldValue != pauseOnBattery {
+                evaluatePowerState()
+            }
+        }
+    }
 
     public private(set) var activePauseReasons: Set<PauseReason> = [] {
         didSet {
@@ -37,11 +47,14 @@ public final class LifecyclePolicy {
     private var observers: [NSObjectProtocol] = []
     private weak var observedWindow: NSWindow?
 
-    public init() {
+    public init(powerMonitor: PowerSourceMonitoring = IOKitPowerSourceMonitor()) {
+        self.powerMonitor = powerMonitor
         setupSystemObservers()
+        setupPowerMonitoring()
     }
 
     deinit {
+        powerMonitor.stopMonitoring()
         for observer in observers {
             NotificationCenter.default.removeObserver(observer)
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
@@ -89,6 +102,27 @@ public final class LifecyclePolicy {
         } else {
             activePauseReasons.insert(.covered)
         }
+    }
+
+    public func evaluatePowerState() {
+        guard pauseOnBattery else {
+            activePauseReasons.remove(.battery)
+            return
+        }
+
+        if powerMonitor.isRunningOnBattery {
+            activePauseReasons.insert(.battery)
+        } else {
+            activePauseReasons.remove(.battery)
+        }
+    }
+
+    private func setupPowerMonitoring() {
+        powerMonitor.onPowerSourceChanged = { [weak self] in
+            self?.evaluatePowerState()
+        }
+        powerMonitor.startMonitoring()
+        evaluatePowerState()
     }
 
     private func setupSystemObservers() {

@@ -11,13 +11,15 @@ public final class PondRenderer {
     ///   - simulation: The current PondSimulation state.
     ///   - context: The CoreGraphics context to draw into.
     ///   - rect: The viewport bounds.
+    ///   - phase: The current TimeOfDayPhase affecting lighting and caustics.
     public func render(
         simulation: PondSimulation,
         in context: CGContext,
-        rect: CGRect
+        rect: CGRect,
+        phase: TimeOfDayPhase = .day
     ) {
         // Layer 1: Water Bed, Ambient Depth Gradient, and Underwater Caustics
-        PondArtwork.drawWater(in: context, rect: rect)
+        PondArtwork.drawWater(in: context, rect: rect, phase: phase)
 
         // Layer 2: Fish Drop Shadows onto Pond Bed (Depth illusion)
         for fish in simulation.fish {
@@ -37,5 +39,8 @@ public final class PondRenderer {
 
         // Layer 6: Floating Lily Pads and Lotus Flowers
         PondArtwork.drawLilyPads(in: context, bounds: simulation.bounds)
+
+        // Layer 7: Time of Day Atmospheric Lighting
+        PondArtwork.drawAtmosphere(in: context, rect: rect, phase: phase)
     }
 }

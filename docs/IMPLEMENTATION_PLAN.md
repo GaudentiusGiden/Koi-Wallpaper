@@ -1,6 +1,6 @@
 # Rencana implementasi Koi Wallpaper
 
-Rencana ini mengikuti [analisis referensi](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/REA.md) dan [hasil REA CLI](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/REA_FINDINGS.md). Fondasi native M0 telah dibangun, diverifikasi (executable `KoiWallpaper`, bundle `.app`, dan suite verifikasi `KoiWallpaperVerify`), dan **resmi diterima pada 20 Oktober 2026 (Asia/Jakarta)** dengan batasan platform WindowServer macOS yang disepakati (Koi Wallpaper terbukti tidak mengambil fokus; klik fisik pada kolam desktop dapat mengaktifkan Finder dan mendefokuskan aplikasi sebelumnya). Milestone **M1 (Simulasi Kolam Mandiri)** telah selesai diimplementasikan, diverifikasi melalui unit test in-process 17/17 lulus (termasuk 4 uji regresi geometri kapsul tirus T0.1–T0.4 dan uji non-penetrasi geometri kapsul multi-langkah deterministik T3.1 pada 5 skenario benturan ekstrim dengan oracle independen), dan divalidasi secara visual melalui 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis berhadapan pada jendela GUI macOS WindowServer dengan perbaikan tuntas pada cacat penumpukan makan, pembagian target sirkumferensial klik air, relaksasi posisi kapsul tulang belakang, dan pemotongan batas resize (status visual temporal kolam diklasifikasikan parsial untuk ketiadaan kerumunan jangka panjang). Milestone berikutnya adalah **M2 (Wallpaper yang Dapat Dipakai)**. Status dan rincian keputusan M0 dicatat di [audit M0](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/M0_AUDIT.md).
+Rencana ini mengikuti [analisis referensi](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/REA.md) dan [hasil REA CLI](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/REA_FINDINGS.md). Fondasi native M0 telah dibangun, diverifikasi (executable `KoiWallpaper`, bundle `.app`, dan suite verifikasi `KoiWallpaperVerify`), dan **resmi diterima pada 20 Oktober 2026 (Asia/Jakarta)** dengan batasan platform WindowServer macOS yang disepakati (Koi Wallpaper terbukti tidak mengambil fokus; klik fisik pada kolam desktop dapat mengaktifkan Finder dan mendefokuskan aplikasi sebelumnya). Milestone **M1 (Simulasi Kolam Mandiri)** telah selesai diimplementasikan, diverifikasi melalui unit test in-process 17/17 lulus (termasuk 4 uji regresi geometri kapsul tirus T0.1–T0.4 dan uji non-penetrasi geometri kapsul multi-langkah deterministik T3.1 pada 5 skenario benturan ekstrim dengan oracle independen), dan divalidasi secara visual melalui 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis berhadapan pada jendela GUI macOS WindowServer dengan perbaikan tuntas pada cacat penumpukan makan, pembagian target sirkumferensial klik air, relaksasi posisi kapsul tulang belakang, dan pemotongan batas resize (status visual temporal kolam diklasifikasikan parsial untuk ketiadaan kerumunan jangka panjang; T3.1 berlaku pada skenario ber-seed dan bukan klaim jaminan universal matematis). Milestone **M2 (Wallpaper yang Dapat Dipakai)** telah selesai diimplementasikan penuh sebagai MVP satu monitor, mengintegrasikan simulasi M1 ke host desktop M0, menyediakan menu lengkap status bar, Time of Day multi-fase, persistensi pengaturan, isolasi multi-alasan pause baterai/sleep/manual, resume bebas lonjakan, dan eksekusi 100% offline (terverifikasi 21/21 lulus pada `KoiWallpaperVerify` dan 17/17 pada `KoiWallpaperSimTest`). Milestone berikutnya adalah **M3 (Banyak Monitor dan Efisiensi)**. Status dan rincian keputusan M0 dicatat di [audit M0](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/docs/M0_AUDIT.md).
 
 ## Urutan kerja
 
@@ -61,25 +61,29 @@ Selesai ketika:
 
 ### M2 — Wallpaper yang dapat dipakai
 
+Status: **SELESAI & TERVERIFIKASI (MVP SATU MONITOR)** (Simulasi kolam mandiri M1 telah dipasang pada host desktop M0 melalui `WallpaperView`; menu status bar lengkap Pause/Resume, Interaction Mode, Time of Day, Settings, dan Quit telah tersedia; fase waktu Auto, systemTheme, dan manual terimplementasi; persistensi pengaturan via `SettingsManager` bertahan melintasi peluncuran ulang; alasan pause manual, baterai/daya, jendela tertutup, sleep, dan sesi tidak aktif terisolasi mandiri sehingga charger terpasang tidak membatalkan pause manual; resume dari sleep terbukti bebas lonjakan dan aplikasi berjalan 100% tanpa jaringan. Seluruh acceptance criteria terverifikasi 21/21 assertion lulus pada `KoiWallpaperVerify` dan 17/17 assertion lulus pada `KoiWallpaperSimTest`).
+
 Tujuan: menyatukan hasil M0 dan M1 menjadi MVP satu monitor.
 
 Pekerjaan:
 
-- Pasang scene kolam pada host desktop hasil M0.
-- Tambahkan menu Pause/Resume, Interaction Mode, Time of Day, Settings, dan Quit.
-- Implementasikan fase waktu Auto/manual, pilihan mengikuti tema sistem, dan penyimpanan pengaturan.
-- Kelola alasan pause manual, baterai, tertutup, sleep, dan sesi tidak aktif.
+- [x] Pasang scene kolam pada host desktop hasil M0 (`WallpaperView` terintegrasi dengan `PondSimulation`, `PondRenderer`, timer animasi 60 FPS, dan mitigasi lag).
+- [x] Tambahkan menu Pause/Resume, Interaction Mode, Time of Day, Settings, dan Quit (`StatusBarController` menu bar dengan submenu lengkap).
+- [x] Implementasikan fase waktu Auto/manual, pilihan mengikuti tema sistem, dan penyimpanan pengaturan (`TimeOfDayController`, `WallpaperSettings`, `SettingsManager`).
+- [x] Kelola alasan pause manual, baterai, tertutup, sleep, dan sesi tidak aktif (`LifecyclePolicy` + `PowerSourceMonitor`, isolasi multi-alasan).
 
 Selesai ketika:
 
-- Pengaturan kembali setelah aplikasi diluncurkan ulang.
-- Pergantian fase waktu tidak menghapus ikan atau makanan.
-- Memasang charger tidak melanjutkan kolam yang dipause secara manual.
-- Resume dari sleep tidak membuat ikan meloncat.
-- Perilaku Finder dan mode interaksi tetap memenuhi keputusan M0.
-- Kolam berjalan tanpa jaringan.
+- [x] Pengaturan kembali setelah aplikasi diluncurkan ulang (terverifikasi via `KoiWallpaperVerify` T6.1).
+- [x] Pergantian fase waktu tidak menghapus ikan atau makanan (terverifikasi via `KoiWallpaperVerify` T6.3, 8 koi dan pelet utuh melintasi siklus dawn/day/dusk/night).
+- [x] Memasang charger tidak melanjutkan kolam yang dipause secara manual (terverifikasi via `KoiWallpaperVerify` T6.4 multi-reason isolation).
+- [x] Resume dari sleep tidak membuat ikan meloncat (terverifikasi via `KoiWallpaperVerify` T6.5, perpindahan maksimal 5.69 pt pada lonjakan 3600 detik).
+- [x] Perilaku Finder dan mode interaksi tetap memenuhi keputusan M0 (terverifikasi via `KoiWallpaperVerify` T1.1–T3.3).
+- [x] Kolam berjalan tanpa jaringan (terverifikasi via `KoiWallpaperVerify` T6.6, audit nol dependensi jaringan).
 
-**M2 adalah batas MVP awal.** Dukungan beberapa monitor dan memori rutinitas belum boleh diklaim pada tahap ini.
+**Batas scope & catatan audit:**
+1. M2 adalah batas MVP awal satu monitor. Dukungan multi-monitor (M3) dan memori rutinitas (M4) tidak boleh diklaim pada tahap ini.
+2. Catatan audit M1 dipertahankan: Uji deterministik T3.1 membuktikan ketiadaan penetrasi pada 5 skenario ber-seed ekstrim dengan oracle independen (disk chain padat), namun tidak diubah menjadi klaim jaminan universal matematis sembarang lintasan. Status ketiadaan kerumunan jangka panjang (*infinite wandering zero-clumping*) tetap diklasifikasikan sebagai **Parsial**. Geometri 5 kapsul tulang belakang berartikulasi dipertahankan utuh tanpa perubahan karena tidak menjadi penghalang untuk M2.
 
 ### M3 — Banyak monitor dan efisiensi
 

@@ -7,15 +7,36 @@ public enum PondArtwork {
 
     // MARK: - Water Background & Caustics
 
-    public static func drawWater(in context: CGContext, rect: CGRect) {
+    public static func drawWater(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase = .day) {
         context.saveGState()
 
-        // 1. Base Gradient: Deep mysterious pond water
+        // 1. Base Gradient: Atmospheric pond water tuned per phase
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let gradientColors = [
-            CGColor(red: 0.04, green: 0.14, blue: 0.16, alpha: 1.0), // Deep center teal
-            CGColor(red: 0.02, green: 0.08, blue: 0.10, alpha: 1.0)  // Dark edge teal
-        ] as CFArray
+        let gradientColors: CFArray
+
+        switch phase {
+        case .dawn:
+            gradientColors = [
+                CGColor(red: 0.07, green: 0.16, blue: 0.18, alpha: 1.0),
+                CGColor(red: 0.03, green: 0.09, blue: 0.12, alpha: 1.0)
+            ] as CFArray
+        case .day:
+            gradientColors = [
+                CGColor(red: 0.04, green: 0.14, blue: 0.16, alpha: 1.0),
+                CGColor(red: 0.02, green: 0.08, blue: 0.10, alpha: 1.0)
+            ] as CFArray
+        case .dusk:
+            gradientColors = [
+                CGColor(red: 0.12, green: 0.09, blue: 0.18, alpha: 1.0),
+                CGColor(red: 0.05, green: 0.04, blue: 0.10, alpha: 1.0)
+            ] as CFArray
+        case .night:
+            gradientColors = [
+                CGColor(red: 0.02, green: 0.05, blue: 0.12, alpha: 1.0),
+                CGColor(red: 0.01, green: 0.02, blue: 0.05, alpha: 1.0)
+            ] as CFArray
+        }
+
         let locations: [CGFloat] = [0.0, 1.0]
 
         if let gradient = CGGradient(colorsSpace: colorSpace, colors: gradientColors, locations: locations) {
@@ -34,15 +55,28 @@ public enum PondArtwork {
             context.fill(rect)
         }
 
-        // 2. Soft Underwater Caustics & Shimmer Bands
-        drawCaustics(in: context, rect: rect)
+        // 2. Soft Underwater Caustics & Shimmer Bands tuned per phase
+        drawCaustics(in: context, rect: rect, phase: phase)
 
         context.restoreGState()
     }
 
-    private static func drawCaustics(in context: CGContext, rect: CGRect) {
+    private static func drawCaustics(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase = .day) {
         context.saveGState()
-        context.setStrokeColor(red: 0.12, green: 0.40, blue: 0.38, alpha: 0.14)
+
+        let causticColor: CGColor
+        switch phase {
+        case .dawn:
+            causticColor = CGColor(red: 0.45, green: 0.40, blue: 0.32, alpha: 0.16)
+        case .day:
+            causticColor = CGColor(red: 0.12, green: 0.40, blue: 0.38, alpha: 0.14)
+        case .dusk:
+            causticColor = CGColor(red: 0.50, green: 0.30, blue: 0.38, alpha: 0.15)
+        case .night:
+            causticColor = CGColor(red: 0.22, green: 0.35, blue: 0.52, alpha: 0.12)
+        }
+
+        context.setStrokeColor(causticColor)
         context.setLineWidth(24.0)
         context.setLineCap(.round)
 
@@ -65,6 +99,28 @@ public enum PondArtwork {
                        control2: CGPoint(x: w * 0.65, y: h * 0.55))
         context.addPath(path2)
         context.strokePath()
+
+        context.restoreGState()
+    }
+
+    /// Atmospheric overlay representing ambient lighting (e.g. night darkness, dusk glow, dawn warmth).
+    public static func drawAtmosphere(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase) {
+        guard phase != .day else { return }
+        context.saveGState()
+
+        switch phase {
+        case .dawn:
+            context.setFillColor(red: 0.90, green: 0.65, blue: 0.40, alpha: 0.05)
+            context.fill(rect)
+        case .day:
+            break
+        case .dusk:
+            context.setFillColor(red: 0.85, green: 0.45, blue: 0.25, alpha: 0.08)
+            context.fill(rect)
+        case .night:
+            context.setFillColor(red: 0.05, green: 0.12, blue: 0.28, alpha: 0.14)
+            context.fill(rect)
+        }
 
         context.restoreGState()
     }

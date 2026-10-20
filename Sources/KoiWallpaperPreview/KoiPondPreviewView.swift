@@ -10,6 +10,11 @@ public final class KoiPondPreviewView: NSView {
     private var lastFrameTime: TimeInterval = 0.0
     private var currentFPS: Double = 60.0
     public var showHUD: Bool = true
+    public var timeOfDayPhase: TimeOfDayPhase = .day {
+        didSet {
+            needsDisplay = true
+        }
+    }
 
     public override var acceptsFirstResponder: Bool {
         true
@@ -82,7 +87,7 @@ public final class KoiPondPreviewView: NSView {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
         // Render full layered pond simulation
-        renderer.render(simulation: simulation, in: context, rect: bounds)
+        renderer.render(simulation: simulation, in: context, rect: bounds, phase: timeOfDayPhase)
 
         // Draw HUD overlay if active
         if showHUD {
@@ -137,7 +142,7 @@ public final class KoiPondPreviewView: NSView {
         let hints = "Click: Splash  ·  Opt+Click: Feed  ·  Space: Pause  ·  R: Reset"
         hints.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 62), withAttributes: hintAttrs)
 
-        let hints2 = "F: Feed Center  ·  C: Splash Center  ·  H: Toggle HUD"
+        let hints2 = "F: Feed Center  ·  C: Splash Center  ·  H: HUD  ·  T: Phase (\(timeOfDayPhase.rawValue))"
         hints2.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 80), withAttributes: hintAttrs)
     }
 
@@ -173,6 +178,12 @@ public final class KoiPondPreviewView: NSView {
             simulation.handleWaterClick(at: simulation.bounds.center)
         case "h":
             showHUD.toggle()
+        case "t":
+            let all = TimeOfDayPhase.allCases
+            if let idx = all.firstIndex(of: timeOfDayPhase) {
+                timeOfDayPhase = all[(idx + 1) % all.count]
+                print("[KoiPondPreviewView] Cycled time-of-day phase to: \(timeOfDayPhase.rawValue)")
+            }
         default:
             super.keyDown(with: event)
         }

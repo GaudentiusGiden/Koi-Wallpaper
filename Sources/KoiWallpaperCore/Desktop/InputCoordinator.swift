@@ -1,6 +1,6 @@
 import AppKit
 
-public enum InputInteractionMode: String, CaseIterable, Sendable {
+public enum InputInteractionMode: String, CaseIterable, Codable, Sendable {
     /// Default mode: mouse events pass through completely to Finder and desktop icons.
     case clickThrough = "clickThrough"
     /// Explicit mode: window captures mouse events (clicks, Option+clicks, drags) for koi pond interaction.
