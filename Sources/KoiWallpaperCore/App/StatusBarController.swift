@@ -18,7 +18,7 @@ public final class StatusBarController {
     private let menu = NSMenu()
 
     // Primary menu items
-    private let headerItem = NSMenuItem(title: "Koi Wallpaper (M2)", action: nil, keyEquivalent: "")
+    private let headerItem = NSMenuItem(title: "Koi Wallpaper (M3)", action: nil, keyEquivalent: "")
     private let pauseStatusItem = NSMenuItem(title: "Status Kolam: Aktif", action: nil, keyEquivalent: "")
     private let pauseToggleItem = NSMenuItem(
         title: "Jeda Kolam (Pause)",
@@ -78,7 +78,7 @@ public final class StatusBarController {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.title = "🐟"
-            button.toolTip = "Koi Wallpaper (M2)"
+            button.toolTip = "Koi Wallpaper (M3)"
         }
 
         setupMenu()

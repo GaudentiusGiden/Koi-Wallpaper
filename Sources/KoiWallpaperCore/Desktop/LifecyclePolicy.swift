@@ -44,8 +44,25 @@ public final class LifecyclePolicy {
         !activePauseReasons.isEmpty
     }
 
-    private var observers: [NSObjectProtocol] = []
+    private var systemObservers: [NSObjectProtocol] = []
+    private var boundWindowVisibility: [ObjectIdentifier: Bool] = [:]
+    private var windowObservers: [ObjectIdentifier: NSObjectProtocol] = [:]
     private weak var observedWindow: NSWindow?
+
+    /// Number of distinct windows currently registered for aggregated visibility tracking.
+    public var boundWindowCount: Int {
+        boundWindowVisibility.count
+    }
+
+    /// Number of active NotificationCenter occlusion observers currently held for bound windows.
+    public var activeWindowObserverCount: Int {
+        windowObservers.count
+    }
+
+    /// Checks whether the specified window currently has an active occlusion observer registered.
+    public func isWindowBound(_ window: NSWindow) -> Bool {
+        windowObservers[ObjectIdentifier(window)] != nil
+    }
 
     public init(powerMonitor: PowerSourceMonitoring = IOKitPowerSourceMonitor()) {
         self.powerMonitor = powerMonitor
@@ -55,21 +72,31 @@ public final class LifecyclePolicy {
 
     deinit {
         powerMonitor.stopMonitoring()
-        for observer in observers {
+        for observer in systemObservers {
             NotificationCenter.default.removeObserver(observer)
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
+        systemObservers.removeAll()
+
+        for (_, observer) in windowObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        windowObservers.removeAll()
     }
 
     public func bindWindow(_ window: NSWindow) {
         self.observedWindow = window
+        let id = ObjectIdentifier(window)
 
-        // If the window is already composited and visible, evaluate occlusion immediately.
-        // If Window Server has not yet reported occlusion (during initial launch), do not
-        // falsely pause before the first didChangeOcclusionStateNotification arrives.
-        if window.isVisible && window.occlusionState.contains(.visible) {
+        let isVisible = window.isVisible && window.occlusionState.contains(.visible)
+        boundWindowVisibility[id] = isVisible
+
+        if isVisible {
             activePauseReasons.remove(.covered)
         }
+
+        // Avoid adding duplicate observers for the same window
+        guard windowObservers[id] == nil else { return }
 
         let obs = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification,
@@ -79,7 +106,19 @@ public final class LifecyclePolicy {
             guard let self = self, let window = window else { return }
             self.evaluateWindowOcclusion(window)
         }
-        observers.append(obs)
+        windowObservers[id] = obs
+    }
+
+    public func unbindWindow(_ window: NSWindow) {
+        let id = ObjectIdentifier(window)
+        boundWindowVisibility.removeValue(forKey: id)
+        if let obs = windowObservers.removeValue(forKey: id) {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        if observedWindow === window {
+            observedWindow = nil
+        }
+        evaluateAggregatedOcclusion()
     }
 
     public func setManualPause(_ pause: Bool) {
@@ -91,13 +130,19 @@ public final class LifecyclePolicy {
     }
 
     public func evaluateWindowOcclusion(_ window: NSWindow) {
-        guard window.isVisible else {
-            activePauseReasons.insert(.covered)
+        let isVisibleOnScreen = window.isVisible && window.occlusionState.contains(.visible)
+        boundWindowVisibility[ObjectIdentifier(window)] = isVisibleOnScreen
+        evaluateAggregatedOcclusion()
+    }
+
+    private func evaluateAggregatedOcclusion() {
+        if boundWindowVisibility.isEmpty {
+            activePauseReasons.remove(.covered)
             return
         }
 
-        let isVisibleOnScreen = window.occlusionState.contains(.visible)
-        if isVisibleOnScreen {
+        let anyWindowVisible = boundWindowVisibility.values.contains(true)
+        if anyWindowVisible {
             activePauseReasons.remove(.covered)
         } else {
             activePauseReasons.insert(.covered)
@@ -129,7 +174,7 @@ public final class LifecyclePolicy {
         let workspaceCenter = NSWorkspace.shared.notificationCenter
 
         // Screen sleep / wake
-        observers.append(workspaceCenter.addObserver(
+        systemObservers.append(workspaceCenter.addObserver(
             forName: NSWorkspace.screensDidSleepNotification,
             object: nil,
             queue: .main
@@ -137,7 +182,7 @@ public final class LifecyclePolicy {
             self?.activePauseReasons.insert(.displaySleep)
         })
 
-        observers.append(workspaceCenter.addObserver(
+        systemObservers.append(workspaceCenter.addObserver(
             forName: NSWorkspace.screensDidWakeNotification,
             object: nil,
             queue: .main
@@ -146,7 +191,7 @@ public final class LifecyclePolicy {
         })
 
         // System sleep / wake
-        observers.append(workspaceCenter.addObserver(
+        systemObservers.append(workspaceCenter.addObserver(
             forName: NSWorkspace.willSleepNotification,
             object: nil,
             queue: .main
@@ -154,7 +199,7 @@ public final class LifecyclePolicy {
             self?.activePauseReasons.insert(.systemSleep)
         })
 
-        observers.append(workspaceCenter.addObserver(
+        systemObservers.append(workspaceCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
@@ -163,7 +208,7 @@ public final class LifecyclePolicy {
         })
 
         // User session active / inactive (lock screen, fast user switching)
-        observers.append(workspaceCenter.addObserver(
+        systemObservers.append(workspaceCenter.addObserver(
             forName: NSWorkspace.sessionDidResignActiveNotification,
             object: nil,
             queue: .main
@@ -171,7 +216,7 @@ public final class LifecyclePolicy {
             self?.activePauseReasons.insert(.sessionInactive)
         })
 
-        observers.append(workspaceCenter.addObserver(
+        systemObservers.append(workspaceCenter.addObserver(
             forName: NSWorkspace.sessionDidBecomeActiveNotification,
             object: nil,
             queue: .main
@@ -180,7 +225,7 @@ public final class LifecyclePolicy {
         })
 
         // Display configuration / screen parameter change
-        observers.append(NotificationCenter.default.addObserver(
+        systemObservers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main

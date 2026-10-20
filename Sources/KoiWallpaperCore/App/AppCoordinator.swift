@@ -12,14 +12,24 @@ public final class AppCoordinator: NSObject,
     public let lifecyclePolicy: LifecyclePolicy
     public let inputCoordinator: InputCoordinator
     public let timeOfDayController: TimeOfDayController
-    public private(set) var desktopWindowController: DesktopWindowController?
+    public let screenManager: ScreenManager
+
+    public var desktopWindowController: DesktopWindowController? {
+        screenManager.primaryController
+    }
+
+    public var desktopWindowControllers: [DesktopWindowController] {
+        screenManager.controllers
+    }
+
     public private(set) var statusBarController: StatusBarController?
 
     public init(
         settingsManager: SettingsManager = SettingsManager(),
         lifecyclePolicy: LifecyclePolicy? = nil,
         inputCoordinator: InputCoordinator? = nil,
-        timeOfDayController: TimeOfDayController? = nil
+        timeOfDayController: TimeOfDayController? = nil,
+        screenManager: ScreenManager? = nil
     ) {
         self.settingsManager = settingsManager
 
@@ -40,6 +50,14 @@ public final class AppCoordinator: NSObject,
         )
         self.timeOfDayController = tod
 
+        let scrMgr = screenManager ?? ScreenManager(
+            inputCoordinator: input,
+            timeOfDayPhase: tod.currentPhase,
+            showHUD: loadedSettings.showHUD,
+            isGloballyPaused: policy.isPaused
+        )
+        self.screenManager = scrMgr
+
         super.init()
 
         self.lifecyclePolicy.delegate = self
@@ -50,27 +68,33 @@ public final class AppCoordinator: NSObject,
     }
 
     public func start() {
-        logger.info("Starting KoiWallpaper M2 Usable Desktop Wallpaper...")
+        logger.info("Starting KoiWallpaper M3 Multi-Monitor Desktop Wallpaper...")
 
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
-            logger.error("No active NSScreen found.")
-            return
+        // Configure screen manager with loaded preferences
+        screenManager.applyInteractionMode(inputCoordinator.currentMode)
+        screenManager.applyTimeOfDayPhase(timeOfDayController.currentPhase)
+        screenManager.applyHUDVisibility(settingsManager.settings.showHUD)
+        screenManager.applyGlobalPause(lifecyclePolicy.isPaused)
+
+        // Bind all active host windows to lifecycle policy for occlusion tracking
+        for controller in screenManager.controllers {
+            lifecyclePolicy.bindWindow(controller.window)
         }
 
-        // Initialize desktop window controller and wallpaper view
-        let windowController = DesktopWindowController(screen: screen)
-        windowController.wallpaperView.inputCoordinator = inputCoordinator
-        windowController.wallpaperView.timeOfDayPhase = timeOfDayController.currentPhase
-        windowController.wallpaperView.showHUD = settingsManager.settings.showHUD
-        windowController.applyInteractionMode(inputCoordinator.currentMode)
-        windowController.show()
-        self.desktopWindowController = windowController
+        screenManager.onControllersChanged = { [weak self] controllers in
+            guard let self = self else { return }
+            for controller in controllers {
+                self.lifecyclePolicy.bindWindow(controller.window)
+            }
+        }
 
-        // Bind window to lifecycle policy
-        lifecyclePolicy.bindWindow(windowController.window)
-        windowController.wallpaperView.isPaused = lifecyclePolicy.isPaused
-        if !lifecyclePolicy.isPaused {
-            windowController.wallpaperView.startAnimationTimer()
+        screenManager.onControllerRemoved = { [weak self] controller in
+            self?.lifecyclePolicy.unbindWindow(controller.window)
+        }
+
+        screenManager.onOcclusionChanged = { [weak self] controller in
+            guard self != nil else { return }
+            logger.info("Screen occlusion changed on display \(controller.displayID ?? 0): isOccluded=\(controller.isOccluded)")
         }
 
         // Start time of day progression monitoring
@@ -95,11 +119,11 @@ public final class AppCoordinator: NSObject,
         )
         self.statusBarController = statusController
 
-        logger.info("KoiWallpaper M2 started successfully on screen \(screen.frame.size.width)x\(screen.frame.size.height) with phase \(self.timeOfDayController.currentPhase.rawValue).")
+        logger.info("KoiWallpaper M3 started successfully across \(self.screenManager.screenCount) screen(s).")
     }
 
     private func handlePhaseChanged(_ newPhase: TimeOfDayPhase) {
-        desktopWindowController?.wallpaperView.timeOfDayPhase = newPhase
+        screenManager.applyTimeOfDayPhase(newPhase)
         statusBarController?.updateTimeOfDayState(
             mode: settingsManager.settings.timeOfDayMode,
             manualPhase: settingsManager.settings.manualTimePhase,
@@ -111,20 +135,20 @@ public final class AppCoordinator: NSObject,
 
     public func lifecyclePolicy(_ policy: LifecyclePolicy, didUpdatePauseReasons reasons: Set<PauseReason>, isPaused: Bool) {
         logger.info("Lifecycle pause state updated. isPaused: \(isPaused), reasons: \(reasons.map(\.rawValue).joined(separator: ", "))")
-        desktopWindowController?.wallpaperView.isPaused = isPaused
+        screenManager.applyGlobalPause(isPaused)
         statusBarController?.updatePauseState(isPaused: isPaused, reasons: reasons)
     }
 
     public func lifecyclePolicyDidRequestScreenReconfiguration(_ policy: LifecyclePolicy) {
         logger.info("Screen reconfiguration requested.")
-        desktopWindowController?.updateScreenConfiguration()
+        screenManager.reconfigureScreens()
     }
 
     // MARK: - InputCoordinatorDelegate
 
     public func inputCoordinator(_ coordinator: InputCoordinator, didChangeMode mode: InputInteractionMode) {
         logger.info("Input mode changed to: \(mode.rawValue)")
-        desktopWindowController?.applyInteractionMode(mode)
+        screenManager.applyInteractionMode(mode)
         statusBarController?.updateInteractionMode(mode)
     }
 
@@ -186,7 +210,7 @@ public final class AppCoordinator: NSObject,
         let newShowHUD = !settingsManager.settings.showHUD
         logger.info("User toggled showHUD to: \(newShowHUD)")
         settingsManager.updateSettings { $0.showHUD = newShowHUD }
-        desktopWindowController?.wallpaperView.showHUD = newShowHUD
+        screenManager.applyHUDVisibility(newShowHUD)
         statusBarController?.updateSettingsState(
             pauseOnBattery: settingsManager.settings.pauseOnBattery,
             showHUD: newShowHUD
@@ -203,7 +227,10 @@ public final class AppCoordinator: NSObject,
         inputCoordinator.setMode(defaults.initialInteractionMode)
         timeOfDayController.setMode(defaults.timeOfDayMode)
         timeOfDayController.setManualPhase(defaults.manualTimePhase)
-        desktopWindowController?.wallpaperView.showHUD = defaults.showHUD
+
+        screenManager.applyHUDVisibility(defaults.showHUD)
+        screenManager.applyInteractionMode(defaults.initialInteractionMode)
+        screenManager.applyTimeOfDayPhase(timeOfDayController.currentPhase)
 
         statusBarController?.updateInteractionMode(defaults.initialInteractionMode)
         statusBarController?.updateTimeOfDayState(
@@ -215,6 +242,15 @@ public final class AppCoordinator: NSObject,
             pauseOnBattery: defaults.pauseOnBattery,
             showHUD: defaults.showHUD
         )
+    }
+
+    /// Cleanly tears down screen managers, unbinds window observers from lifecycle policy, and stops timers.
+    public func teardown() {
+        timeOfDayController.stopMonitoring()
+        for controller in screenManager.controllers {
+            lifecyclePolicy.unbindWindow(controller.window)
+        }
+        screenManager.teardown()
     }
 
     public func statusBarDidRequestQuit(_ controller: StatusBarController) {

@@ -2,7 +2,7 @@ import AppKit
 
 /// WallpaperWindow is a borderless, non-activating window that serves as the desktop host.
 /// It stays pinned to the desktop level across all Spaces and avoids stealing focus.
-public final class WallpaperWindow: NSWindow {
+open class WallpaperWindow: NSWindow {
 
     public override var canBecomeKey: Bool {
         return false

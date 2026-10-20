@@ -55,7 +55,18 @@ public final class WallpaperView: NSView {
 
     private var animationTimer: Timer?
     private var lastFrameTime: TimeInterval = 0.0
-    private var currentFPS: Double = 60.0
+
+    /// Monotonically increasing count of animation timer callback firings.
+    public private(set) var totalTimerTicks: Int = 0
+
+    /// Measured frequency (Hz or ticks/sec) of the RunLoop animation timer callbacks.
+    /// Note: This measures timer invocation cadence, NOT display VSYNC hardware frame presentation.
+    public private(set) var timerCadenceFPS: Double = 60.0
+
+    /// Backward-compatible alias for timer callback cadence.
+    public var currentFPS: Double {
+        timerCadenceFPS
+    }
 
     public init(frame frameRect: NSRect, simulation: PondSimulation? = nil) {
         let simBounds = PondBounds(
@@ -68,6 +79,8 @@ public final class WallpaperView: NSView {
 
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        startAnimationTimer()
     }
 
     required init?(coder: NSCoder) {
@@ -78,10 +91,19 @@ public final class WallpaperView: NSView {
 
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        startAnimationTimer()
     }
 
     deinit {
         stopAnimationTimer()
+    }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0
+        layer?.contentsScale = scale
+        needsDisplay = true
     }
 
     public override func setFrameSize(_ newSize: NSSize) {
@@ -97,13 +119,14 @@ public final class WallpaperView: NSView {
 
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             guard let self = self, !self.isPaused else { return }
+            self.totalTimerTicks += 1
             let now = CACurrentMediaTime()
             let dt = (self.lastFrameTime > 0) ? (now - self.lastFrameTime) : (1.0 / 60.0)
             self.lastFrameTime = now
 
-            if dt > 0.001 {
-                let instantFPS = 1.0 / dt
-                self.currentFPS = self.currentFPS * 0.9 + instantFPS * 0.1
+            if dt > 0.005 && dt < 0.10 {
+                let instantCadence = 1.0 / dt
+                self.timerCadenceFPS = self.timerCadenceFPS * 0.9 + instantCadence * 0.1
             }
 
             self.simulation.advance(deltaTime: dt)
@@ -200,12 +223,12 @@ public final class WallpaperView: NSView {
             .foregroundColor: NSColor.lightGray
         ]
 
-        "Koi Wallpaper (M2) — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
+        "Koi Wallpaper (M3) — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
         statusText.draw(at: NSPoint(x: hudRect.minX + 165, y: hudRect.maxY - 22), withAttributes: statusAttrs)
 
         let stats = String(
-            format: "FPS: %.0f  ·  Koi: %d  ·  Pellets: %d/%d  ·  Ripples: %d/%d",
-            currentFPS,
+            format: "Cadence: %.0f Hz  ·  Koi: %d  ·  Pellets: %d/%d  ·  Ripples: %d/%d",
+            timerCadenceFPS,
             simulation.fish.count,
             simulation.pellets.count,
             simulation.maxPellets,

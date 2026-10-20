@@ -59,21 +59,37 @@ guard appProcess.isRunning else {
 print("App is running with PID: \(appProcess.processIdentifier)")
 
 // 2. Query Window Server for KoiWallpaper and Finder window properties
-let windowList = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
 var foundWallpaperWindow: [String: Any]?
 var foundFinderWindow: [String: Any]?
+let expectedDesktopLayer = Int(CGWindowLevelForKey(.desktopWindow))
 
-for w in windowList {
-    let owner = w[kCGWindowOwnerName as String] as? String ?? ""
-    let pid = w[kCGWindowOwnerPID as String] as? pid_t ?? 0
-    let layer = w[kCGWindowLayer as String] as? Int ?? 0
+let queryDeadline = Date().addingTimeInterval(3.0)
+while Date() < queryDeadline {
+    let windowList = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
+    foundWallpaperWindow = nil
+    foundFinderWindow = nil
 
-    if pid == appProcess.processIdentifier || owner == "KoiWallpaper" {
-        foundWallpaperWindow = w
+    for w in windowList {
+        let owner = w[kCGWindowOwnerName as String] as? String ?? ""
+        let pid = w[kCGWindowOwnerPID as String] as? pid_t ?? 0
+        let layer = w[kCGWindowLayer as String] as? Int ?? 0
+
+        if pid == appProcess.processIdentifier || owner == "KoiWallpaper" || owner == "Koi Wallpaper" {
+            if layer == expectedDesktopLayer {
+                foundWallpaperWindow = w
+            } else if foundWallpaperWindow == nil {
+                foundWallpaperWindow = w
+            }
+        }
+        if owner == "Finder" && layer == Int(CGWindowLevelForKey(.desktopIconWindow)) {
+            foundFinderWindow = w
+        }
     }
-    if owner == "Finder" && layer == Int(CGWindowLevelForKey(.desktopIconWindow)) {
-        foundFinderWindow = w
+
+    if let win = foundWallpaperWindow, let lay = win[kCGWindowLayer as String] as? Int, lay == expectedDesktopLayer {
+        break
     }
+    Thread.sleep(forTimeInterval: 0.2)
 }
 
 guard let wallpaperWin = foundWallpaperWindow else {
@@ -84,7 +100,6 @@ guard let wallpaperWin = foundWallpaperWindow else {
 
 let wallpaperLayer = wallpaperWin[kCGWindowLayer as String] as? Int ?? 0
 let wallpaperBounds = wallpaperWin[kCGWindowBounds as String] as? [String: Any] ?? [:]
-let expectedDesktopLayer = Int(CGWindowLevelForKey(.desktopWindow))
 
 print("\n--- Window Server Inspection ---")
 print("KoiWallpaper Window ID: \(wallpaperWin[kCGWindowNumber as String] ?? 0)")
