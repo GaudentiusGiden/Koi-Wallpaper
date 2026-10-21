@@ -31,6 +31,7 @@ public final class ScreenManager {
 
     public private(set) var currentMode: InputInteractionMode = .clickThrough
     public private(set) var currentPhase: TimeOfDayPhase = .day
+    public private(set) var currentTheme: PondTheme = .day
     public private(set) var currentShowHUD: Bool = false
     public private(set) var isGloballyPaused: Bool = false
     public weak var inputCoordinator: InputCoordinator?
@@ -47,13 +48,16 @@ public final class ScreenManager {
         controllerFactory: ((NSScreen) -> DesktopWindowController)? = nil,
         inputCoordinator: InputCoordinator? = nil,
         timeOfDayPhase: TimeOfDayPhase = .day,
+        theme: PondTheme? = nil,
         showHUD: Bool = false,
         isGloballyPaused: Bool = false
     ) {
         self.screenProvider = screenProvider
         self.controllerFactory = controllerFactory
         self.inputCoordinator = inputCoordinator
-        self.currentPhase = timeOfDayPhase
+        let resolvedTheme = theme ?? timeOfDayPhase.theme
+        self.currentTheme = resolvedTheme
+        self.currentPhase = resolvedTheme.asTimePhase ?? timeOfDayPhase
         self.currentShowHUD = showHUD
         self.isGloballyPaused = isGloballyPaused
         if let input = inputCoordinator {
@@ -126,7 +130,7 @@ public final class ScreenManager {
     private func createController(for screen: NSScreen) -> DesktopWindowController {
         let controller = controllerFactory?(screen) ?? DesktopWindowController(screen: screen)
         controller.wallpaperView.inputCoordinator = inputCoordinator
-        controller.wallpaperView.timeOfDayPhase = currentPhase
+        controller.wallpaperView.theme = currentTheme
         controller.wallpaperView.showHUD = currentShowHUD
         controller.applyInteractionMode(currentMode)
         controller.setGloballyPaused(isGloballyPaused)
@@ -162,11 +166,18 @@ public final class ScreenManager {
         }
     }
 
-    public func applyTimeOfDayPhase(_ phase: TimeOfDayPhase) {
-        self.currentPhase = phase
-        for controller in controllers {
-            controller.wallpaperView.timeOfDayPhase = phase
+    public func applyTheme(_ theme: PondTheme) {
+        self.currentTheme = theme
+        if let phase = theme.asTimePhase {
+            self.currentPhase = phase
         }
+        for controller in controllers {
+            controller.wallpaperView.theme = theme
+        }
+    }
+
+    public func applyTimeOfDayPhase(_ phase: TimeOfDayPhase) {
+        applyTheme(phase.theme)
     }
 
     public func applyHUDVisibility(_ show: Bool) {

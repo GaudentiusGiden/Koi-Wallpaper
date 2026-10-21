@@ -12,12 +12,115 @@ public final class WallpaperView: NSView {
     public private(set) var totalRenderedFrames: Int = 0
     public override var wantsUpdateLayer: Bool { true }
 
-    public var timeOfDayPhase: TimeOfDayPhase = .day {
+    public var theme: PondTheme = .day {
         didSet {
-            if oldValue != timeOfDayPhase {
-                needsDisplay = true
+            if oldValue != theme {
+                setTheme(theme, animated: true)
             }
         }
+    }
+
+    public var timeOfDayPhase: TimeOfDayPhase {
+        get { theme.asTimePhase ?? .day }
+        set { theme = newValue.theme }
+    }
+
+    public private(set) var activeTheme: PondTheme = .day
+    public private(set) var targetTheme: PondTheme = .day
+    public private(set) var pendingTheme: PondTheme? = nil
+    public private(set) var transitionProgress: CGFloat = 1.0
+    public var transitionDuration: TimeInterval = 1.8
+
+    public func setTheme(_ newTheme: PondTheme, animated: Bool = true) {
+        if !animated {
+            pendingTheme = nil
+            renderer.clearSnapshotSource()
+            activeTheme = newTheme
+            targetTheme = newTheme
+            transitionProgress = 1.0
+            needsDisplay = true
+            return
+        }
+
+        if transitionProgress < 1.0 {
+            // If already waiting for current transition to finish (due to earlier snapshot fallback):
+            if pendingTheme != nil {
+                if newTheme == targetTheme {
+                    // New request matches current destination; cancel pending follow-up.
+                    pendingTheme = nil
+                } else if newTheme == activeTheme && !renderer.isSnapshotSource {
+                    // The failed snapshot left a direct theme-to-theme transition. Reverse it
+                    // in place and discard the queued follow-up without changing the visible mix.
+                    pendingTheme = nil
+                    let previousSource = activeTheme
+                    activeTheme = targetTheme
+                    targetTheme = previousSource
+                    transitionProgress = max(0.0, min(1.0, 1.0 - transitionProgress))
+                    needsDisplay = true
+                } else {
+                    // A snapshot source can be a mixed image, so keep the current transition
+                    // and queue the latest requested theme after it completes.
+                    pendingTheme = newTheme
+                }
+                return
+            }
+
+            if newTheme == targetTheme {
+                return
+            }
+
+            // Reversing back to source theme if no intermediate snapshot is in effect
+            if newTheme == activeTheme && !renderer.isSnapshotSource {
+                let prevTarget = targetTheme
+                targetTheme = activeTheme
+                activeTheme = prevTarget
+                transitionProgress = max(0.0, min(1.0, 1.0 - transitionProgress))
+                needsDisplay = true
+                return
+            }
+
+            // Before the first frame is rendered, there is no visible mixed appearance to preserve.
+            // Retarget directly to newTheme without snapshotting or queuing.
+            if totalRenderedFrames == 0 {
+                renderer.clearSnapshotSource()
+                pendingTheme = nil
+                targetTheme = newTheme
+                transitionProgress = 0.0
+                needsDisplay = true
+                return
+            }
+
+            // Visible transition in flight (totalRenderedFrames > 0):
+            // Snapshot the visible in-flight blend into Layer A, target C into Layer B
+            let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 1.0
+            let size = (bounds.width > 0 && bounds.height > 0) ? bounds.size : CGSize(width: 1024, height: 640)
+            let success = renderer.snapshotTransition(
+                size: size,
+                scale: scale,
+                progress: transitionProgress,
+                fromTheme: activeTheme,
+                toTheme: targetTheme
+            )
+            if success {
+                activeTheme = targetTheme
+                targetTheme = newTheme
+                transitionProgress = 0.0
+                pendingTheme = nil
+            } else {
+                // Snapshot failed during a visible in-flight transition.
+                // Do NOT interrupt the current visible appearance or snap back to source theme.
+                // Allow the current transition (activeTheme -> targetTheme) to finish smoothly,
+                // saving newTheme as the pending target to start immediately upon completion.
+                pendingTheme = newTheme
+            }
+        } else {
+            guard newTheme != targetTheme else { return }
+            pendingTheme = nil
+            renderer.clearSnapshotSource()
+            targetTheme = newTheme
+            transitionProgress = 0.0
+        }
+        needsDisplay = true
     }
 
     public var isInteractionMode: Bool = false {
@@ -83,6 +186,7 @@ public final class WallpaperView: NSView {
         super.init(frame: frameRect)
 
         wantsLayer = true
+        layerUsesCoreImageFilters = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         layer?.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
         configureSceneLayers()
@@ -96,6 +200,7 @@ public final class WallpaperView: NSView {
         super.init(coder: coder)
 
         wantsLayer = true
+        layerUsesCoreImageFilters = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         layer?.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
         configureSceneLayers()
@@ -135,6 +240,21 @@ public final class WallpaperView: NSView {
             if dt > 0.005 && dt < 0.10 {
                 let instantCadence = 1.0 / dt
                 self.timerCadenceFPS = self.timerCadenceFPS * 0.9 + instantCadence * 0.1
+            }
+
+            if self.transitionProgress < 1.0 {
+                let duration = max(0.001, self.transitionDuration)
+                self.transitionProgress = min(1.0, self.transitionProgress + CGFloat(dt / duration))
+                if self.transitionProgress >= 1.0 {
+                    self.activeTheme = self.targetTheme
+                    self.renderer.clearSnapshotSource()
+                    if let nextTheme = self.pendingTheme {
+                        self.pendingTheme = nil
+                        if nextTheme != self.activeTheme {
+                            self.setTheme(nextTheme, animated: true)
+                        }
+                    }
+                }
             }
 
             self.simulation.advance(deltaTime: dt)
@@ -178,7 +298,14 @@ public final class WallpaperView: NSView {
 
     public override func updateLayer() {
         let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 1
-        sceneLayer.update(simulation: simulation, bounds: bounds, backingScale: scale, phase: timeOfDayPhase)
+        sceneLayer.update(
+            simulation: simulation,
+            bounds: bounds,
+            backingScale: scale,
+            fromTheme: activeTheme,
+            toTheme: targetTheme,
+            progress: transitionProgress
+        )
         totalRenderedFrames += 1
         overlayView.frame = overlayFrame
         overlayView.isHidden = !showHUD && !isInteractionMode
@@ -251,7 +378,8 @@ public final class WallpaperView: NSView {
         )
         stats.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 42), withAttributes: bodyAttrs)
 
-        let phaseStr = "Phase: \(timeOfDayPhase.displayName)"
+        let transitionInfo = transitionProgress < 1.0 ? String(format: " (blending %.0f%%)", transitionProgress * 100) : ""
+        let phaseStr = "Theme: \(targetTheme.displayName)\(transitionInfo)"
         phaseStr.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 62), withAttributes: bodyAttrs)
 
         let modeStr = isInteractionMode ? "Mode: Interactive Capture" : "Mode: Finder Click-Through"

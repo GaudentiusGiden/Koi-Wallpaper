@@ -46,13 +46,15 @@ public final class AppCoordinator: NSObject,
 
         let tod = timeOfDayController ?? TimeOfDayController(
             mode: loadedSettings.timeOfDayMode,
-            manualPhase: loadedSettings.manualTimePhase
+            manualPhase: loadedSettings.manualTimePhase,
+            manualTheme: loadedSettings.manualTheme
         )
         self.timeOfDayController = tod
 
         let scrMgr = screenManager ?? ScreenManager(
             inputCoordinator: input,
             timeOfDayPhase: tod.currentPhase,
+            theme: tod.currentTheme,
             showHUD: loadedSettings.showHUD,
             isGloballyPaused: policy.isPaused
         )
@@ -62,8 +64,8 @@ public final class AppCoordinator: NSObject,
 
         self.lifecyclePolicy.delegate = self
         self.inputCoordinator.delegate = self
-        self.timeOfDayController.onPhaseChanged = { [weak self] newPhase in
-            self?.handlePhaseChanged(newPhase)
+        self.timeOfDayController.onThemeChanged = { [weak self] newTheme in
+            self?.handleThemeChanged(newTheme)
         }
     }
 
@@ -72,7 +74,7 @@ public final class AppCoordinator: NSObject,
 
         // Configure screen manager with loaded preferences
         screenManager.applyInteractionMode(inputCoordinator.currentMode)
-        screenManager.applyTimeOfDayPhase(timeOfDayController.currentPhase)
+        screenManager.applyTheme(timeOfDayController.currentTheme)
         screenManager.applyHUDVisibility(settingsManager.settings.showHUD)
         screenManager.applyGlobalPause(lifecyclePolicy.isPaused)
 
@@ -108,10 +110,10 @@ public final class AppCoordinator: NSObject,
             isPaused: lifecyclePolicy.isPaused,
             reasons: lifecyclePolicy.activePauseReasons
         )
-        statusController.updateTimeOfDayState(
+        statusController.updateThemeState(
             mode: settingsManager.settings.timeOfDayMode,
-            manualPhase: settingsManager.settings.manualTimePhase,
-            currentPhase: timeOfDayController.currentPhase
+            manualTheme: settingsManager.settings.manualTheme,
+            currentTheme: timeOfDayController.currentTheme
         )
         statusController.updateSettingsState(
             pauseOnBattery: settingsManager.settings.pauseOnBattery,
@@ -122,12 +124,12 @@ public final class AppCoordinator: NSObject,
         logger.info("KoiWallpaper M3 started successfully across \(self.screenManager.screenCount) screen(s).")
     }
 
-    private func handlePhaseChanged(_ newPhase: TimeOfDayPhase) {
-        screenManager.applyTimeOfDayPhase(newPhase)
-        statusBarController?.updateTimeOfDayState(
+    private func handleThemeChanged(_ newTheme: PondTheme) {
+        screenManager.applyTheme(newTheme)
+        statusBarController?.updateThemeState(
             mode: settingsManager.settings.timeOfDayMode,
-            manualPhase: settingsManager.settings.manualTimePhase,
-            currentPhase: newPhase
+            manualTheme: settingsManager.settings.manualTheme,
+            currentTheme: newTheme
         )
     }
 
@@ -171,28 +173,40 @@ public final class AppCoordinator: NSObject,
 
     public func statusBarDidSelectTimeOfDayMode(_ controller: StatusBarController, mode: TimeOfDayMode) {
         logger.info("User selected Time of Day mode: \(mode.rawValue)")
+        let previousTheme = timeOfDayController.currentTheme
         settingsManager.updateSettings { $0.timeOfDayMode = mode }
         timeOfDayController.setMode(mode)
-        statusBarController?.updateTimeOfDayState(
-            mode: mode,
-            manualPhase: settingsManager.settings.manualTimePhase,
-            currentPhase: timeOfDayController.currentPhase
-        )
+        if previousTheme == timeOfDayController.currentTheme {
+            statusBarController?.updateThemeState(
+                mode: mode,
+                manualTheme: settingsManager.settings.manualTheme,
+                currentTheme: timeOfDayController.currentTheme
+            )
+        }
+    }
+
+    public func statusBarDidSelectManualTheme(_ controller: StatusBarController, theme: PondTheme) {
+        logger.info("User selected manual theme: \(theme.rawValue)")
+        let previousTheme = timeOfDayController.currentTheme
+        settingsManager.updateSettings {
+            $0.timeOfDayMode = .manual
+            $0.manualTheme = theme
+            if let phase = theme.asTimePhase {
+                $0.manualTimePhase = phase
+            }
+        }
+        timeOfDayController.selectManualTheme(theme)
+        if previousTheme == timeOfDayController.currentTheme {
+            statusBarController?.updateThemeState(
+                mode: .manual,
+                manualTheme: theme,
+                currentTheme: timeOfDayController.currentTheme
+            )
+        }
     }
 
     public func statusBarDidSelectManualTimePhase(_ controller: StatusBarController, phase: TimeOfDayPhase) {
-        logger.info("User selected manual Time of Day phase: \(phase.rawValue)")
-        settingsManager.updateSettings {
-            $0.timeOfDayMode = .manual
-            $0.manualTimePhase = phase
-        }
-        timeOfDayController.setMode(.manual)
-        timeOfDayController.setManualPhase(phase)
-        statusBarController?.updateTimeOfDayState(
-            mode: .manual,
-            manualPhase: phase,
-            currentPhase: timeOfDayController.currentPhase
-        )
+        statusBarDidSelectManualTheme(controller, theme: phase.theme)
     }
 
     public func statusBarDidTogglePauseOnBattery(_ controller: StatusBarController) {
@@ -221,23 +235,26 @@ public final class AppCoordinator: NSObject,
         logger.info("User reset settings to defaults.")
         settingsManager.resetToDefaults()
         let defaults = settingsManager.settings
+        let previousTheme = timeOfDayController.currentTheme
 
         lifecyclePolicy.pauseOnBattery = defaults.pauseOnBattery
         lifecyclePolicy.setManualPause(defaults.isManualPaused)
         inputCoordinator.setMode(defaults.initialInteractionMode)
-        timeOfDayController.setMode(defaults.timeOfDayMode)
-        timeOfDayController.setManualPhase(defaults.manualTimePhase)
+        timeOfDayController.batchUpdate(mode: defaults.timeOfDayMode, manualTheme: defaults.manualTheme)
+
+        let resolvedTheme = timeOfDayController.currentTheme
 
         screenManager.applyHUDVisibility(defaults.showHUD)
         screenManager.applyInteractionMode(defaults.initialInteractionMode)
-        screenManager.applyTimeOfDayPhase(timeOfDayController.currentPhase)
 
         statusBarController?.updateInteractionMode(defaults.initialInteractionMode)
-        statusBarController?.updateTimeOfDayState(
-            mode: defaults.timeOfDayMode,
-            manualPhase: defaults.manualTimePhase,
-            currentPhase: timeOfDayController.currentPhase
-        )
+        if previousTheme == resolvedTheme {
+            statusBarController?.updateThemeState(
+                mode: defaults.timeOfDayMode,
+                manualTheme: defaults.manualTheme,
+                currentTheme: resolvedTheme
+            )
+        }
         statusBarController?.updateSettingsState(
             pauseOnBattery: defaults.pauseOnBattery,
             showHUD: defaults.showHUD

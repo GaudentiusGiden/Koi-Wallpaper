@@ -7,22 +7,21 @@ public enum PondArtwork {
 
     // MARK: - Water Background & Caustics
 
-    public static func drawWater(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase = .day) {
+    public static func drawWater(in context: CGContext, rect: CGRect, theme: PondTheme = .day) {
         guard rect.width > 0, rect.height > 0 else { return }
         context.saveGState()
         context.translateBy(x: rect.minX, y: rect.minY)
         let w = rect.width, h = rect.height
         let space = CGColorSpaceCreateDeviceRGB()
 
-        // A mint-lit opening falls into jade water, rather than a uniformly lit
-        // green canvas. Deep jade/teal edges and sheltered olive-green corners
-        // create natural perimeter depth while preserving an illuminated center.
+        // Structured depth gradient, light washes, and floor nuances crafted
+        // specifically for each theme identity to prevent muddy waters.
         let depthColors: [CGColor]
         let lightColor: (CGFloat, CGFloat, CGFloat)
         let deepTealColor: (CGFloat, CGFloat, CGFloat)
         let oliveColor: (CGFloat, CGFloat, CGFloat)
         let gain: CGFloat
-        switch phase {
+        switch theme {
         case .day:
             depthColors = [
                 CGColor(red: 0.52, green: 0.95, blue: 0.77, alpha: 1),
@@ -35,42 +34,84 @@ public enum PondArtwork {
             deepTealColor = (0.030, 0.16, 0.13)
             oliveColor = (0.050, 0.16, 0.09)
             gain = 1.0
+
         case .dawn:
             depthColors = [
-                CGColor(red: 0.56, green: 0.74, blue: 0.48, alpha: 1),
-                CGColor(red: 0.38, green: 0.56, blue: 0.38, alpha: 1),
-                CGColor(red: 0.24, green: 0.44, blue: 0.30, alpha: 1),
-                CGColor(red: 0.14, green: 0.30, blue: 0.21, alpha: 1),
-                CGColor(red: 0.06, green: 0.18, blue: 0.12, alpha: 1)
+                CGColor(red: 0.88, green: 0.82, blue: 0.68, alpha: 1),
+                CGColor(red: 0.48, green: 0.68, blue: 0.54, alpha: 1),
+                CGColor(red: 0.28, green: 0.52, blue: 0.42, alpha: 1),
+                CGColor(red: 0.14, green: 0.35, blue: 0.29, alpha: 1),
+                CGColor(red: 0.06, green: 0.20, blue: 0.17, alpha: 1)
             ]
-            lightColor = (0.92, 0.88, 0.65)
-            deepTealColor = (0.030, 0.15, 0.12)
-            oliveColor = (0.060, 0.16, 0.08)
-            gain = 0.68
+            lightColor = (0.96, 0.84, 0.64)
+            deepTealColor = (0.030, 0.16, 0.14)
+            oliveColor = (0.060, 0.18, 0.10)
+            gain = 0.75
+
+        case .goldenHour:
+            depthColors = [
+                CGColor(red: 0.95, green: 0.78, blue: 0.48, alpha: 1),
+                CGColor(red: 0.52, green: 0.65, blue: 0.44, alpha: 1),
+                CGColor(red: 0.22, green: 0.48, blue: 0.45, alpha: 1),
+                CGColor(red: 0.10, green: 0.32, blue: 0.34, alpha: 1),
+                CGColor(red: 0.04, green: 0.18, blue: 0.22, alpha: 1)
+            ]
+            lightColor = (1.00, 0.80, 0.42)
+            deepTealColor = (0.025, 0.14, 0.17)
+            oliveColor = (0.070, 0.14, 0.08)
+            gain = 0.92
+
         case .dusk:
             depthColors = [
-                CGColor(red: 0.42, green: 0.38, blue: 0.50, alpha: 1),
-                CGColor(red: 0.26, green: 0.26, blue: 0.36, alpha: 1),
-                CGColor(red: 0.16, green: 0.17, blue: 0.26, alpha: 1),
-                CGColor(red: 0.09, green: 0.10, blue: 0.17, alpha: 1),
-                CGColor(red: 0.035, green: 0.050, blue: 0.10, alpha: 1)
+                CGColor(red: 0.68, green: 0.46, blue: 0.60, alpha: 1),
+                CGColor(red: 0.38, green: 0.32, blue: 0.48, alpha: 1),
+                CGColor(red: 0.20, green: 0.24, blue: 0.38, alpha: 1),
+                CGColor(red: 0.10, green: 0.14, blue: 0.26, alpha: 1),
+                CGColor(red: 0.04, green: 0.07, blue: 0.16, alpha: 1)
             ]
-            lightColor = (0.86, 0.65, 0.55)
-            deepTealColor = (0.025, 0.060, 0.13)
-            oliveColor = (0.045, 0.075, 0.10)
-            gain = 0.32
+            lightColor = (0.94, 0.58, 0.56)
+            deepTealColor = (0.025, 0.055, 0.14)
+            oliveColor = (0.045, 0.065, 0.11)
+            gain = 0.45
+
         case .night:
             depthColors = [
-                CGColor(red: 0.14, green: 0.26, blue: 0.40, alpha: 1),
-                CGColor(red: 0.08, green: 0.16, blue: 0.28, alpha: 1),
-                CGColor(red: 0.045, green: 0.10, blue: 0.19, alpha: 1),
-                CGColor(red: 0.020, green: 0.055, blue: 0.11, alpha: 1),
-                CGColor(red: 0.008, green: 0.025, blue: 0.060, alpha: 1)
+                CGColor(red: 0.18, green: 0.36, blue: 0.52, alpha: 1),
+                CGColor(red: 0.10, green: 0.22, blue: 0.36, alpha: 1),
+                CGColor(red: 0.05, green: 0.13, blue: 0.24, alpha: 1),
+                CGColor(red: 0.022, green: 0.07, blue: 0.15, alpha: 1),
+                CGColor(red: 0.008, green: 0.03, blue: 0.08, alpha: 1)
             ]
-            lightColor = (0.45, 0.70, 0.90)
-            deepTealColor = (0.006, 0.028, 0.07)
-            oliveColor = (0.010, 0.030, 0.05)
-            gain = 0.18
+            lightColor = (0.48, 0.76, 0.96)
+            deepTealColor = (0.008, 0.032, 0.085)
+            oliveColor = (0.012, 0.038, 0.065)
+            gain = 0.30
+
+        case .deepClear:
+            depthColors = [
+                CGColor(red: 0.45, green: 0.98, blue: 0.92, alpha: 1),
+                CGColor(red: 0.25, green: 0.76, blue: 0.74, alpha: 1),
+                CGColor(red: 0.12, green: 0.56, blue: 0.58, alpha: 1),
+                CGColor(red: 0.06, green: 0.38, blue: 0.44, alpha: 1),
+                CGColor(red: 0.03, green: 0.22, blue: 0.28, alpha: 1)
+            ]
+            lightColor = (0.60, 1.00, 0.96)
+            deepTealColor = (0.020, 0.18, 0.22)
+            oliveColor = (0.035, 0.18, 0.14)
+            gain = 1.15
+
+        case .rain:
+            depthColors = [
+                CGColor(red: 0.55, green: 0.68, blue: 0.70, alpha: 1),
+                CGColor(red: 0.34, green: 0.48, blue: 0.50, alpha: 1),
+                CGColor(red: 0.20, green: 0.36, blue: 0.38, alpha: 1),
+                CGColor(red: 0.11, green: 0.24, blue: 0.27, alpha: 1),
+                CGColor(red: 0.05, green: 0.14, blue: 0.17, alpha: 1)
+            ]
+            lightColor = (0.78, 0.86, 0.88)
+            deepTealColor = (0.030, 0.11, 0.14)
+            oliveColor = (0.040, 0.10, 0.10)
+            gain = 0.58
         }
 
         context.setFillColor(depthColors.last!)
@@ -141,26 +182,40 @@ public enum PondArtwork {
         context.restoreGState()
     }
 
+    public static func drawWater(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase = .day) {
+        drawWater(in: context, rect: rect, theme: phase.theme)
+    }
+
     /// Atmospheric overlay representing ambient lighting (e.g. night darkness, dusk glow, dawn warmth).
-    public static func drawAtmosphere(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase) {
-        guard phase != .day else { return }
+    public static func drawAtmosphere(in context: CGContext, rect: CGRect, theme: PondTheme) {
+        guard theme != .day && theme != .deepClear else { return }
         context.saveGState()
 
-        switch phase {
+        switch theme {
         case .dawn:
-            context.setFillColor(red: 0.90, green: 0.65, blue: 0.40, alpha: 0.05)
+            context.setFillColor(red: 0.95, green: 0.80, blue: 0.55, alpha: 0.03)
             context.fill(rect)
-        case .day:
+        case .day, .deepClear:
             break
+        case .goldenHour:
+            context.setFillColor(red: 0.98, green: 0.72, blue: 0.35, alpha: 0.05)
+            context.fill(rect)
         case .dusk:
-            context.setFillColor(red: 0.85, green: 0.45, blue: 0.25, alpha: 0.08)
+            context.setFillColor(red: 0.80, green: 0.40, blue: 0.50, alpha: 0.06)
             context.fill(rect)
         case .night:
-            context.setFillColor(red: 0.05, green: 0.12, blue: 0.28, alpha: 0.14)
+            context.setFillColor(red: 0.04, green: 0.10, blue: 0.25, alpha: 0.10)
+            context.fill(rect)
+        case .rain:
+            context.setFillColor(red: 0.60, green: 0.72, blue: 0.78, alpha: 0.07)
             context.fill(rect)
         }
 
         context.restoreGState()
+    }
+
+    public static func drawAtmosphere(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase) {
+        drawAtmosphere(in: context, rect: rect, theme: phase.theme)
     }
 
     // MARK: - Food Pellets

@@ -5,10 +5,19 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidToggleManualPause(_ controller: StatusBarController)
     func statusBarDidSelectTimeOfDayMode(_ controller: StatusBarController, mode: TimeOfDayMode)
     func statusBarDidSelectManualTimePhase(_ controller: StatusBarController, phase: TimeOfDayPhase)
+    func statusBarDidSelectManualTheme(_ controller: StatusBarController, theme: PondTheme)
     func statusBarDidTogglePauseOnBattery(_ controller: StatusBarController)
     func statusBarDidToggleHUD(_ controller: StatusBarController)
     func statusBarDidResetSettings(_ controller: StatusBarController)
     func statusBarDidRequestQuit(_ controller: StatusBarController)
+}
+
+extension StatusBarControllerDelegate {
+    public func statusBarDidSelectManualTheme(_ controller: StatusBarController, theme: PondTheme) {
+        if let phase = theme.asTimePhase {
+            statusBarDidSelectManualTimePhase(controller, phase: phase)
+        }
+    }
 }
 
 public final class StatusBarController {
@@ -33,16 +42,21 @@ public final class StatusBarController {
     )
     private let interactionDescItem = NSMenuItem(title: "Status: Tembus Klik Finder (Default)", action: nil, keyEquivalent: "")
 
-    // Time of Day submenu
-    private let timeOfDayMenuItem = NSMenuItem(title: "Waktu Kolam (Time of Day)", action: nil, keyEquivalent: "")
-    private let timeOfDayMenu = NSMenu(title: "Time of Day")
+    // Time of Day & Theme submenu
+    private let timeOfDayMenuItem = NSMenuItem(title: "Tema & Waktu Kolam", action: nil, keyEquivalent: "")
+    private let timeOfDayMenu = NSMenu(title: "Tema & Waktu")
     private let autoTimeItem = NSMenuItem(title: "Otomatis Sesuai Jam (Auto)", action: #selector(autoTimeSelected), keyEquivalent: "")
     private let systemThemeItem = NSMenuItem(title: "Ikuti Tema Sistem (Light/Dark)", action: #selector(systemThemeSelected), keyEquivalent: "")
     private let dawnItem = NSMenuItem(title: "Fajar (Dawn)", action: #selector(dawnSelected), keyEquivalent: "")
     private let dayItem = NSMenuItem(title: "Siang (Day)", action: #selector(daySelected), keyEquivalent: "")
+    private let goldenHourItem = NSMenuItem(title: "Golden Hour", action: #selector(goldenHourSelected), keyEquivalent: "")
     private let duskItem = NSMenuItem(title: "Senja (Dusk)", action: #selector(duskSelected), keyEquivalent: "")
     private let nightItem = NSMenuItem(title: "Malam (Night)", action: #selector(nightSelected), keyEquivalent: "")
-    private let currentPhaseInfoItem = NSMenuItem(title: "Fase Aktif: Siang (Day)", action: nil, keyEquivalent: "")
+
+    private let deepClearItem = NSMenuItem(title: "Deep Clear", action: #selector(deepClearSelected), keyEquivalent: "")
+    private let rainItem = NSMenuItem(title: "Hujan (Rain Preset)", action: #selector(rainSelected), keyEquivalent: "")
+
+    private let currentPhaseInfoItem = NSMenuItem(title: "Tema Aktif: Siang (Day)", action: nil, keyEquivalent: "")
 
     // Settings submenu
     private let settingsMenuItem = NSMenuItem(title: "Pengaturan (Settings)", action: nil, keyEquivalent: "")
@@ -99,24 +113,37 @@ public final class StatusBarController {
         systemThemeItem.target = self
         dawnItem.target = self
         dayItem.target = self
+        goldenHourItem.target = self
         duskItem.target = self
         nightItem.target = self
+        deepClearItem.target = self
+        rainItem.target = self
         pauseOnBatteryItem.target = self
         showHUDItem.target = self
         resetSettingsItem.target = self
         quitItem.target = self
 
-        // Build Time of Day submenu
+        // Build Theme submenu
         timeOfDayMenu.addItem(autoTimeItem)
         timeOfDayMenu.addItem(systemThemeItem)
         timeOfDayMenu.addItem(NSMenuItem.separator())
-        let manualHeader = NSMenuItem(title: "Pilihan Manual:", action: nil, keyEquivalent: "")
-        manualHeader.isEnabled = false
-        timeOfDayMenu.addItem(manualHeader)
+
+        let phaseHeader = NSMenuItem(title: "Fase Waktu:", action: nil, keyEquivalent: "")
+        phaseHeader.isEnabled = false
+        timeOfDayMenu.addItem(phaseHeader)
         timeOfDayMenu.addItem(dawnItem)
         timeOfDayMenu.addItem(dayItem)
+        timeOfDayMenu.addItem(goldenHourItem)
         timeOfDayMenu.addItem(duskItem)
         timeOfDayMenu.addItem(nightItem)
+
+        timeOfDayMenu.addItem(NSMenuItem.separator())
+        let presetHeader = NSMenuItem(title: "Preset Khusus:", action: nil, keyEquivalent: "")
+        presetHeader.isEnabled = false
+        timeOfDayMenu.addItem(presetHeader)
+        timeOfDayMenu.addItem(deepClearItem)
+        timeOfDayMenu.addItem(rainItem)
+
         timeOfDayMenu.addItem(NSMenuItem.separator())
         timeOfDayMenu.addItem(currentPhaseInfoItem)
         timeOfDayMenuItem.submenu = timeOfDayMenu
@@ -174,16 +201,23 @@ public final class StatusBarController {
         )
     }
 
-    public func updateTimeOfDayState(mode: TimeOfDayMode, manualPhase: TimeOfDayPhase, currentPhase: TimeOfDayPhase) {
+    public func updateThemeState(mode: TimeOfDayMode, manualTheme: PondTheme, currentTheme: PondTheme) {
         autoTimeItem.state = (mode == .auto) ? .on : .off
         systemThemeItem.state = (mode == .systemTheme) ? .on : .off
 
-        dawnItem.state = (mode == .manual && manualPhase == .dawn) ? .on : .off
-        dayItem.state = (mode == .manual && manualPhase == .day) ? .on : .off
-        duskItem.state = (mode == .manual && manualPhase == .dusk) ? .on : .off
-        nightItem.state = (mode == .manual && manualPhase == .night) ? .on : .off
+        dawnItem.state = (mode == .manual && manualTheme == .dawn) ? .on : .off
+        dayItem.state = (mode == .manual && manualTheme == .day) ? .on : .off
+        goldenHourItem.state = (mode == .manual && manualTheme == .goldenHour) ? .on : .off
+        duskItem.state = (mode == .manual && manualTheme == .dusk) ? .on : .off
+        nightItem.state = (mode == .manual && manualTheme == .night) ? .on : .off
+        deepClearItem.state = (mode == .manual && manualTheme == .deepClear) ? .on : .off
+        rainItem.state = (mode == .manual && manualTheme == .rain) ? .on : .off
 
-        currentPhaseInfoItem.title = "Fase Aktif: \(currentPhase.displayName)"
+        currentPhaseInfoItem.title = "Tema Aktif: \(currentTheme.displayName)"
+    }
+
+    public func updateTimeOfDayState(mode: TimeOfDayMode, manualPhase: TimeOfDayPhase, currentPhase: TimeOfDayPhase) {
+        updateThemeState(mode: mode, manualTheme: manualPhase.theme, currentTheme: currentPhase.theme)
     }
 
     public func updateSettingsState(pauseOnBattery: Bool, showHUD: Bool) {
@@ -221,19 +255,31 @@ public final class StatusBarController {
     }
 
     @objc private func dawnSelected() {
-        delegate?.statusBarDidSelectManualTimePhase(self, phase: .dawn)
+        delegate?.statusBarDidSelectManualTheme(self, theme: .dawn)
     }
 
     @objc private func daySelected() {
-        delegate?.statusBarDidSelectManualTimePhase(self, phase: .day)
+        delegate?.statusBarDidSelectManualTheme(self, theme: .day)
+    }
+
+    @objc private func goldenHourSelected() {
+        delegate?.statusBarDidSelectManualTheme(self, theme: .goldenHour)
     }
 
     @objc private func duskSelected() {
-        delegate?.statusBarDidSelectManualTimePhase(self, phase: .dusk)
+        delegate?.statusBarDidSelectManualTheme(self, theme: .dusk)
     }
 
     @objc private func nightSelected() {
-        delegate?.statusBarDidSelectManualTimePhase(self, phase: .night)
+        delegate?.statusBarDidSelectManualTheme(self, theme: .night)
+    }
+
+    @objc private func deepClearSelected() {
+        delegate?.statusBarDidSelectManualTheme(self, theme: .deepClear)
+    }
+
+    @objc private func rainSelected() {
+        delegate?.statusBarDidSelectManualTheme(self, theme: .rain)
     }
 
     @objc private func pauseOnBatteryToggled() {

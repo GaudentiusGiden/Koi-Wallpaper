@@ -6,29 +6,116 @@ import Foundation
 final class PondWaterSurface {
     private var keySize: CGSize = .zero
     private var keyScale: CGFloat = 0
-    private var keyPhase: TimeOfDayPhase?
+    private var keyTheme: PondTheme?
     private(set) var bed: CGImage?
-    private var networks: [CGImage] = []
+    private(set) var networks: [CGImage] = []
     private var overscan: CGFloat = 48
 
-    func prepare(size: CGSize, scale: CGFloat, phase: TimeOfDayPhase) {
-        guard size != keySize || scale != keyScale || phase != keyPhase else { return }
+    func copyForSnapshot() -> PondWaterSurface {
+        let copy = PondWaterSurface()
+        copy.keySize = keySize
+        copy.keyScale = keyScale
+        copy.keyTheme = keyTheme
+        copy.bed = bed
+        copy.networks = networks
+        copy.overscan = overscan
+        return copy
+    }
+
+    var hasCompleteAssets: Bool {
+        bed != nil && networks.count == 2
+    }
+
+    func hasCompleteAssets(for size: CGSize, scale: CGFloat) -> Bool {
+        keySize == size && keyScale == scale && bed != nil && networks.count == 2
+    }
+
+    func isPrepared(size: CGSize, scale: CGFloat, theme: PondTheme) -> Bool {
+        keyTheme == theme && hasCompleteAssets(for: size, scale: scale)
+    }
+
+    func prepare(size: CGSize, scale: CGFloat, theme: PondTheme) {
+        guard size != keySize || scale != keyScale || theme != keyTheme || bed == nil || networks.count != 2 else { return }
         keySize = size
         keyScale = scale
-        keyPhase = phase
+        keyTheme = theme
         overscan = max(24, min(size.width, size.height) * 0.055)
         let meshSize = CGSize(width: size.width + overscan * 2, height: size.height + overscan * 2)
-        // Soft light does not need a full Retina backing store. The GPU samples it
-        // linearly; bounding all three textures avoids multiplying monitor memory.
+        // Soft light does not need a full Retina backing store. Bounding all three
+        // textures avoids multiplying monitor memory across displays.
         let rasterScale = min(scale, 1536 / max(meshSize.width, meshSize.height), sqrt(2_250_000 / (meshSize.width * meshSize.height)))
-        bed = PondBitmap.makeImage(size: size, scale: rasterScale) {
-            PondArtwork.drawWater(in: $0, rect: CGRect(origin: .zero, size: size), phase: phase)
+        guard let newBed = PondBitmap.makeImage(size: size, scale: rasterScale, draw: {
+            PondArtwork.drawWater(in: $0, rect: CGRect(origin: .zero, size: size), theme: theme)
+        }) else {
+            bed = nil
+            networks = []
+            keyTheme = nil
+            return
         }
-        networks = (0..<2).compactMap { layer in
+        let newNetworks = (0..<2).compactMap { layer in
             PondBitmap.makeImage(size: meshSize, scale: rasterScale) { bitmap in
-                Self.drawVoronoi(in: bitmap, size: meshSize, layer: layer, phase: phase)
+                Self.drawVoronoi(in: bitmap, size: meshSize, layer: layer, theme: theme)
             }
         }
+        guard newNetworks.count == 2 else {
+            bed = nil
+            networks = []
+            keyTheme = nil
+            return
+        }
+        bed = newBed
+        networks = newNetworks
+    }
+
+    func prepare(size: CGSize, scale: CGFloat, phase: TimeOfDayPhase) {
+        prepare(size: size, scale: scale, theme: phase.theme)
+    }
+
+    @discardableResult
+    func snapshotBlend(with target: PondWaterSurface, progress: CGFloat) -> Bool {
+        guard let bedA = self.bed, let bedB = target.bed,
+              self.networks.count == 2, target.networks.count == 2,
+              keySize.width > 0, keySize.height > 0 else {
+            return false
+        }
+        let p = max(0, min(1, progress))
+        let bedRasterScale = min(keyScale > 0 ? keyScale : 1.0, 1536 / max(keySize.width, keySize.height), sqrt(2_250_000 / (keySize.width * keySize.height)))
+
+        guard let newBed = PondBitmap.makeImage(size: keySize, scale: bedRasterScale, draw: { ctx in
+            ctx.saveGState()
+            // Base layer remains at full opacity; incoming layer fades in at p (source-over compositing)
+            ctx.draw(bedA, in: CGRect(origin: .zero, size: keySize))
+            ctx.setAlpha(p)
+            ctx.draw(bedB, in: CGRect(origin: .zero, size: keySize))
+            ctx.restoreGState()
+        }) else {
+            return false
+        }
+
+        let meshSize = CGSize(width: keySize.width + overscan * 2, height: keySize.height + overscan * 2)
+        // Bound rasterScale by meshSize (including overscan) to ensure mesh textures never exceed 1536 px or 2.25M pixels
+        let meshRasterScale = min(keyScale > 0 ? keyScale : 1.0, 1536 / max(meshSize.width, meshSize.height), sqrt(2_250_000 / (meshSize.width * meshSize.height)))
+
+        let newNetworks: [CGImage] = (0..<2).compactMap { i in
+            let netA = self.networks[i]
+            let netB = target.networks[i]
+            return PondBitmap.makeImage(size: meshSize, scale: meshRasterScale) { ctx in
+                ctx.saveGState()
+                ctx.setAlpha(1.0 - p)
+                ctx.draw(netA, in: CGRect(origin: .zero, size: meshSize))
+                ctx.setBlendMode(.plusLighter)
+                ctx.setAlpha(p)
+                ctx.draw(netB, in: CGRect(origin: .zero, size: meshSize))
+                ctx.restoreGState()
+            }
+        }
+
+        guard newNetworks.count == 2 else { return false }
+
+        self.bed = newBed
+        self.networks = newNetworks
+        self.keyTheme = nil
+        return true
     }
 
     func placements(time: Double) -> [PondImagePlacement] {
@@ -43,7 +130,7 @@ final class PondWaterSurface {
         }
     }
 
-    private static func drawVoronoi(in context: CGContext, size: CGSize, layer: Int, phase: TimeOfDayPhase) {
+    private static func drawVoronoi(in context: CGContext, size: CGSize, layer: Int, theme: PondTheme) {
         let short = min(size.width, size.height)
         let spacing = short * (layer == 0 ? 0.105 : 0.047)
         let cols = Int(ceil(size.width / spacing)) + 4
@@ -103,33 +190,48 @@ final class PondWaterSurface {
         context.setLineCap(.round)
         context.setLineJoin(.round)
 
-        // Phase-specific caustic color palettes
+        // Phase/theme-specific caustic color palettes
         let outerColor: (CGFloat, CGFloat, CGFloat)
         let innerColor: (CGFloat, CGFloat, CGFloat)
         let faintColor: (CGFloat, CGFloat, CGFloat)
         let phaseAlphaGain: CGFloat
 
-        switch phase {
+        switch theme {
         case .day:
             outerColor = (0.58, 0.98, 0.80)
             innerColor = (0.68, 1.00, 0.86)
             faintColor = (0.46, 0.88, 0.68)
             phaseAlphaGain = 1.0
         case .dawn:
-            outerColor = (0.88, 0.94, 0.72)
-            innerColor = (0.96, 0.98, 0.80)
-            faintColor = (0.76, 0.84, 0.62)
-            phaseAlphaGain = 0.82
+            outerColor = (0.92, 0.90, 0.68)
+            innerColor = (0.98, 0.96, 0.78)
+            faintColor = (0.74, 0.82, 0.60)
+            phaseAlphaGain = 0.78
+        case .goldenHour:
+            outerColor = (0.98, 0.82, 0.46)
+            innerColor = (1.00, 0.92, 0.65)
+            faintColor = (0.85, 0.74, 0.40)
+            phaseAlphaGain = 0.88
         case .dusk:
-            outerColor = (0.80, 0.68, 0.76)
-            innerColor = (0.90, 0.78, 0.84)
-            faintColor = (0.68, 0.58, 0.66)
-            phaseAlphaGain = 0.55
+            outerColor = (0.85, 0.62, 0.78)
+            innerColor = (0.94, 0.78, 0.88)
+            faintColor = (0.70, 0.52, 0.68)
+            phaseAlphaGain = 0.52
         case .night:
-            outerColor = (0.42, 0.70, 0.92)
-            innerColor = (0.55, 0.82, 0.98)
-            faintColor = (0.32, 0.55, 0.78)
-            phaseAlphaGain = 0.38
+            outerColor = (0.38, 0.72, 0.95)
+            innerColor = (0.55, 0.88, 1.00)
+            faintColor = (0.28, 0.55, 0.82)
+            phaseAlphaGain = 0.45
+        case .deepClear:
+            outerColor = (0.45, 0.96, 0.92)
+            innerColor = (0.75, 1.00, 0.98)
+            faintColor = (0.35, 0.85, 0.82)
+            phaseAlphaGain = 1.12
+        case .rain:
+            outerColor = (0.65, 0.80, 0.82)
+            innerColor = (0.80, 0.90, 0.92)
+            faintColor = (0.50, 0.68, 0.70)
+            phaseAlphaGain = 0.48
         }
 
         for band in 0..<4 {

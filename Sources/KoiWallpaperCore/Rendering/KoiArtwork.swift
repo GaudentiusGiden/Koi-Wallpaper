@@ -4,7 +4,17 @@ import Foundation
 /// Original, limited-palette koi artwork. Torso stations use the same spine and
 /// widths as collision capsules; fins and tail remain articulated decorations.
 public enum KoiArtwork {
-    public static func draw(_ fish: KoiFish, in context: CGContext, drawShadowOnly: Bool = false, phase: TimeOfDayPhase = .day) {
+    public static func draw(_ fish: KoiFish, in context: CGContext, drawShadowOnly: Bool = false, phase: TimeOfDayPhase) {
+        draw(fish, in: context, drawShadowOnly: drawShadowOnly, theme: phase.theme)
+    }
+
+    public static func draw(
+        _ fish: KoiFish,
+        in context: CGContext,
+        drawShadowOnly: Bool = false,
+        theme: PondTheme = .day,
+        customShadowStyle: PondLighting.ShadowStyle? = nil
+    ) {
         context.saveGState()
         let length = CGFloat(fish.length)
         let halfWidth = CGFloat(fish.width / 2)
@@ -18,7 +28,7 @@ public enum KoiArtwork {
         let flutter = CGFloat(sin(fish.wigglePhase)) * 0.10
         let turnFinBias = CGFloat(fish.spineCurvature) * 0.10
         if drawShadowOnly {
-            let style = PondLighting.shadowStyle(for: phase)
+            let style = customShadowStyle ?? PondLighting.shadowStyle(for: theme)
             // 1. Slightly expanded stepped penumbra (soft edge into pond bed)
             let penumbraWidth = halfWidth * 1.14
             let penumbraLength = length * 1.05

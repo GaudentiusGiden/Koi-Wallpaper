@@ -25,7 +25,7 @@ public enum DecorativeFishArtwork {
         let index: Int
     }
 
-    public static func draw(in context: CGContext, size: CGSize, time: Double, phase: TimeOfDayPhase = .day) {
+    public static func draw(in context: CGContext, size: CGSize, time: Double, theme: PondTheme = .day, customShadowStyle: PondLighting.ShadowStyle? = nil) {
         let short = min(size.width, size.height)
         let centers = [CGPoint(x: 0.29, y: 0.34), CGPoint(x: 0.75, y: 0.30), CGPoint(x: 0.65, y: 0.73)]
 
@@ -55,7 +55,7 @@ public enum DecorativeFishArtwork {
                 context.saveGState()
                 context.translateBy(x: fish.x, y: fish.y)
                 context.rotate(by: CGFloat(fish.turn))
-                drawShadow(in: context, length: fish.length, halfWidth: fish.halfWidth, heading: CGFloat(fish.turn), phase: phase)
+                drawShadow(in: context, length: fish.length, halfWidth: fish.halfWidth, heading: CGFloat(fish.turn), theme: theme, customShadowStyle: customShadowStyle)
                 context.restoreGState()
             }
 
@@ -71,6 +71,10 @@ public enum DecorativeFishArtwork {
                 context.restoreGState()
             }
         }
+    }
+
+    public static func draw(in context: CGContext, size: CGSize, time: Double, phase: TimeOfDayPhase) {
+        draw(in: context, size: size, time: time, theme: phase.theme)
     }
 
     // MARK: - School Color Palettes
@@ -174,8 +178,15 @@ public enum DecorativeFishArtwork {
 
     // MARK: - Anatomy & Markings
 
-    private static func drawShadow(in context: CGContext, length: CGFloat, halfWidth: CGFloat, heading: CGFloat, phase: TimeOfDayPhase = .day) {
-        let style = PondLighting.shadowStyle(for: phase)
+    private static func drawShadow(
+        in context: CGContext,
+        length: CGFloat,
+        halfWidth: CGFloat,
+        heading: CGFloat,
+        theme: PondTheme = .day,
+        customShadowStyle: PondLighting.ShadowStyle? = nil
+    ) {
+        let style = customShadowStyle ?? PondLighting.shadowStyle(for: theme)
         context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: style.smallFishAlpha)
         let worldOffset = PondLighting.shadowOffset(distance: length * 0.28)
         // The fish context is rotated; undo that rotation for the light vector.

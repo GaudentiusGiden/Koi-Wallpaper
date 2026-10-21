@@ -12,7 +12,7 @@ enum PondFloraArtwork {
     static func localBounds(shortSide: CGFloat) -> CGRect {
         CGRect(x: -shortSide * 0.30, y: -shortSide * 0.34, width: shortSide * 0.60, height: shortSide * 0.68)
     }
-    static func drawCluster(_ index: Int, in context: CGContext, shortSide: CGFloat, phase: TimeOfDayPhase = .day) {
+    static func drawCluster(_ index: Int, in context: CGContext, shortSide: CGFloat, theme: PondTheme = .day) {
         context.saveGState()
         context.scaleBy(x: shortSide * 1.3, y: shortSide * 1.3)
         let mirror: CGFloat = index == 2 || index == 3 ? -1 : 1
@@ -32,7 +32,7 @@ enum PondFloraArtwork {
             context.addQuadCurve(to: CGPoint(x: x + 0.010, y: y + length), control: CGPoint(x: x - 0.02, y: y))
             context.strokePath()
             let radius = random(0.0035...0.0085)
-            let shadowStyle = PondLighting.shadowStyle(for: phase)
+            let shadowStyle = PondLighting.shadowStyle(for: theme)
             context.setFillColor(red: shadowStyle.color.0, green: shadowStyle.color.1, blue: shadowStyle.color.2, alpha: shadowStyle.smallFishAlpha)
             let shadow = PondLighting.shadowOffset(distance: 0.024)
             context.fillEllipse(in: CGRect(x: x + shadow.x * mirror, y: y + shadow.y,
@@ -60,13 +60,17 @@ enum PondFloraArtwork {
         for (i, p) in pads.enumerated() {
             drawPad(in: context, center: CGPoint(x: p.0, y: p.1), radius: p.2,
                     angle: CGFloat(index) * 1.3 + CGFloat(i) * 2.1, variant: index + i,
-                    flower: i == 1 && index < 4, mirror: mirror, phase: phase)
+                    flower: i == 1 && index < 4, mirror: mirror, theme: theme)
         }
         context.restoreGState()
     }
 
+    static func drawCluster(_ index: Int, in context: CGContext, shortSide: CGFloat, phase: TimeOfDayPhase) {
+        drawCluster(index, in: context, shortSide: shortSide, theme: phase.theme)
+    }
+
     private static func drawPad(in context: CGContext, center: CGPoint, radius: CGFloat,
-                                angle: CGFloat, variant: Int, flower: Bool, mirror: CGFloat, phase: TimeOfDayPhase = .day) {
+                                angle: CGFloat, variant: Int, flower: Bool, mirror: CGFloat, theme: PondTheme = .day) {
         context.saveGState()
         context.translateBy(x: center.x, y: center.y)
         context.rotate(by: angle)
@@ -86,7 +90,7 @@ enum PondFloraArtwork {
         let dy = offset.y
         context.translateBy(x: cos(angle) * dx + sin(angle) * dy,
                             y: (-sin(angle) * dx + cos(angle) * dy) / 0.92)
-        let shadowStyle = PondLighting.shadowStyle(for: phase)
+        let shadowStyle = PondLighting.shadowStyle(for: theme)
         // 1. Soft penumbra stepped softening rim
         context.saveGState()
         context.scaleBy(x: 1.08, y: 1.08)
@@ -126,16 +130,31 @@ enum PondFloraArtwork {
             }
         }
         context.strokePath()
-        // Short, broken rim highlights instead of an outlined circle.
-        context.setStrokeColor(red: 0.23, green: 0.42, blue: 0.24, alpha: 0.5)
+        // Short, broken rim highlights tuned for active theme.
+        let rimColor: (CGFloat, CGFloat, CGFloat, CGFloat)
+        switch theme {
+        case .goldenHour:
+            rimColor = (0.65, 0.58, 0.28, 0.65)
+        case .night:
+            rimColor = (0.18, 0.38, 0.40, 0.40)
+        case .dusk:
+            rimColor = (0.38, 0.32, 0.40, 0.45)
+        case .dawn:
+            rimColor = (0.42, 0.52, 0.32, 0.55)
+        case .rain:
+            rimColor = (0.30, 0.45, 0.42, 0.45)
+        case .day, .deepClear:
+            rimColor = (0.23, 0.42, 0.24, 0.50)
+        }
+        context.setStrokeColor(red: rimColor.0, green: rimColor.1, blue: rimColor.2, alpha: rimColor.3)
         context.setLineWidth(radius * 0.022)
         context.addArc(center: .zero, radius: radius * 0.985, startAngle: 1.2, endAngle: 2.7, clockwise: false)
         context.strokePath()
-        if flower { drawFlower(in: context, radius: radius * 0.32) }
+        if flower { drawFlower(in: context, radius: radius * 0.32, theme: theme) }
         context.restoreGState()
     }
 
-    private static func drawFlower(in context: CGContext, radius: CGFloat) {
+    private static func drawFlower(in context: CGContext, radius: CGFloat, theme: PondTheme = .day) {
         for tier in 0..<2 {
             let petal = CGMutablePath()
             for i in 0..<16 {
@@ -145,8 +164,21 @@ enum PondFloraArtwork {
                 if i == 0 { petal.move(to: p) } else { petal.addLine(to: p) }
             }
             petal.closeSubpath()
-            if tier == 0 { context.setFillColor(red: 0.87, green: 0.34, blue: 0.48, alpha: 1) }
-            else { context.setFillColor(red: 1, green: 0.70, blue: 0.72, alpha: 1) }
+            if tier == 0 {
+                switch theme {
+                case .goldenHour: context.setFillColor(red: 0.92, green: 0.42, blue: 0.38, alpha: 1)
+                case .dusk: context.setFillColor(red: 0.82, green: 0.35, blue: 0.52, alpha: 1)
+                case .night: context.setFillColor(red: 0.68, green: 0.38, blue: 0.56, alpha: 1)
+                default: context.setFillColor(red: 0.87, green: 0.34, blue: 0.48, alpha: 1)
+                }
+            } else {
+                switch theme {
+                case .goldenHour: context.setFillColor(red: 1.00, green: 0.78, blue: 0.68, alpha: 1)
+                case .dusk: context.setFillColor(red: 0.95, green: 0.72, blue: 0.82, alpha: 1)
+                case .night: context.setFillColor(red: 0.85, green: 0.70, blue: 0.82, alpha: 1)
+                default: context.setFillColor(red: 1.00, green: 0.70, blue: 0.72, alpha: 1)
+                }
+            }
             context.addPath(petal)
             context.fillPath()
         }

@@ -127,6 +127,29 @@ Status: **REVISI VISUAL DIIMPLEMENTASIKAN & DIVERIFIKASI**, mengikuti rencana ko
 
 Implementasi, hasil verifikasi, dan cara meninjau: [VISUAL_FOUNDATION.md](VISUAL_FOUNDATION.md). Perbandingan gambar: [laporan visual lokal](../reports/visual-review.html).
 
+### M3.6 — Palet dan transisi tema
+
+Status: **IMPLEMENTASI SELESAI; `swift build` LULUS; COMPOSITOR NATIVE BELUM DIPERIKSA SAAT RUNTIME**. Model `PondTheme` mencakup 5 tema waktu dan 2 preset manual. Auto mengikuti jadwal REA [05:30, 07:30, 16:30, 18:00, 19:30], System memetakan light ke Day dan dark ke Night. `PondSceneLayer` memakai Core Animation dan filter Core Image `CIAdditionCompositing` untuk pasangan caustics; host `NSView` mengaktifkan `layerUsesCoreImageFilters`. Jalur native, offscreen, dan snapshot menerapkan bobot source $(1-p)$ dan target $p$ pada caustics premultiplied RGBA. Snapshot retarget membangun kandidat bed, tepat 2 jaringan caustics lengkap (tanpa mentolerir pasangan parsial), flora, tint, shadow, dan glimmer, lalu commit hanya setelah seluruh aset siap. Validasi source snapshot campuran memeriksa kelengkapan aset tanpa mensyaratkan `keyTheme` tertentu, dan kegagalan parsial caustics me-reset state bersih tanpa menyisakan aset tidak lengkap. Kegagalan mempertahankan state/sumber aktif; fallback melanjutkan transisi, menyimpan tema terbaru, dan menjalankannya setelah selesai. Jika antrean meminta tema sumber, transisi tema tunggal dibalik; sumber snapshot campuran tetap diantrekan karena tidak bisa dibalik sebagai satu tema. `AppCoordinator` menerapkan wallpaper/menu hanya dari `onThemeChanged`, bukan callback fase.
+
+Runtime filter Core Image, isolasi visual caustics, dan transisi native belum diperiksa secara visual. Screenshot M3.6 yang tersedia menunjukkan palet tema statis, bukan verifikasi compositing transisi. Suite `KoiWallpaperVerify` dan `KoiWallpaperSimTest` tidak dijalankan.
+
+Pekerjaan:
+
+- [x] Definisikan model data `PondTheme` (7 tema) dan integrasikan dengan `TimeOfDayPhase` (menambahkan `goldenHour`) serta sinkronisasi persisten kompatibel lama pada `WallpaperSettings`.
+- [x] Bangun palet air terstruktur 5 kedalaman, berkas cahaya, caustics Voronoi 2 jaringan, rim highlight teratai, dan bayangan penumbra/umbra untuk seluruh 7 tema.
+- [x] Bedakan preset visual Rain (cahaya mendung abu-abu-teal desaturasi dan permukaan reflektif) dari efek simulasi cuaca/partikel hujan (cakupan M4).
+- [x] Implementasikan transisi kontinu 1,8 detik dengan crossfade layer ganda, interpolasi lerp bayangan ikan, retargeting, dan stasis saat jeda. Runtime visual native belum diverifikasi.
+- [x] Hubungkan antarmuka ke menu status bar, kontrol preview (tombol 't'), HUD diagnosis, `ScreenManager`, dan ekspor offscreen `PondRenderer.render`.
+- [x] Dokumentasikan bukti teramati (Day, Night, Rain) vs interpretasi desain (Dawn, Golden Hour, Dusk, Deep Clear) di [decisions/2026-10-21-theme-palettes-and-transitions.md](decisions/2026-10-21-theme-palettes-and-transitions.md).
+
+Selesai ketika:
+
+- [x] Seluruh 7 tema memiliki identitas visual yang tajam, kontras ikan terjaga, dan air tidak berlumpur.
+- [x] Jalur tema menjaga entitas simulasi dan menyediakan crossfade serta retargeting; hasil visual saat runtime belum diverifikasi.
+- [x] Retargeting menyediakan pembalikan arah untuk sumber tema tunggal dan antrean fallback untuk snapshot campuran; belum diuji lewat suite khusus.
+- [x] Pengaturan lama ter-decode dengan benar tanpa migrasi data yang merusak.
+- [x] `swift build` berhasil pada target package.
+
 ### M4 — Perilaku personal dan atmosfer
 
 Pekerjaan:
