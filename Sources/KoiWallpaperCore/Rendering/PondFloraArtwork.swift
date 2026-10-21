@@ -12,7 +12,7 @@ enum PondFloraArtwork {
     static func localBounds(shortSide: CGFloat) -> CGRect {
         CGRect(x: -shortSide * 0.30, y: -shortSide * 0.34, width: shortSide * 0.60, height: shortSide * 0.68)
     }
-    static func drawCluster(_ index: Int, in context: CGContext, shortSide: CGFloat) {
+    static func drawCluster(_ index: Int, in context: CGContext, shortSide: CGFloat, phase: TimeOfDayPhase = .day) {
         context.saveGState()
         context.scaleBy(x: shortSide * 1.3, y: shortSide * 1.3)
         let mirror: CGFloat = index == 2 || index == 3 ? -1 : 1
@@ -32,8 +32,11 @@ enum PondFloraArtwork {
             context.addQuadCurve(to: CGPoint(x: x + 0.010, y: y + length), control: CGPoint(x: x - 0.02, y: y))
             context.strokePath()
             let radius = random(0.0035...0.0085)
-            context.setFillColor(red: 0.025, green: 0.14, blue: 0.10, alpha: 0.22)
-            context.fillEllipse(in: CGRect(x: x + 0.006, y: y - 0.012, width: radius * 2.9, height: radius * 2.3))
+            let shadowStyle = PondLighting.shadowStyle(for: phase)
+            context.setFillColor(red: shadowStyle.color.0, green: shadowStyle.color.1, blue: shadowStyle.color.2, alpha: shadowStyle.smallFishAlpha)
+            let shadow = PondLighting.shadowOffset(distance: 0.024)
+            context.fillEllipse(in: CGRect(x: x + shadow.x * mirror, y: y + shadow.y,
+                                          width: radius * 3.0, height: radius * 2.4))
             let greens: [(CGFloat, CGFloat, CGFloat)] = [(0.18, 0.40, 0.20), (0.28, 0.51, 0.22), (0.38, 0.59, 0.25), (0.22, 0.45, 0.23)]
             let col = greens[i % greens.count]
             context.setFillColor(red: col.0, green: col.1, blue: col.2, alpha: 1)
@@ -57,13 +60,13 @@ enum PondFloraArtwork {
         for (i, p) in pads.enumerated() {
             drawPad(in: context, center: CGPoint(x: p.0, y: p.1), radius: p.2,
                     angle: CGFloat(index) * 1.3 + CGFloat(i) * 2.1, variant: index + i,
-                    flower: i == 1 && index < 4, mirror: mirror)
+                    flower: i == 1 && index < 4, mirror: mirror, phase: phase)
         }
         context.restoreGState()
     }
 
     private static func drawPad(in context: CGContext, center: CGPoint, radius: CGFloat,
-                                angle: CGFloat, variant: Int, flower: Bool, mirror: CGFloat) {
+                                angle: CGFloat, variant: Int, flower: Bool, mirror: CGFloat, phase: TimeOfDayPhase = .day) {
         context.saveGState()
         context.translateBy(x: center.x, y: center.y)
         context.rotate(by: angle)
@@ -78,11 +81,22 @@ enum PondFloraArtwork {
         leaf.closeSubpath()
         context.saveGState()
         // Undo the local leaf rotation/mirroring for a consistent world light direction.
-        let dx = radius * 0.17 * mirror
-        let dy = -radius * 0.24
+        let offset = PondLighting.shadowOffset(distance: radius * 0.44)
+        let dx = offset.x * mirror
+        let dy = offset.y
         context.translateBy(x: cos(angle) * dx + sin(angle) * dy,
                             y: (-sin(angle) * dx + cos(angle) * dy) / 0.92)
-        context.setFillColor(red: 0.02, green: 0.14, blue: 0.105, alpha: 0.30)
+        let shadowStyle = PondLighting.shadowStyle(for: phase)
+        // 1. Soft penumbra stepped softening rim
+        context.saveGState()
+        context.scaleBy(x: 1.08, y: 1.08)
+        context.setFillColor(red: shadowStyle.color.0, green: shadowStyle.color.1, blue: shadowStyle.color.2, alpha: shadowStyle.penumbraAlpha)
+        context.addPath(leaf)
+        context.fillPath()
+        context.restoreGState()
+
+        // 2. Core umbra
+        context.setFillColor(red: shadowStyle.color.0, green: shadowStyle.color.1, blue: shadowStyle.color.2, alpha: shadowStyle.coreAlpha)
         context.addPath(leaf)
         context.fillPath()
         context.restoreGState()

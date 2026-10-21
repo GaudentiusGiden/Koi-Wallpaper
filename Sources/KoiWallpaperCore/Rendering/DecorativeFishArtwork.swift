@@ -15,45 +15,59 @@ public enum DecorativeFishArtwork {
         let finAccent: CGColor
     }
 
-    public static func draw(in context: CGContext, size: CGSize, time: Double) {
+    private struct SchoolFishInstance {
+        let x: CGFloat
+        let y: CGFloat
+        let turn: Double
+        let length: CGFloat
+        let halfWidth: CGFloat
+        let palette: FishPalette
+        let index: Int
+    }
+
+    public static func draw(in context: CGContext, size: CGSize, time: Double, phase: TimeOfDayPhase = .day) {
         let short = min(size.width, size.height)
         let centers = [CGPoint(x: 0.29, y: 0.34), CGPoint(x: 0.75, y: 0.30), CGPoint(x: 0.65, y: 0.73)]
 
         for group in 0..<schoolCount {
             var rng = SeededRandomNumberGenerator(seed: UInt64(700 + group * 443))
-            let phase = time * (0.10 + Double(group) * 0.014) + Double(group) * 2.1
-            let center = CGPoint(x: centers[group].x * size.width + CGFloat(sin(phase)) * short * 0.065,
-                                 y: centers[group].y * size.height + CGFloat(sin(phase * 0.8 + 1)) * short * 0.055)
-            let heading = atan2(cos(phase * 0.8 + 1) * 0.055 * 0.8, cos(phase) * 0.065)
+            let phaseAngle = time * (0.10 + Double(group) * 0.014) + Double(group) * 2.1
+            let center = CGPoint(x: centers[group].x * size.width + CGFloat(sin(phaseAngle)) * short * 0.065,
+                                 y: centers[group].y * size.height + CGFloat(sin(phaseAngle * 0.8 + 1)) * short * 0.055)
+            let heading = atan2(cos(phaseAngle * 0.8 + 1) * 0.055 * 0.8, cos(phaseAngle) * 0.065)
 
+            var instances: [SchoolFishInstance] = []
+            instances.reserveCapacity(fishPerSchool)
             for index in 0..<fishPerSchool {
                 let offsetX = CGFloat(Double.random(in: -0.065...0.065, using: &rng)) * short
                 let offsetY = CGFloat(Double.random(in: -0.045...0.045, using: &rng)) * short
                 let length = CGFloat(Double.random(in: 0.015...0.025, using: &rng)) * short
                 let turn = heading + sin(time * 0.9 + Double(index)) * 0.14
                 let halfWidth = length * 0.18
-                let palette = palette(for: group, index: index)
+                let pal = palette(for: group, index: index)
+                let px = center.x + offsetX + CGFloat(sin(time * 0.7 + Double(index))) * short * 0.004
+                let py = center.y + offsetY + CGFloat(cos(time * 0.6 + Double(index))) * short * 0.003
+                instances.append(SchoolFishInstance(x: px, y: py, turn: turn, length: length, halfWidth: halfWidth, palette: pal, index: index))
+            }
 
+            // 1. Soft aquatic drop shadow grounded on pond bed (all fish shadows under all fish)
+            for fish in instances {
                 context.saveGState()
-                context.translateBy(x: center.x + offsetX + CGFloat(sin(time * 0.7 + Double(index))) * short * 0.004,
-                                    y: center.y + offsetY + CGFloat(cos(time * 0.6 + Double(index))) * short * 0.003)
-                context.rotate(by: CGFloat(turn))
+                context.translateBy(x: fish.x, y: fish.y)
+                context.rotate(by: CGFloat(fish.turn))
+                drawShadow(in: context, length: fish.length, halfWidth: fish.halfWidth, heading: CGFloat(fish.turn), phase: phase)
+                context.restoreGState()
+            }
 
-                // 1. Soft aquatic drop shadow grounded on pond bed
-                drawShadow(in: context, length: length, halfWidth: halfWidth)
-
-                // 2. Articulated pectoral fins with swimming stroke flutter
-                drawPectoralFins(in: context, length: length, halfWidth: halfWidth, palette: palette, time: time, index: index)
-
-                // 3. Graceful caudal fin with swimming flutter and accent rays
-                drawTailFin(in: context, length: length, halfWidth: halfWidth, palette: palette, time: time, index: index)
-
-                // 4. Slender organic torso, depth shading, and distinct motif
-                drawTorso(in: context, length: length, halfWidth: halfWidth, palette: palette, index: index)
-
-                // 5. Expressive eyes with tiny specular catchlight
-                drawEyes(in: context, length: length, halfWidth: halfWidth)
-
+            // 2. Fish anatomy, fins, motifs, and eyes
+            for fish in instances {
+                context.saveGState()
+                context.translateBy(x: fish.x, y: fish.y)
+                context.rotate(by: CGFloat(fish.turn))
+                drawPectoralFins(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, time: time, index: fish.index)
+                drawTailFin(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, time: time, index: fish.index)
+                drawTorso(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, index: fish.index)
+                drawEyes(in: context, length: fish.length, halfWidth: fish.halfWidth)
                 context.restoreGState()
             }
         }
@@ -160,14 +174,18 @@ public enum DecorativeFishArtwork {
 
     // MARK: - Anatomy & Markings
 
-    private static func drawShadow(in context: CGContext, length: CGFloat, halfWidth: CGFloat) {
-        context.setFillColor(red: 0.025, green: 0.17, blue: 0.14, alpha: 0.22)
-        let shadowOffset = CGPoint(x: length * 0.04, y: -length * 0.10)
+    private static func drawShadow(in context: CGContext, length: CGFloat, halfWidth: CGFloat, heading: CGFloat, phase: TimeOfDayPhase = .day) {
+        let style = PondLighting.shadowStyle(for: phase)
+        context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: style.smallFishAlpha)
+        let worldOffset = PondLighting.shadowOffset(distance: length * 0.28)
+        // The fish context is rotated; undo that rotation for the light vector.
+        let shadowOffset = CGPoint(x: cos(heading) * worldOffset.x + sin(heading) * worldOffset.y,
+                                   y: -sin(heading) * worldOffset.x + cos(heading) * worldOffset.y)
         context.fillEllipse(in: CGRect(
             x: -length * 0.42 + shadowOffset.x,
             y: -halfWidth * 0.90 + shadowOffset.y,
-            width: length * 0.92,
-            height: halfWidth * 1.80
+            width: length * 0.94,
+            height: halfWidth * 1.85
         ))
     }
 

@@ -4,21 +4,45 @@ import Foundation
 /// Original, limited-palette koi artwork. Torso stations use the same spine and
 /// widths as collision capsules; fins and tail remain articulated decorations.
 public enum KoiArtwork {
-    public static func draw(_ fish: KoiFish, in context: CGContext, drawShadowOnly: Bool = false) {
+    public static func draw(_ fish: KoiFish, in context: CGContext, drawShadowOnly: Bool = false, phase: TimeOfDayPhase = .day) {
         context.saveGState()
         let length = CGFloat(fish.length)
         let halfWidth = CGFloat(fish.width / 2)
         let s = KoiFish.localSpinePoints(length: fish.length, flex: fish.spineCurvature, wigglePhase: fish.wigglePhase)
         let spine = [s.p0, s.p1, s.p2, s.p3, s.p4, s.p5, s.p6].map { CGPoint(x: $0.x, y: $0.y) }
-        let shadowOffset = drawShadowOnly ? CGPoint(x: length * 0.085, y: -length * 0.105) : .zero
+        let shadowOffset = drawShadowOnly ? PondLighting.shadowOffset(distance: length * 0.28) : .zero
         context.translateBy(x: CGFloat(fish.position.x) + shadowOffset.x, y: CGFloat(fish.position.y) + shadowOffset.y)
         context.rotate(by: CGFloat(fish.heading))
         let body = torso(spine: spine, halfWidth: halfWidth)
         let tail = tail(spine: spine, halfWidth: halfWidth, length: length)
+        let flutter = CGFloat(sin(fish.wigglePhase)) * 0.10
+        let turnFinBias = CGFloat(fish.spineCurvature) * 0.10
         if drawShadowOnly {
-            context.setFillColor(red: 0.025, green: 0.17, blue: 0.14, alpha: 0.25)
+            let style = PondLighting.shadowStyle(for: phase)
+            // 1. Slightly expanded stepped penumbra (soft edge into pond bed)
+            let penumbraWidth = halfWidth * 1.14
+            let penumbraLength = length * 1.05
+            let penumbraBody = Self.torso(spine: spine, halfWidth: penumbraWidth)
+            let penumbraTail = Self.tail(spine: spine, halfWidth: penumbraWidth, length: penumbraLength)
+            context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: style.penumbraAlpha)
+            context.addPath(penumbraBody)
+            context.addPath(penumbraTail)
+            for side: CGFloat in [-1, 1] {
+                context.addPath(pectoralFin(at: spine[2], length: penumbraLength, halfWidth: penumbraWidth,
+                                            side: side, flutter: flutter, turnBias: turnFinBias))
+            }
+            context.fillPath()
+
+            // 2. Core umbra silhouette
+            context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: style.coreAlpha)
             context.addPath(body)
             context.addPath(tail)
+            // A single filled silhouette keeps translucent fins from producing
+            // darker overlap patches in the projected shadow.
+            for side: CGFloat in [-1, 1] {
+                context.addPath(pectoralFin(at: spine[2], length: length, halfWidth: halfWidth,
+                                            side: side, flutter: flutter, turnBias: turnFinBias))
+            }
             context.fillPath()
             context.restoreGState()
             return
@@ -38,19 +62,9 @@ public enum KoiArtwork {
 
         // Broad translucent fins with gentle swim stroke flutter and turn steering flare.
         context.setFillColor(base.copy(alpha: 0.66)!)
-        let flutter = CGFloat(sin(fish.wigglePhase)) * 0.10
-        let turnFinBias = CGFloat(fish.spineCurvature) * 0.10
         for side: CGFloat in [-1, 1] {
-            let p = spine[2]
-            let fin = CGMutablePath()
-            let finSpan = side * (flutter + turnFinBias * side)
-            fin.move(to: CGPoint(x: p.x + length * 0.04, y: p.y + side * halfWidth * 0.45))
-            fin.addQuadCurve(to: CGPoint(x: p.x - length * 0.20, y: p.y + side * halfWidth * (1.55 + finSpan)),
-                             control: CGPoint(x: p.x - length * 0.06, y: p.y + side * halfWidth * 1.8))
-            fin.addQuadCurve(to: CGPoint(x: p.x - length * 0.23, y: p.y + side * halfWidth * 0.45),
-                             control: CGPoint(x: p.x - length * 0.25, y: p.y + side * halfWidth * 0.9))
-            fin.closeSubpath()
-            context.addPath(fin)
+            context.addPath(pectoralFin(at: spine[2], length: length, halfWidth: halfWidth,
+                                        side: side, flutter: flutter, turnBias: turnFinBias))
             context.fillPath()
         }
         context.addPath(tail)
@@ -146,6 +160,30 @@ public enum KoiArtwork {
                                 width: eyeSize, height: eyeSize))
         }
         context.restoreGState()
+    }
+
+    private static func pectoralFin(at point: CGPoint, length: CGFloat, halfWidth: CGFloat,
+                                    side: CGFloat, flutter: CGFloat, turnBias: CGFloat) -> CGPath {
+        let span = side * (flutter + turnBias * side)
+        let leading = CGPoint(x: point.x + length * 0.04, y: point.y + side * halfWidth * 0.45)
+        let tip = CGPoint(x: point.x - length * 0.20, y: point.y + side * halfWidth * (1.55 + span))
+        let trailing = CGPoint(x: point.x - length * 0.23, y: point.y + side * halfWidth * 0.45)
+        let forwardControl = CGPoint(x: point.x - length * 0.06, y: point.y + side * halfWidth * 1.8)
+        let backControl = CGPoint(x: point.x - length * 0.25, y: point.y + side * halfWidth * 0.9)
+        let path = CGMutablePath()
+        // Both sides use the torso's winding so their overlapping shadows add
+        // to the silhouette instead of cutting a hole in it.
+        path.move(to: leading)
+        if side > 0 {
+            path.addQuadCurve(to: tip, control: forwardControl)
+            path.addQuadCurve(to: trailing, control: backControl)
+        } else {
+            path.addLine(to: trailing)
+            path.addQuadCurve(to: tip, control: backControl)
+            path.addQuadCurve(to: leading, control: forwardControl)
+        }
+        path.closeSubpath()
+        return path
     }
 
     private static func torso(spine: [CGPoint], halfWidth: CGFloat) -> CGPath {

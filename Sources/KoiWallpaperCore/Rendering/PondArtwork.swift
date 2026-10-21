@@ -8,69 +8,134 @@ public enum PondArtwork {
     // MARK: - Water Background & Caustics
 
     public static func drawWater(in context: CGContext, rect: CGRect, phase: TimeOfDayPhase = .day) {
+        guard rect.width > 0, rect.height > 0 else { return }
         context.saveGState()
         context.translateBy(x: rect.minX, y: rect.minY)
         let w = rect.width, h = rect.height
-        let colors: [CGColor]
+        let space = CGColorSpaceCreateDeviceRGB()
+
+        // A mint-lit opening falls into jade water, rather than a uniformly lit
+        // green canvas. Deep jade/teal edges and sheltered olive-green corners
+        // create natural perimeter depth while preserving an illuminated center.
+        let depthColors: [CGColor]
+        let lightColor: (CGFloat, CGFloat, CGFloat)
+        let deepTealColor: (CGFloat, CGFloat, CGFloat)
+        let oliveColor: (CGFloat, CGFloat, CGFloat)
+        let gain: CGFloat
         switch phase {
         case .day:
-            colors = [CGColor(red: 0.42, green: 0.72, blue: 0.57, alpha: 1), CGColor(red: 0.18, green: 0.43, blue: 0.32, alpha: 1), CGColor(red: 0.08, green: 0.26, blue: 0.21, alpha: 1)]
+            depthColors = [
+                CGColor(red: 0.52, green: 0.95, blue: 0.77, alpha: 1),
+                CGColor(red: 0.35, green: 0.67, blue: 0.53, alpha: 1),
+                CGColor(red: 0.22, green: 0.52, blue: 0.40, alpha: 1),
+                CGColor(red: 0.12, green: 0.38, blue: 0.28, alpha: 1),
+                CGColor(red: 0.06, green: 0.22, blue: 0.16, alpha: 1)
+            ]
+            lightColor = (0.46, 1.00, 0.78)
+            deepTealColor = (0.030, 0.16, 0.13)
+            oliveColor = (0.050, 0.16, 0.09)
+            gain = 1.0
         case .dawn:
-            colors = [CGColor(red: 0.47, green: 0.61, blue: 0.44, alpha: 1), CGColor(red: 0.20, green: 0.36, blue: 0.29, alpha: 1), CGColor(red: 0.06, green: 0.21, blue: 0.19, alpha: 1)]
+            depthColors = [
+                CGColor(red: 0.56, green: 0.74, blue: 0.48, alpha: 1),
+                CGColor(red: 0.38, green: 0.56, blue: 0.38, alpha: 1),
+                CGColor(red: 0.24, green: 0.44, blue: 0.30, alpha: 1),
+                CGColor(red: 0.14, green: 0.30, blue: 0.21, alpha: 1),
+                CGColor(red: 0.06, green: 0.18, blue: 0.12, alpha: 1)
+            ]
+            lightColor = (0.92, 0.88, 0.65)
+            deepTealColor = (0.030, 0.15, 0.12)
+            oliveColor = (0.060, 0.16, 0.08)
+            gain = 0.68
         case .dusk:
-            colors = [CGColor(red: 0.28, green: 0.29, blue: 0.35, alpha: 1), CGColor(red: 0.13, green: 0.16, blue: 0.23, alpha: 1), CGColor(red: 0.06, green: 0.09, blue: 0.16, alpha: 1)]
+            depthColors = [
+                CGColor(red: 0.42, green: 0.38, blue: 0.50, alpha: 1),
+                CGColor(red: 0.26, green: 0.26, blue: 0.36, alpha: 1),
+                CGColor(red: 0.16, green: 0.17, blue: 0.26, alpha: 1),
+                CGColor(red: 0.09, green: 0.10, blue: 0.17, alpha: 1),
+                CGColor(red: 0.035, green: 0.050, blue: 0.10, alpha: 1)
+            ]
+            lightColor = (0.86, 0.65, 0.55)
+            deepTealColor = (0.025, 0.060, 0.13)
+            oliveColor = (0.045, 0.075, 0.10)
+            gain = 0.32
         case .night:
-            colors = [CGColor(red: 0.07, green: 0.15, blue: 0.23, alpha: 1), CGColor(red: 0.025, green: 0.07, blue: 0.13, alpha: 1), CGColor(red: 0.01, green: 0.03, blue: 0.07, alpha: 1)]
+            depthColors = [
+                CGColor(red: 0.14, green: 0.26, blue: 0.40, alpha: 1),
+                CGColor(red: 0.08, green: 0.16, blue: 0.28, alpha: 1),
+                CGColor(red: 0.045, green: 0.10, blue: 0.19, alpha: 1),
+                CGColor(red: 0.020, green: 0.055, blue: 0.11, alpha: 1),
+                CGColor(red: 0.008, green: 0.025, blue: 0.060, alpha: 1)
+            ]
+            lightColor = (0.45, 0.70, 0.90)
+            deepTealColor = (0.006, 0.028, 0.07)
+            oliveColor = (0.010, 0.030, 0.05)
+            gain = 0.18
         }
-        let space = CGColorSpaceCreateDeviceRGB()
-        context.setFillColor(colors[2])
+
+        context.setFillColor(depthColors.last!)
         context.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        if let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: [0, 0.50, 1]) {
-            context.drawRadialGradient(gradient, startCenter: CGPoint(x: w * 0.36, y: h * 0.96), startRadius: 0,
-                                       endCenter: CGPoint(x: w * 0.53, y: h * 0.42), endRadius: max(w, h) * 0.87,
-                                       options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        if let gradient = CGGradient(colorsSpace: space, colors: depthColors as CFArray,
+                                     locations: [0, 0.15, 0.34, 0.58, 0.88]) {
+            context.drawRadialGradient(gradient,
+                startCenter: CGPoint(x: w * 0.50, y: h * 0.96), startRadius: 0,
+                endCenter: CGPoint(x: w * 0.52, y: h * 0.50), endRadius: max(w, h) * 0.76,
+                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
         }
-        // Overlapping, oblique pools of light give the water spatial depth.
-        let gain: CGFloat = phase == .day ? 1 : (phase == .dawn ? 0.60 : 0.16)
-        func light(_ x: CGFloat, _ y: CGFloat, _ rx: CGFloat, _ ry: CGFloat, _ angle: CGFloat, _ alpha: CGFloat) {
+
+        func wash(_ x: CGFloat, _ y: CGFloat, _ rx: CGFloat, _ ry: CGFloat,
+                  _ angle: CGFloat, color: (CGFloat, CGFloat, CGFloat), alpha: CGFloat) {
             context.saveGState()
             context.translateBy(x: x * w, y: y * h)
             context.rotate(by: angle)
             context.scaleBy(x: rx * w, y: ry * h)
-            if let glow = CGGradient(colorsSpace: space, colors: [
-                CGColor(red: 0.69, green: 1, blue: 0.83, alpha: alpha * gain),
-                CGColor(red: 0.46, green: 0.91, blue: 0.69, alpha: alpha * 0.26 * gain),
-                CGColor(red: 0.46, green: 0.91, blue: 0.69, alpha: 0)
-            ] as CFArray, locations: [0, 0.48, 1]) {
-                context.drawRadialGradient(glow, startCenter: .zero, startRadius: 0,
+            let colors = [0.95, 0.57, 0.15, 0.0].map {
+                CGColor(red: color.0, green: color.1, blue: color.2, alpha: alpha * $0)
+            }
+            if let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: [0, 0.30, 0.65, 1]) {
+                context.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0,
                                            endCenter: .zero, endRadius: 1, options: [])
             }
             context.restoreGState()
         }
-        light(0.17, 0.40, 0.13, 0.74, -0.43, 0.78)
-        light(0.43, 0.94, 0.34, 0.22, -0.18, 0.82)
-        light(0.73, 0.78, 0.10, 0.55, -0.52, 0.30)
-        light(0.96, 0.18, 0.19, 0.37, -0.48, 0.16)
-        // A chain of feathered pools follows a curved light shaft. Its center
-        // is also soft; a translucent stroked path would leave a hard ribbon edge.
-        for index in 0..<24 {
-            let t = CGFloat(index) / 23
-            let u = 1 - t
-            let x = u * u * u * (-0.10) + 3 * u * u * t * 0.10 + 3 * u * t * t * 0.25 + t * t * t * 0.48
-            let y = u * u * u * (-0.10) + 3 * u * u * t * 0.40 + 3 * u * t * t * 0.58 + t * t * t * 1.12
-            light(x, y, 0.045, 0.11, -0.43, 0.16)
-        }
 
-        // Original, seeded flecks sit below the smooth water surface. They are
-        // generated only on cache rebuild and do not animate like screen noise.
+        // Wide overhead opening and an oblique shaft filtering past the left
+        // shoreline. Confined to upper opening so middle-to-bottom pool stays deep.
+        wash(0.50, 0.95, 0.44, 0.20, -0.08, color: lightColor, alpha: 0.85 * gain)
+        wash(0.76, 0.93, 0.30, 0.18, -0.22, color: lightColor, alpha: 0.70 * gain)
+
+        wash(0.14, 0.55, 0.22, 0.38, -0.52, color: lightColor, alpha: 0.75 * gain)
+        wash(0.28, 0.76, 0.16, 0.22, -0.60, color: lightColor, alpha: 0.24 * gain)
+
+        // 1. Deep aquatic jade/teal washes: sunken basin floor and shoreline edges.
+        wash(0.52, 0.18, 0.54, 0.28, -0.05, color: deepTealColor, alpha: 0.36)
+        wash(0.50, -0.05, 0.60, 0.22, 0, color: deepTealColor, alpha: 0.45)
+        wash(1.08, 0.45, 0.16, 0.46, 0.10, color: deepTealColor, alpha: 0.35)
+        wash(-0.04, 0.04, 0.22, 0.22, -0.15, color: deepTealColor, alpha: 0.35)
+
+        // 2. Sheltered corner nuances with subtle olive-green warmth:
+        // Placed in sheltered recesses beneath vegetation clusters.
+        wash(0.08, 0.03, 0.24, 0.24, 0.15, color: oliveColor, alpha: 0.45)
+        wash(0.92, 0.03, 0.26, 0.26, -0.20, color: oliveColor, alpha: 0.45)
+        wash(-0.02, 0.90, 0.22, 0.24, -0.20, color: oliveColor, alpha: 0.38)
+        wash(0.98, 0.92, 0.24, 0.24, 0.20, color: oliveColor, alpha: 0.36)
+        wash(0.50, 1.08, 0.44, 0.16, 0.05, color: oliveColor, alpha: 0.28)
+
+        // Seeded sediment is part of the cached bed, never random screen noise.
         var random = SeededRandomNumberGenerator(seed: 405)
         let unit = min(w, h) / 270
-        for index in 0..<3000 {
+        for _ in 0..<2800 {
             let x = CGFloat(Double.random(in: 0...1, using: &random)) * w
             let y = CGFloat(Double.random(in: 0...1, using: &random)) * h
-            let size = CGFloat(Double.random(in: 0.4...1.4, using: &random)) * unit
-            if index % 3 == 0 { context.setFillColor(red: 0.61, green: 0.85, blue: 0.60, alpha: 0.065 * gain) }
-            else { context.setFillColor(red: 0.04, green: 0.25, blue: 0.18, alpha: 0.065 * gain) }
+            let size = CGFloat(Double.random(in: 0.35...0.95, using: &random)) * unit
+            let exposure = PondLighting.causticExposure(at: CGPoint(x: x / w, y: y / h))
+            let isMineral = Double.random(in: 0...1, using: &random) < Double(exposure * 0.24)
+            if isMineral {
+                context.setFillColor(red: lightColor.0, green: lightColor.1, blue: lightColor.2, alpha: 0.075 * gain)
+            } else {
+                context.setFillColor(red: deepTealColor.0, green: deepTealColor.1, blue: deepTealColor.2,
+                                     alpha: 0.070 + exposure * 0.035)
+            }
             context.fill(CGRect(x: x, y: y, width: size, height: size))
         }
         context.restoreGState()

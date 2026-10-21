@@ -2,6 +2,8 @@
 
 Tanggal: 21 Oktober 2026 (Asia/Jakarta).
 
+Revisi pencahayaan berikutnya tersedia pada [review cahaya dan bayangan](../reports/water-shadow-review.html), dengan [catatan perubahan dan verifikasi](decisions/2026-10-21-background-visual-enhancement.md). Revisi tersebut menyesuaikan naungan kanopi, sorotan air, eksposur caustics, serta arah bayangan koi, teratai, dan ikan kecil. Screenshot serta angka dalam dokumen fondasi di bawah tetap merupakan rekaman revisi fondasi sebelumnya.
+
 Revisi ini melanjutkan implementasi M3.5 sebelumnya, dengan proporsi dan komposisi yang dinilai terhadap screenshot acuan. Pengguna menyetujui penyesuaian ukuran fisik koi bersama artwork serta penambahan ikan kecil dekoratif. Implementasi perangkat lunak M3 sudah selesai pada `f88406c`; validasi fisik monitor eksternal kedua dan pengukuran energi Watt tetap tertunda.
 
 [Perbandingan visual interaktif](../reports/visual-review.html) menampilkan screenshot REA, hasil revisi pada viewport yang sama, versi sebelumnya, serta screenshot native preview dan desktop. Referensi utama adalah [fullscreen REA](../analysis/rea/nagomi/screenshots/fullscreen-visible.png), dengan [feed-response](../analysis/rea/nagomi/screenshots/feed-response.png) untuk detail koi. Screenshot referensi hanya dipakai dalam laporan review; aplikasi menghasilkan artwork sendiri melalui CoreGraphics.

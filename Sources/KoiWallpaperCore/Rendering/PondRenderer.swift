@@ -46,6 +46,7 @@ public final class PondRenderer {
     private var cachedFlora: [PondImagePlacement] = []
     private var floraSize: CGSize = .zero
     private var floraPixelSize: CGFloat = 0
+    private var floraPhase: TimeOfDayPhase = .day
 
     public init() {}
 
@@ -92,9 +93,9 @@ public final class PondRenderer {
             bitmap.saveGState()
             bitmap.scaleBy(x: 1 / pixelSize, y: 1 / pixelSize)
             bitmap.setShouldAntialias(false)
-            DecorativeFishArtwork.draw(in: bitmap, size: size, time: simulation.elapsedTime)
-            for fish in simulation.fish { KoiArtwork.draw(fish, in: bitmap, drawShadowOnly: true) }
-            for fish in simulation.fish { KoiArtwork.draw(fish, in: bitmap) }
+            DecorativeFishArtwork.draw(in: bitmap, size: size, time: simulation.elapsedTime, phase: phase)
+            for fish in simulation.fish { KoiArtwork.draw(fish, in: bitmap, drawShadowOnly: true, phase: phase) }
+            for fish in simulation.fish { KoiArtwork.draw(fish, in: bitmap, phase: phase) }
             PondArtwork.drawPellets(simulation.pellets, in: bitmap)
             bitmap.restoreGState()
             if let image = bitmap.makeImage() {
@@ -102,9 +103,10 @@ public final class PondRenderer {
                     rect: CGRect(x: 0, y: 0, width: pixels.width * pixelSize, height: pixels.height * pixelSize), pixelated: true)
             }
         }
-        if floraSize != size || floraPixelSize != pixelSize {
+        if floraSize != size || floraPixelSize != pixelSize || floraPhase != phase {
             floraSize = size
             floraPixelSize = pixelSize
+            floraPhase = phase
             let local = PondFloraArtwork.localBounds(shortSide: short)
             // Round crop extents to the same grid as the swimmers.
             let crop = CGRect(x: floor(local.minX / pixelSize) * pixelSize, y: floor(local.minY / pixelSize) * pixelSize,
@@ -112,7 +114,7 @@ public final class PondRenderer {
             cachedFlora = PondFloraArtwork.anchors.enumerated().compactMap { index, anchor in
                 guard let image = PondBitmap.makeImage(size: crop.size, scale: 1 / pixelSize, pixelated: true, draw: { bitmap in
                     bitmap.translateBy(x: -crop.minX, y: -crop.minY)
-                    PondFloraArtwork.drawCluster(index, in: bitmap, shortSide: short)
+                    PondFloraArtwork.drawCluster(index, in: bitmap, shortSide: short, phase: phase)
                 }) else { return nil }
                 let x = (anchor.x * size.width / pixelSize).rounded() * pixelSize
                 let y = (anchor.y * size.height / pixelSize).rounded() * pixelSize
