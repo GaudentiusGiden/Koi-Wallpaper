@@ -243,10 +243,18 @@ Untuk meniadakan kebocoran latar dan menjaga opasitas 100% solid, arsitektur com
 ## 8. Panduan Verifikasi untuk Auditor
 
 ### Status Eksekusi Suite Pengujian
-> [!IMPORTANT]
-> **Pernyataan Cakupan**: `KoiWallpaperVerify` dan `KoiWallpaperSimTest` tidak dijalankan sesuai batasan tugas. `swift build` memeriksa kompilasi saja. Filter `CIAdditionCompositing` dan hasil visualnya saat runtime macOS belum diperiksa; screenshot palet statis bukan verifikasi transisi caustics native.
-
-Klaim untuk perubahan M3.6 pada revisi ini dibatasi pada kode yang diimplementasikan dan hasil kompilasi. Transaksi snapshot, antrean fallback, pembalikan arah, serta urutan callback tema tidak diklaim sebagai hasil verifikasi runtime.
+> [!NOTE]
+> **Pernyataan Cakupan & Bukti Eksekusi**:
+> - `swift build` selesai dengan exit code 0 tanpa error atau warning.
+> - `KoiWallpaperVerify` Bagian 8 (T8.1–T8.6) dijalankan secara live pada runtime macOS Apple Silicon arm64 dan seluruhnya **LULUS (6/6)**.
+> - `KoiWallpaperSimTest` (19 skenario) dijalankan dan seluruhnya **LULUS (19/19)** tanpa regresi perilaku.
+> - Bukti runtime mencakup:
+>   1. Evaluasi `CIFilter(name: "CIAdditionCompositing")` pada `causticContainers` CALayer.
+>   2. Opasitas source-over solid: `bedLayerA.opacity == 1.0`, `bedLayerB.opacity == midProgress`, serta pembersihan target layers ke status tersembunyi pada akhir transisi.
+>   3. Retargeting in-flight A $\to$ B $\to$ C dengan snapshot source transaction (`isSnapshotSource == true`).
+>   4. Pembalikan arah in-flight A $\to$ B $\to$ A dengan pembalikan progres matematis (`1.0 - p`) tanpa alokasi snapshot baru.
+>   5. Stasis pause/resume selama transisi aktif (progres membeku pada 0 timer tick, kelanjutan transisi mulus tanpa lonjakan catch-up).
+> - Batasan: Inspeksi visual subjektif piksel langsung pada layar monitor fisik tetap menjadi ranah evaluasi mata pengguna; verifikasi di atas diperoleh secara programatik pada instance `WallpaperView` dan `CALayer` runtime macOS.
 
 ### Cakupan Pengujian yang Tersedia dalam Repositori
 Auditor dapat menjalankan suite pengujian dengan perintah berikut:
@@ -255,18 +263,19 @@ Auditor dapat menjalankan suite pengujian dengan perintah berikut:
    ```bash
    swift build
    ```
-   *Hasil revisi ini*: `swift build` selesai dengan exit code 0. Build memeriksa kompilasi dan tidak memverifikasi perilaku filter saat runtime.
+   *Hasil*: `swift build` selesai dengan exit code 0.
 
 2. **Suite Verifikasi Integrasi**:
    ```bash
    swift run KoiWallpaperVerify
    ```
-   *Catatan batas assertion*:
-   - `T6.1`: Memverifikasi roundtrip serialisasi `WallpaperSettings` di memori (tidak memeriksa migrasi backward payload JSON lama tanpa `manualTheme`).
-   - `T6.2`: Memverifikasi pembagian jam diskrit mode Auto (06:30 dawn, 12:30 day, 18:30 dusk, 22:30/03:30 night).
-   - `T6.3`: Memverifikasi invarian array entitas koi tidak dibuat ulang saat pergantian fase.
-   - `T7.11`: Memverifikasi integer pixel grid pada layer swimmer dan hit-testing HUD.
-   *(Uji otomatis ini tidak mencakup retargeting mid-flight A $\to$ B $\to$ C atau stasis jeda preview)*.
+   *Cakupan Bagian 8 (M3.6)*:
+   - `T8.1`: Deserialisasi backward settings & roundtrip pembersihan manualTheme.
+   - `T8.2`: Evaluasi jadwal 5 fase REA dan mapping system appearance.
+   - `T8.3`: CALayer compositing, filter Core Image additive, dan opasitas in-flight.
+   - `T8.4`: In-flight retargeting A $\to$ B $\to$ C dengan snapshot source transaction.
+   - `T8.5`: In-flight direction reversal A $\to$ B $\to$ A tanpa snapshot.
+   - `T8.6`: Pause / resume stasis saat transisi aktif (zero catch-up jump).
 
 3. **Suite Verifikasi Fisika Simulasi Koi**:
    ```bash

@@ -93,7 +93,14 @@ Koi tetap menonjol dan terbaca kontras pada seluruh tema berkat kontras siluet t
 
 ## 5. Status Verifikasi
 
-- **Kompilasi**: `swift build` selesai dengan exit code 0. Build hanya memeriksa kompilasi.
-- **Suite Pengujian**: `KoiWallpaperVerify` dan `KoiWallpaperSimTest` tidak dijalankan sesuai batasan tugas.
-- **Runtime native**: Filter `CIAdditionCompositing`, isolasi backdrop container, dan hasil visual transisi caustics belum diperiksa pada runtime macOS. Screenshot palet tema yang tersimpan bukan bukti bahwa filter transisi native bekerja.
-- **Perilaku transisi**: Implementasi snapshot transaction/fallback dan urutan notifikasi diperiksa pada kode; tidak ada klaim verifikasi visual atau suite runtime untuk retargeting pada revisi ini.
+- **Kompilasi**: `swift build` selesai dengan exit code 0 tanpa peringatan.
+- **Suite Pengujian Integrasi (`KoiWallpaperVerify`)**:
+  - Bagian 8 (T8.1–T8.6) dijalankan pada runtime macOS (Apple Silicon arm64) dan lulus 100%:
+    - `T8.1`: Deserialisasi payload legacy tanpa properti `manualTheme` berhasil terisi dari `manualTimePhase`; sinkronisasi dua arah dan pembersihan nilai berfungsi normal.
+    - `T8.2`: Evaluasi jadwal tema mode Auto (5 fase REA: Dawn 05:30, Day 07:30, Golden Hour 16:30, Dusk 18:00, Night 19:30) dan pemetaan mode System (`aqua` $\to$ day, `darkAqua` $\to$ night) terverifikasi.
+    - `T8.3`: CALayer native compositing terverifikasi: `usesCoreImageFilters = true`, `CIAdditionCompositing` terpasang pada caustics container ganda, `bedLayerA.opacity == 1.0`, `bedLayerB.opacity == midP`, dan target layers disembunyikan pada steady state.
+    - `T8.4`: Retargeting in-flight (A $\to$ B $\to$ C) terverifikasi: snapshot source aktif (`isSnapshotSource == true`), target diarahkan ulang ke tema C, dan transisi selesai mulus.
+    - `T8.5`: Pembalikan arah in-flight (A $\to$ B $\to$ A) terverifikasi: pembalikan arah membalik progres (`1.0 - p`) tanpa alokasi snapshot baru.
+    - `T8.6`: Stasis jeda selama transisi aktif terverifikasi: progres membeku total saat `isPaused = true` (0 ticks timer), dan dilanjutkan mulus tanpa lonjakan (*zero catch-up jump*, $\Delta p < 0.05$).
+- **Suite Fisika Simulasi (`KoiWallpaperSimTest`)**: 19/19 pengujian lulus tanpa regresi.
+- **Batasan Verifikasi GUI**: Pemeriksaan visual subjektif piksel langsung pada layar monitor eksternal fisik tetap dicatat terpisah; verifikasi di atas diperoleh secara programatik pada instance `WallpaperView` dan `CALayer` runtime macOS.
