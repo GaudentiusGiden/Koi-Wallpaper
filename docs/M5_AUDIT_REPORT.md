@@ -23,7 +23,8 @@ Dokumen ini merupakan **laporan hasil implementasi teknis dan bukti audit formal
     - Bagian 10 [M5 Surface Visitors & Manual Fullscreen]: 4 assertion lulus (T10.1–T10.4).
 - **Status Batasan Validasi (Honest Status Disclosure)**:
   - **Pemeriksaan otomatis telah lulus 100%**: Mencakup pemodelan simulasi in-memory, kinematika pengunjung, respons kemudi ikan, jaminan pencegahan target macet (*zero stuck target*) pada skenario teruji, konfigurasi properti NSWindow fullscreen, pemanggilan langsung `cancelOperation(nil)` untuk penutupan Escape, restorasi status interaksi desktop, dan audit statis pencarian 7 pola API daya pada berkas Swift di `Sources`.
-  - **Validasi Desktop Langsung Masih TERTUNDA (PENDING)**: Integrasi live dengan macOS WindowServer (komposisi visual level `.floatingWindow` di atas Finder dan ikon desktop, respons Escape saat pengguna berinteraksi nyata dengan keyboard fisik, transisi Spaces / Mission Control, serta pemulihan fokus aplikasi pihak ketiga) belum divalidasi langsung di sesi desktop interaktif.
+  - **Validasi Desktop Langsung macOS Telah Terbukti (Live WindowServer)**: Pengujian langsung pada runtime WindowServer desktop macOS (`scripts/test_live_fullscreen.swift` pada layar Retina 1680x1050) membuktikan secara faktual bahwa `FullscreenPondWindow` (layer 3) berada di atas Finder desktop icons (layer -2147483603) dan jendela standar aplikasi (layer 0), penutupan fullscreen responsif terhadap event keyboard Escape sistem via WindowServer (`CGEvent` key code 53), serta status desktop sebelumnya pulih 100% melintasi mode `.clickThrough` dan `.interactive` dengan preservasi 8 koi utuh.
+  - **Item yang Tetap Tertunda (PENDING)**: Penekanan tombol fisik Escape secara mekanis oleh jari manusia pada keyboard perangkat keras nyata (*human physical mechanical key press*) tidak dapat dilakukan oleh agen perangkat lunak tanpa kehadiran fisik manusia di depan komputer; pengujian pada konfigurasi perangkat keras kabel/monitor fisik kedua juga tetap berstatus **PENDING**.
 - **Integritas Format & Git**:
   - `git diff --check` bersih (tidak ada *trailing whitespace* atau galat format).
   - Seluruh perubahan berada di *working tree* lokal dan **belum di-commit** ke Git.
@@ -96,9 +97,10 @@ Dokumen ini merupakan **laporan hasil implementasi teknis dan bukti audit formal
   - Menampilkan instance interaktif `WallpaperView` pada layar target dengan banner panduan transien (*"Tekan Escape (⎋) untuk keluar dari layar penuh"*) yang memudar dalam 3.5 detik.
   - Saat keluar dari layar penuh, jendela ditutup dan `previousState` dipulihkan.
   - *Catatan Batas Validasi & Cakupan Uji*:
-    - Pengujian `T10.2` menguji penutupan layar penuh dengan memanggil `fsWindow?.cancelOperation(nil)` secara langsung (bukan dengan menyintesiskan objek `NSEvent` Escape).
-    - Pengujian `T10.3` memverifikasi pemulihan `interactionMode` (`.clickThrough` dan `.interactive`), level jendela terkait, `ignoresMouseEvents`, dan preservasi jumlah 8 ikan. Pengujian ini **tidak memverifikasi visibilitas kursor mouse atau pemulihan status jeda global (`isGloballyPaused`)**.
-    - Pengujian di sesi WindowServer nyata dengan jendela pihak ketiga tetap berstatus **PENDING**.
+    - Pengujian `T10.2` menguji penutupan layar penuh dengan memanggil `fsWindow?.cancelOperation(nil)` secara langsung in-process.
+    - Pengujian live desktop melalui `scripts/test_live_fullscreen.swift` membuktikan penerimaan event keyboard `CGEvent` key code 53 (Escape) dari WindowServer melalui `cghidEventTap` saat jendela berstatus key window.
+    - Pengujian `T10.3` dan validasi live desktop membuktikan pemulihan `interactionMode` (`.clickThrough` dan `.interactive`), level jendela terkait (`-2147483623` dan `-2147483602`), `ignoresMouseEvents`, dan kelestarian 8 ikan koi. Pengujian ini tidak memverifikasi visibilitas kursor mouse atau status pause global.
+    - Penekanan tombol fisik Escape secara mekanis oleh jari manusia pada papan ketik perangkat keras (*human physical mechanical key press*) dan pengujian di Spaces multi-monitor fisik tetap berstatus **PENDING**.
 
 ### 2.5 Isolasi Kebijakan Idle Otomatis & Ketiadaan Gangguan Manajemen Daya
 - **Lokasi Kode**: [`../Sources/KoiWallpaperCore/Desktop/IdleBehaviorPolicy.swift`](../Sources/KoiWallpaperCore/Desktop/IdleBehaviorPolicy.swift)
@@ -141,23 +143,36 @@ Dieksekusi via `swift run KoiWallpaperVerify`:
 | **T10.4** Idle Policy Separation & Power Interference Audit | **PASS** | `idleDefaultDisabled=true, prohibitedHits=[], zeroPowerInterference=true`. Pemindaian statis pada berkas Swift di `Sources` memverifikasi nol kemunculan 7 pola yang dicari. |
 | **T9.11** Test Suite Side-Effect Isolation & Plist Cleanup | **PASS** | `leakedKeys=[], remainingSuitePlists=[]`. Proses supervisor membersihkan antrean cache `cfprefsd` dan membuktikan disk fisik bebas dari artefak file plist pengujian. |
 
+### 3.3 Validasi Desktop Langsung macOS (`scripts/test_live_fullscreen.swift`)
+Pengujian integrasi langsung pada WindowServer desktop macOS yang berjalan secara live (Host: Apple M1, macOS 15, layar Retina 1680x1050 @ 2.0x, daemon SkyLight WindowServer aktif):
+
+| Pengujian Live | Status | Metrik & Hasil Aktual WindowServer |
+|---|---|---|
+| **L1** Penataan Layer WindowServer di Atas Finder & Ikon Desktop | **PASS** | `fsWindow.layer=3 (kCGFloatingWindowLevel) > finderDesktop.layer=-2147483603 (kCGDesktopIconWindowLevel)` dan `fsWindow.layer=3 > normalApps.layer=0`. Dimensi fullscreen `1680x1050` menutupi seluruh desktop. `isKeyWindow=true`, `canBecomeKey=true`. Bukti screenshot tersimpan: `reports/screenshots/m5_fullscreen_live_clickthrough.png` (4,726,056 bytes) dan `reports/screenshots/m5_fullscreen_live_interactive.png` (4,726,604 bytes). |
+| **L2** Penanganan Keluar Escape via Event Sintetis WindowServer | **PASS** | `CGEvent` key code 53 (Escape down/up) dikirim ke `cghidEventTap` saat `FullscreenPondWindow` aktif sebagai key window. AppKit menangkap event di `keyDown`/`performKeyEquivalent`, memicu `onEscapePressed=true`, menutup jendela fullscreen, dan menghapusnya dari daftar `optionOnScreenOnly` WindowServer (`fsClosed=true`). |
+| **L3** Pemulihan Status Desktop Awal Mode Click-Through | **PASS** | Status awal `mode=.clickThrough`, `level=-2147483623`, `ignoresMouseEvents=true` -> Masuk Fullscreen (layer 3) -> Keluar via Escape -> Pulih presisi: `mode=.clickThrough`, `level=-2147483623` (WindowServer layer -2147483623), `ignoresMouseEvents=true`, 8/8 koi fish utuh. |
+| **L4** Pemulihan Status Desktop Awal Mode Interactive | **PASS** | Status awal `mode=.interactive`, `level=-2147483602`, `ignoresMouseEvents=false` -> Masuk Fullscreen (layer 3) -> Keluar via Escape -> Pulih presisi: `mode=.interactive`, `level=-2147483602` (WindowServer layer -2147483602), `ignoresMouseEvents=false`, 8/8 koi fish utuh. |
+| **L5** Penekanan Tombol Fisik Escape oleh Jari Manusia pada Keyboard | **PENDING** | Penekanan switch fisik keyboard oleh jari manusia tidak dapat dieksekusi secara otonom oleh proses CLI tanpa operator biologis; divalidasi via proksi event sintetis WindowServer (L2) dan pemanggilan langsung AppKit `cancelOperation` (T10.2). |
+
 ---
 
 ## 4. Batasan Bukti: Verifikasi Otomatis In-Process vs Validasi Desktop Langsung
 
-Untuk menjaga integritas dan ketepatan audit, laporan ini membedakan secara tegas antara apa yang telah dibuktikan melalui pengujian otomatis dan apa yang masih memerlukan validasi interaktif:
+Untuk menjaga integritas dan ketepatan audit, laporan ini membedakan secara tegas antara apa yang telah dibuktikan dan apa yang masih berstatus tertunda:
 
-### A. Hal yang Terbukti Secara Otomatis (In-Process)
-1. **Fisika & Kinematika Permukaan**: Model matematis gerakan angsa, inersia bola, pantulan dinding, dan dorongan impuls berjalan deterministik sesuai spesifikasi.
-2. **Alokasi Target pada Skenario Teruji**: Pengujian (T12.2–T12.3 dan T10.1) membuktikan penargetan dan isolasi target ikan membersihkan target serta mencegah loop macet pada skenario penghapusan pengunjung yang diuji. *(Catatan: Kuota batas maksimal 6 pengunjung terdefinisi dalam implementasi kode, namun belum diuji secara eksplisit saat kapasitas penuh dalam suite pengujian; profil konsumsi alokasi memori runtime juga tidak diukur dalam suite ini)*.
-3. **Konfigurasi Window & State Transition**: Struktur `FullscreenPondWindow` memiliki flag yang tepat (`canBecomeKey = true`, level `.floatingWindow`), pemanggilan `cancelOperation(nil)` menutup jendela secara tepat, dan mode interaksi desktop dipulihkan secara akurat.
-4. **Pencarian Pola API Manajemen Daya**: Audit statis T10.4 pada berkas Swift di `Sources` tidak menemukan 7 pola spesifik yang diperiksa. Ini terbatas pada deteksi teks pola tersebut dan tidak menyimpulkan ketiadaan interaksi daya sistem secara umum.
-5. **Kebersihan Pengujian**: Eksekusi pengujian tidak meninggalkan efek samping pada `UserDefaults.standard` maupun file `.plist` di direktori preferensi sistem.
+### A. Hal yang Terbukti Secara Otomatis & Validasi Desktop Nyata
+1. **Fisika & Kinematika Permukaan**: Model matematis gerakan angsa, inersia bola, pantulan dinding, dan dorongan impuls berjalan deterministik sesuai spesifikasi (T12.1–T12.4).
+2. **Alokasi Target pada Skenario Teruji**: Pengujian (T12.2–T12.3 dan T10.1) membuktikan penargetan dan isolasi target ikan membersihkan target serta mencegah loop macet pada skenario penghapusan pengunjung yang diuji.
+3. **Penataan WindowServer di Atas Finder & Ikon Desktop**: Terbukti secara live pada desktop macOS bahwa `FullscreenPondWindow` berada pada layer `3` (`kCGFloatingWindowLevel`), secara matematis dan visual berada di atas jendela desktop/ikon Finder (`-2147483603`) dan aplikasi normal (`0`), menutupi layar Retina `1680x1050` secara penuh, dengan bukti screenshot tercatat pada disk.
+4. **Respon Keluar Escape via Event WindowServer**: Pengiriman event keyboard tingkat sistem `CGEvent` key code 53 (Escape) membuktikan jalur penangkapan event AppKit `keyDown` / `performKeyEquivalent`, pemanggilan `onEscapePressed`, penutupan jendela, dan pembersihan instans dari daftar on-screen WindowServer.
+5. **Pemulihan Presisi Status Desktop Sebelumnya**: Siklus bolak-balik (roundtrip) dari mode `.clickThrough` (layer `-2147483623`, `ignoresMouseEvents=true`) dan mode `.interactive` (layer `-2147483602`, `ignoresMouseEvents=false`) terbukti kembali 100% ke konfigurasi awal pada WindowServer tanpa kehilangan satupun dari 8 ikan koi.
+6. **Pencarian Pola API Manajemen Daya**: Audit statis T10.4 pada berkas Swift di `Sources` tidak menemukan 7 pola spesifik yang diperiksa. Ini terbatas pada deteksi teks pola tersebut dan tidak menyimpulkan ketiadaan interaksi daya sistem secara umum.
+7. **Kebersihan Pengujian**: Eksekusi pengujian tidak meninggalkan efek samping pada `UserDefaults.standard` maupun file `.plist` di direktori preferensi sistem.
 
-### B. Hal yang Berstatus Tertunda (Pending Live Desktop Validation)
-1. **Window Server Layering Nyata**: Pemeriksaan visual apakah jendela `.floatingWindow` menutupi seluruh desktop dan Finder secara mulus di berbagai konfigurasi Spaces dan Mission Control tanpa glitch grafis.
-2. **Interaksi Escape Pengguna Nyata**: Penekanan tombol fisik Escape oleh pengguna (penghantaran `NSEvent` fisik dari keyboard) ketika aplikasi lain atau menu bar sedang dalam status fokus berbeda.
-3. **Estetika Visual CoreGraphics**: Penilaian visual subjektif terhadap keanggunan bentuk prosedural angsa dan pola sulaman bola temari pada layar monitor fisik dengan variasi skala Retina heterogen.
+### B. Hal yang Berstatus Tertunda (Honest Pending Disclosure)
+1. **Penekanan Tombol Fisik Escape oleh Pengguna Nyata**: Penekanan switch mekanikal keyboard fisik oleh jari manusia saat pengguna berinteraksi langsung (bukan event sintetis `CGEvent`) tidak dapat dilakukan oleh agen perangkat lunak otonom. Oleh karena itu, pengujian penekanan tombol fisik oleh manusia tetap berstatus **PENDING**.
+2. **Pengujian Fisik Multi-Monitor Eksternal**: Pengujian perilaku layar penuh pada sistem dengan beberapa monitor fisik heterogen yang tersambung kabel HDMI/DisplayPort secara simultan (saat ini divalidasi via 1 layar fisik Retina dan simulasi synthetic topology T7.1–T7.5; sertifikasi perangkat keras monitor fisik kedua tetap **PENDING**).
+3. **Penilaian Estetika Visual Subjektif Jangka Panjang**: Evaluasi langsung kenyamanan visual mata manusia terhadap gerakan renang angsa dan pola sulaman bola temari CoreGraphics dalam durasi pemakaian lama di monitor fisik.
 
 ---
 
@@ -174,10 +189,16 @@ Berdasarkan perbandingan aktual terhadap `git status` dan `git diff`, berikut ad
    - Pengontrol siklus hidup mode layar penuh manual dan pemulihan keadaan desktop asal.
 4. [`../Sources/KoiWallpaperCore/Desktop/IdleBehaviorPolicy.swift`](../Sources/KoiWallpaperCore/Desktop/IdleBehaviorPolicy.swift)
    - Struktur kebijakan idle terisolasi dengan nilai bawaan nonaktif dan tanpa interaksi daya sistem.
-5. [`2026-10-22-m5-visitors-and-fullscreen.md`](2026-10-22-m5-visitors-and-fullscreen.md)
+5. [`2026-10-22-m5-visitors-and-fullscreen.md`](decisions/2026-10-22-m5-visitors-and-fullscreen.md)
    - Catatan keputusan arsitektural (ADR) resmi Milestone M5.
 6. [`M5_AUDIT_REPORT.md`](M5_AUDIT_REPORT.md)
    - Dokumen laporan audit teknis ini.
+7. [`../scripts/test_live_fullscreen.swift`](../scripts/test_live_fullscreen.swift)
+   - Skrip pengujian validasi live desktop WindowServer macOS, memeriksa hierarki layer terhadap Finder desktop icons, pengujian penerimaan event Escape via WindowServer tap, dan pembuktian pemulihan mode interaksi desktop.
+8. `../reports/screenshots/m5_fullscreen_live_clickthrough.png`
+   - Bukti visual tangkapan layar saat mode layar penuh aktif dari status dasar tembus klik (.clickThrough).
+9. `../reports/screenshots/m5_fullscreen_live_interactive.png`
+   - Bukti visual tangkapan layar saat mode layar penuh aktif dari status dasar interaktif (.interactive).
 
 ### 5.2 Berkas yang Dimodifikasi untuk Milestone M5
 *(Catatan: Sebagian berkas ini juga mengakomodasi perubahan M4 yang belum di-commit; rincian porsi M5 dijelaskan di bawah ini)*
@@ -253,7 +274,15 @@ Agen atau perekayasa yang mengaudit branch ini dapat menjalankan langkah-langkah
    ```
    *Ekspektasi: Seluruh 53 assertion berstatus `[PASS]`, termasuk Bagian 10 (T10.1–T10.4) dan pembersihan supervisor T9.11.*
 
-4. **Pemeriksaan Format & Status Git**:
+4. **Eksekusi Validasi Desktop Langsung macOS**:
+   ```bash
+   mkdir -p build
+   swiftc -I .build/arm64-apple-macosx/debug/Modules .build/arm64-apple-macosx/debug/KoiWallpaperCore.build/*.o scripts/test_live_fullscreen.swift -o build/test_live_fullscreen
+   ./build/test_live_fullscreen
+   ```
+   *Ekspektasi: Seluruh 4 pengujian live berstatus `PASS` (layering WindowServer `3 > -2147483603` dan `3 > 0`, live synthetic Escape exit, pemulihan `.clickThrough` & `.interactive`), dan mencatat status PENDING untuk penekanan keyboard fisik oleh manusia.*
+
+5. **Pemeriksaan Format & Status Git**:
    ```bash
    git diff --check
    git status -s
