@@ -320,10 +320,10 @@ public final class KoiPondPreviewView: NSView {
         )
         stats.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 42), withAttributes: bodyAttrs)
 
-        let hints = "Click: Splash  ·  Opt+Click: Feed  ·  Space: Pause  ·  R: Reset"
+        let hints = "Click: Splash  ·  Opt+Click: Feed  ·  V: Swan  ·  B: Ball  ·  X: Clear"
         hints.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 62), withAttributes: hintAttrs)
 
-        let hints2 = "T: Theme  ·  M: Mood (\(simulation.mood.displayName))  ·  W: Rain  ·  G: Greet"
+        let hints2 = "T: Theme  ·  M: Mood (\(simulation.mood.displayName))  ·  W: Rain  ·  Space: Pause"
         hints2.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 80), withAttributes: hintAttrs)
     }
 
@@ -367,6 +367,15 @@ public final class KoiPondPreviewView: NSView {
         case "w":
             simulation.isRainActive.toggle()
             print("[KoiPondPreviewView] Rain effect toggled: \(simulation.isRainActive ? "ON" : "OFF")")
+        case "v":
+            let v = simulation.spawnVisitor(type: .swan)
+            print("[KoiPondPreviewView] Spawned Swan visitor: id=\(v.id) pos=\(v.position)")
+        case "b":
+            let b = simulation.spawnVisitor(type: .ball)
+            print("[KoiPondPreviewView] Spawned Temari Ball visitor: id=\(b.id) pos=\(b.position)")
+        case "x":
+            simulation.clearVisitors()
+            print("[KoiPondPreviewView] Cleared all visitors. Remaining fish targets reset.")
         case "g":
             let (shouldGreet, msg) = simulation.dailyGreetingManager.checkAndTriggerGreeting()
             print("[KoiPondPreviewView] Daily Greeting: shouldGreet=\(shouldGreet), msg=\(msg ?? "already shown today")")

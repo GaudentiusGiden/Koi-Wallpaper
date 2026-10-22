@@ -678,6 +678,146 @@ recordSimTest("T11.2 Production-Size Collision and Resize Stress (Independent Or
               passed: profileStressPassed, details: stressDetails.joined(separator: "; "))
 
 // -------------------------------------------------------------
+// TEST 12: Surface Visitors & Fish Dynamics (Milestone M5)
+// -------------------------------------------------------------
+print("\n--- 12. Surface Visitors & Fish Motion Dynamics (Milestone M5) ---")
+
+// T12.1 Surface Visitors (Swan & Ball) Kinematics & Confinement
+let visitorSim = PondSimulation(bounds: PondBounds(width: 800, height: 600), seed: 5001)
+let swan1 = visitorSim.spawnVisitor(type: PondVisitorType.swan, at: PondVector(x: 200, y: 300))
+let ball1 = visitorSim.spawnVisitor(type: PondVisitorType.ball, at: PondVector(x: 600, y: 300))
+
+var visitorsStayedInBounds = true
+for _ in 0..<300 { // 5 seconds at 60Hz
+    visitorSim.stepSimulation(dt: 1.0 / 60.0)
+    for v in visitorSim.visitors {
+        if !visitorSim.bounds.contains(v.position, inset: v.radius) {
+            visitorsStayedInBounds = false
+        }
+    }
+}
+let t12_1Passed = (visitorSim.visitors.count == 2) && visitorsStayedInBounds && (swan1.speed > 0.0) && (ball1.radius > 0.0)
+recordSimTest(
+    "T12.1 Surface Visitors (Swan & Ball) Kinematics & Confinement",
+    passed: t12_1Passed,
+    details: "count=\(visitorSim.visitors.count), stayedInBounds=\(visitorsStayedInBounds), swanSpeed=\(String(format: "%.1f", swan1.speed))pt/s, ballRadius=\(String(format: "%.1f", ball1.radius))pt"
+)
+
+// T12.2 Fish Curiosity & Attraction to Visitors
+let attractBounds = PondBounds(width: 800, height: 600)
+var curiousFish = KoiFish(
+    variety: KoiVariety.allEightVarieties[0],
+    position: PondVector(x: 350, y: 300),
+    heading: 0.0,
+    length: 50.0,
+    baseSpeed: 50.0,
+    seed: 5002
+)
+curiousFish.traits = FishTraits(curiosity: 0.85, boldness: 0.6, agility: 1.0, feedingEagerness: 0.5)
+let attractSim = PondSimulation(bounds: attractBounds, initialFish: [curiousFish], seed: 5003)
+let targetSwan = attractSim.spawnVisitor(type: PondVisitorType.swan, at: PondVector(x: 420, y: 300))
+
+var fishTargetedVisitor = false
+var fishApproached = false
+for _ in 0..<60 { // Up to 1 second
+    attractSim.stepSimulation(dt: 1.0 / 60.0)
+    let f = attractSim.fish[0]
+    if f.state == KoiBehaviorState.investigatingVisitor && f.targetVisitorId == targetSwan.id {
+        fishTargetedVisitor = true
+    }
+    if f.position.distance(to: targetSwan.position) < 80.0 {
+        fishApproached = true
+    }
+}
+let t12_2Passed = fishTargetedVisitor && fishApproached
+recordSimTest(
+    "T12.2 Fish Curiosity & Attraction to Visitors",
+    passed: t12_2Passed,
+    details: "targetedVisitor=\(fishTargetedVisitor), approached=\(fishApproached), state=\(attractSim.fish[0].state.rawValue)"
+)
+
+// T12.3 Safe Visitor Removal & Zero Stuck Fish Guarantee
+let removalBounds = PondBounds(width: 800, height: 600)
+var followingFish = KoiFish(
+    variety: KoiVariety.allEightVarieties[1],
+    position: PondVector(x: 300, y: 300),
+    heading: 0.0,
+    length: 50.0,
+    baseSpeed: 50.0,
+    seed: 5004
+)
+followingFish.traits = FishTraits(curiosity: 0.90, boldness: 0.6, agility: 1.0, feedingEagerness: 0.5)
+let removalSim = PondSimulation(bounds: removalBounds, initialFish: [followingFish], seed: 5005)
+let swanToRemove = removalSim.spawnVisitor(type: PondVisitorType.swan, at: PondVector(x: 360, y: 300))
+
+// Step until fish investigates the visitor
+for _ in 0..<30 {
+    removalSim.stepSimulation(dt: 1.0 / 60.0)
+    if removalSim.fish[0].state == KoiBehaviorState.investigatingVisitor { break }
+}
+let wasInvestigating = (removalSim.fish[0].state == KoiBehaviorState.investigatingVisitor)
+
+// Explicitly remove the visitor
+removalSim.removeVisitor(id: swanToRemove.id)
+
+// Verify fish target is immediately cleared
+let targetImmediatelyCleared = (removalSim.fish[0].currentTarget == nil &&
+                                removalSim.fish[0].targetVisitorId == nil &&
+                                removalSim.fish[0].state == KoiBehaviorState.wandering)
+
+// Advance 120 steps and verify fish swims smoothly without being stuck
+var continuedSwimming = true
+let posBefore = removalSim.fish[0].position
+for _ in 0..<120 {
+    removalSim.stepSimulation(dt: 1.0 / 60.0)
+}
+let posAfter = removalSim.fish[0].position
+let displacement = posBefore.distance(to: posAfter)
+continuedSwimming = (displacement > 20.0) && (removalSim.fish[0].state == KoiBehaviorState.wandering)
+
+let t12_3Passed = wasInvestigating && targetImmediatelyCleared && continuedSwimming
+recordSimTest(
+    "T12.3 Safe Visitor Removal & Zero Stuck Fish Guarantee",
+    passed: t12_3Passed,
+    details: "wasInvestigating=\(wasInvestigating), immediatelyCleared=\(targetImmediatelyCleared), continuedSwimming=\(continuedSwimming), displacement=\(String(format: "%.1f", displacement))pt"
+)
+
+// T12.4 Ball Nudge Physical Impulse & Ripple Reaction
+let nudgeBounds = PondBounds(width: 800, height: 600)
+var nudgingFish = KoiFish(
+    variety: KoiVariety.allEightVarieties[3],
+    position: PondVector(x: 280, y: 300),
+    heading: 0.0, // Head pointing right toward (300, 300)
+    length: 50.0,
+    baseSpeed: 60.0,
+    seed: 5006
+)
+let nudgeSim = PondSimulation(bounds: nudgeBounds, initialFish: [nudgingFish], seed: 5007)
+let ballToNudge = nudgeSim.spawnVisitor(type: PondVisitorType.ball, at: PondVector(x: 310, y: 300))
+let initialBallVel = ballToNudge.velocity
+
+var ballNudged = false
+var rippleSpawned = false
+for _ in 0..<60 {
+    nudgeSim.stepSimulation(dt: 1.0 / 60.0)
+    if let currentBall = nudgeSim.visitors.first(where: { $0.id == ballToNudge.id }) {
+        if currentBall.velocity.distance(to: initialBallVel) > 5.0 {
+            ballNudged = true
+        }
+    }
+    if nudgeSim.ripples.contains(where: { $0.type == RippleType.waterCall }) {
+        rippleSpawned = true
+    }
+    if ballNudged && rippleSpawned { break }
+}
+let t12_4Passed = ballNudged && rippleSpawned
+recordSimTest(
+    "T12.4 Ball Nudge Physical Impulse & Ripple Reaction",
+    passed: t12_4Passed,
+    details: "ballNudged=\(ballNudged), rippleSpawned=\(rippleSpawned)"
+)
+
+// -------------------------------------------------------------
 // SUMMARY & RESULTS
 // -------------------------------------------------------------
 print("\n=======================================================")

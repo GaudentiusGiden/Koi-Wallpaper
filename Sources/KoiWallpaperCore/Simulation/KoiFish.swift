@@ -4,6 +4,7 @@ public enum KoiBehaviorState: String, Sendable {
     case wandering = "Wandering"
     case seekingFood = "Seeking Food"
     case investigatingClick = "Investigating Click"
+    case investigatingVisitor = "Investigating Visitor"
 }
 
 /// Represents an individual koi fish with natural swimming physics,
@@ -32,6 +33,7 @@ public struct KoiFish: Identifiable, Sendable {
     public private(set) var state: KoiBehaviorState
     public private(set) var currentTarget: PondVector?
     public private(set) var targetDurationRemaining: Double
+    public private(set) var targetVisitorId: UUID?
     public var traits: FishTraits
 
     public init(
@@ -71,6 +73,7 @@ public struct KoiFish: Identifiable, Sendable {
         self.state = .wandering
         self.currentTarget = nil
         self.targetDurationRemaining = 0.0
+        self.targetVisitorId = nil
     }
 
     /// The coordinate of the koi's mouth (front of head).
@@ -187,16 +190,18 @@ public struct KoiFish: Identifiable, Sendable {
     }
 
     /// Sets a temporary attraction target (e.g. water ripple, food pellet, or surface visitor).
-    public mutating func setTarget(_ target: PondVector, state: KoiBehaviorState, duration: Double) {
+    public mutating func setTarget(_ target: PondVector, state: KoiBehaviorState, duration: Double, visitorId: UUID? = nil) {
         self.currentTarget = target
         self.state = state
         self.targetDurationRemaining = duration
+        self.targetVisitorId = visitorId
     }
 
     public mutating func clearTarget() {
         self.currentTarget = nil
         self.state = .wandering
         self.targetDurationRemaining = 0.0
+        self.targetVisitorId = nil
     }
 
     /// Main physics and steering step for the koi fish.
@@ -222,7 +227,7 @@ public struct KoiFish: Identifiable, Sendable {
         if let target = currentTarget {
             targetDurationRemaining -= dt
             let dist = position.distance(to: target)
-            let arrivalDist = mouthRadius + 6.0
+            let arrivalDist = (state == .investigatingVisitor) ? (mouthRadius + 14.0) : (mouthRadius + 6.0)
             if targetDurationRemaining <= 0.0 || dist < arrivalDist {
                 clearTarget()
             }
@@ -246,7 +251,13 @@ public struct KoiFish: Identifiable, Sendable {
             let dist = toTarget.length
             if dist > 0.001 {
                 let arrivalRamp = min(1.0, max(0.25, dist / 80.0))
-                let baseSeek = (state == .seekingFood) ? 2.4 : 1.8
+                let baseSeek: Double
+                switch state {
+                case .seekingFood: baseSeek = 2.4
+                case .investigatingClick: baseSeek = 1.8
+                case .investigatingVisitor: baseSeek = 1.9
+                case .wandering: baseSeek = 1.5
+                }
                 targetPull = toTarget.normalized() * (baseSeek * arrivalRamp)
             }
         }
@@ -321,6 +332,7 @@ public struct KoiFish: Identifiable, Sendable {
         switch state {
         case .seekingFood: stateUrgency = 1.0
         case .investigatingClick: stateUrgency = 0.5
+        case .investigatingVisitor: stateUrgency = 0.6
         case .wandering: stateUrgency = 0.0
         }
         let urgency = max(avoidanceUrgency, stateUrgency)
@@ -347,6 +359,8 @@ public struct KoiFish: Identifiable, Sendable {
             targetSpeed = maxSpeed * moodSpeedMultiplier * eagernessBonus
         case .investigatingClick:
             targetSpeed = baseSpeed * 1.35 * moodSpeedMultiplier
+        case .investigatingVisitor:
+            targetSpeed = baseSpeed * 1.25 * moodSpeedMultiplier
         }
 
         // Smoothly yield and decelerate if another fish is directly ahead in our path

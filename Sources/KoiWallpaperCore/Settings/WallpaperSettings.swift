@@ -111,6 +111,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
     public var showHUD: Bool
     public var pondMood: PondMood
     public var isRainActive: Bool
+    public var idleBehaviorPolicy: IdleBehaviorPolicy
 
     public init(
         timeOfDayMode: TimeOfDayMode = .auto,
@@ -121,7 +122,8 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         initialInteractionMode: InputInteractionMode = .clickThrough,
         showHUD: Bool = false,
         pondMood: PondMood = .calm,
-        isRainActive: Bool = false
+        isRainActive: Bool = false,
+        idleBehaviorPolicy: IdleBehaviorPolicy = IdleBehaviorPolicy()
     ) {
         self.timeOfDayMode = timeOfDayMode
         let resolvedTheme = manualTheme ?? manualTimePhase.theme
@@ -133,6 +135,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         self.showHUD = showHUD
         self.pondMood = pondMood
         self.isRainActive = isRainActive
+        self.idleBehaviorPolicy = idleBehaviorPolicy
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -145,6 +148,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         case showHUD
         case pondMood
         case isRainActive
+        case idleBehaviorPolicy
     }
 
     public init(from decoder: Decoder) throws {
@@ -160,6 +164,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         showHUD = try container.decodeIfPresent(Bool.self, forKey: .showHUD) ?? false
         pondMood = try container.decodeIfPresent(PondMood.self, forKey: .pondMood) ?? .calm
         isRainActive = try container.decodeIfPresent(Bool.self, forKey: .isRainActive) ?? false
+        idleBehaviorPolicy = try container.decodeIfPresent(IdleBehaviorPolicy.self, forKey: .idleBehaviorPolicy) ?? IdleBehaviorPolicy()
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -173,5 +178,6 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         try container.encode(showHUD, forKey: .showHUD)
         try container.encode(pondMood, forKey: .pondMood)
         try container.encode(isRainActive, forKey: .isRainActive)
+        try container.encode(idleBehaviorPolicy, forKey: .idleBehaviorPolicy)
     }
 }

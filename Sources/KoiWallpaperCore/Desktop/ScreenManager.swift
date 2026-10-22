@@ -216,6 +216,32 @@ public final class ScreenManager {
         }
     }
 
+    // MARK: - Visitors Management
+
+    /// Spawns a visitor on all managed screen pond simulations.
+    @discardableResult
+    public func spawnVisitor(type: PondVisitorType, at point: PondVector? = nil) -> [PondVisitor] {
+        var created: [PondVisitor] = []
+        for controller in controllers {
+            let v = controller.wallpaperView.simulation.spawnVisitor(type: type, at: point)
+            created.append(v)
+            controller.wallpaperView.needsDisplay = true
+        }
+        return created
+    }
+
+    /// Clears all visitors across all screen simulations, guaranteeing no stuck koi targets.
+    public func clearVisitors() {
+        for controller in controllers {
+            controller.wallpaperView.simulation.clearVisitors()
+            controller.wallpaperView.needsDisplay = true
+        }
+    }
+
+    public var totalVisitorsCount: Int {
+        primaryController?.wallpaperView.simulation.visitors.count ?? 0
+    }
+
     // MARK: - Coordinate Conversion & Click Dispatch
 
     /// Locates the DesktopWindowController hosting the given global screen point.

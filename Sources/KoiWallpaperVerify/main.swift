@@ -26,6 +26,8 @@ enum TestCategory: String {
     case m3Resource = "M3 HARDWARE BENCH"
     case m3Theme = "M3.6 THEME"
     case m4Personality = "M4 PERSONALITY"
+    case m5Visitors = "M5 VISITORS"
+    case m5Fullscreen = "M5 FULLSCREEN"
     case audit = "ARCH AUDIT"
 }
 
@@ -2359,6 +2361,208 @@ purgeSuiteDomain("com.koiwallpaper.verify.greeting.testsuite")
 recordTest(.m4Personality, "T9.10 Daily Greeting Persistence Across Manager Reload Roundtrip (UserDefaults Dedicated Domain)",
            passed: greetingPersistPassed,
            details: greetingDetails)
+
+// =============================================================
+// Section 10: Milestone M5 Surface Visitors & Manual Fullscreen Verification
+// =============================================================
+print("\n--- Section 10: Milestone M5 Surface Visitors & Manual Fullscreen Mode Verification ---")
+
+// T10.1 Surface Visitors (Swan & Ball) & Stuck Target Prevention
+var visitorPreventionPassed = false
+var visitorDetails = ""
+
+do {
+    let m5Sim = PondSimulation(bounds: PondBounds(width: 800, height: 600), seed: 9001)
+    let swan = m5Sim.spawnVisitor(type: .swan, at: PondVector(x: 300, y: 300))
+    let ball = m5Sim.spawnVisitor(type: .ball, at: PondVector(x: 500, y: 300))
+    let visitorsSpawned = (m5Sim.visitors.count == 2)
+
+    // Force fish 0 into curious pursuit of swan
+    m5Sim.setFishTarget(at: 0, target: swan.position, state: .investigatingVisitor, duration: 6.0, visitorId: swan.id)
+    let fishInvestigating = (m5Sim.fish[0].state == .investigatingVisitor && m5Sim.fish[0].targetVisitorId == swan.id)
+
+    // Remove swan specifically: fish target must be immediately cleared
+    m5Sim.removeVisitor(id: swan.id)
+    let swanClearedTarget = (m5Sim.fish[0].currentTarget == nil &&
+                             m5Sim.fish[0].targetVisitorId == nil &&
+                             m5Sim.fish[0].state == .wandering)
+
+    // Force fish 1 into curious pursuit of ball
+    m5Sim.setFishTarget(at: 1, target: ball.position, state: .investigatingVisitor, duration: 6.0, visitorId: ball.id)
+    // Clear all visitors
+    m5Sim.clearVisitors()
+    let allClearedTarget = (m5Sim.visitors.isEmpty &&
+                            m5Sim.fish[1].currentTarget == nil &&
+                            m5Sim.fish[1].targetVisitorId == nil &&
+                            m5Sim.fish[1].state == .wandering)
+
+    // Advance 120 steps: verify all 8 koi continue smooth wandering without sticking
+    let initialPositions = m5Sim.fish.map(\.position)
+    for _ in 0..<120 {
+        m5Sim.stepSimulation(dt: 1.0 / 60.0)
+    }
+    let displacements = (0..<8).map { m5Sim.fish[$0].position.distance(to: initialPositions[$0]) }
+    let allFishMoved = displacements.allSatisfy { $0 > 15.0 }
+    let allFishWandering = m5Sim.fish.allSatisfy { $0.state == .wandering }
+
+    visitorPreventionPassed = visitorsSpawned && fishInvestigating && swanClearedTarget && allClearedTarget && allFishMoved && allFishWandering
+    visitorDetails = "spawned=\(visitorsSpawned), swanClearedTarget=\(swanClearedTarget), allClearedTarget=\(allClearedTarget), allMoved=\(allFishMoved), minDisplacement=\(String(format: "%.1f", displacements.min() ?? 0))pt"
+}
+
+recordTest(.m5Visitors, "T10.1 Surface Visitors (Swan & Ball) & Stuck Target Prevention",
+           passed: visitorPreventionPassed,
+           details: visitorDetails)
+
+// T10.2 Manual Fullscreen Presentation, Key Handling & Escape Exit
+var fullscreenEscapePassed = false
+var fullscreenEscapeDetails = ""
+
+do {
+    let mockFsScreen = MockScreen(frame: NSRect(x: 0, y: 0, width: 1920, height: 1080), scale: 2.0, displayID: 5001)
+    let mockFsScreenManager = ScreenManager(
+        screenProvider: { [mockFsScreen] },
+        controllerFactory: { DesktopWindowController(screen: $0) },
+        timeOfDayPhase: .day,
+        showHUD: true
+    )
+    let fsController = ManualFullscreenController(screenManager: mockFsScreenManager)
+
+    // Enter fullscreen
+    fsController.enterFullscreen(targetScreen: mockFsScreen)
+    let isFsActive = fsController.isFullscreen
+    let windowCount = fsController.fullscreenWindows.count
+    let fsWindow = fsController.fullscreenWindows.first
+    let canBeKey = (fsWindow?.canBecomeKey == true)
+    let canBeMain = (fsWindow?.canBecomeMain == true)
+    let windowLevel = fsWindow?.level == NSWindow.Level(Int(CGWindowLevelForKey(.floatingWindow)))
+    let fsView = fsWindow?.contentView as? WallpaperView
+    let viewInteractive = (fsView?.isInteractionMode == true)
+    let viewIsFullscreen = (fsView?.isFullscreenPresentation == true)
+
+    // Exit via synthetic Escape operation (cancelOperation / onEscapePressed)
+    var exitCallbackInvoked = false
+    fsController.onFullscreenStateChanged = { active in
+        if !active { exitCallbackInvoked = true }
+    }
+    fsWindow?.cancelOperation(nil)
+
+    let isFsDeactivated = (!fsController.isFullscreen)
+    let windowsCleanedUp = (fsController.fullscreenWindows.isEmpty)
+
+    fullscreenEscapePassed = isFsActive && (windowCount == 1) && canBeKey && canBeMain && windowLevel &&
+                             viewInteractive && viewIsFullscreen && exitCallbackInvoked && isFsDeactivated && windowsCleanedUp
+    fullscreenEscapeDetails = "canBeKey=\(canBeKey), levelFloating=\(windowLevel), viewInteractive=\(viewInteractive), escapeExited=\(isFsDeactivated && windowsCleanedUp)"
+    mockFsScreenManager.teardown()
+}
+
+recordTest(.m5Fullscreen, "T10.2 Manual Fullscreen Presentation, Key Handling & Escape Exit",
+           passed: fullscreenEscapePassed,
+           details: fullscreenEscapeDetails)
+
+// T10.3 Previous Desktop State Restoration Across Fullscreen Roundtrip
+var stateRestorationPassed = false
+var stateRestorationDetails = ""
+
+do {
+    let mockRestoreScreen = MockScreen(frame: NSRect(x: 0, y: 0, width: 1440, height: 900), scale: 2.0, displayID: 5002)
+    let restoreScreenManager = ScreenManager(
+        screenProvider: { [mockRestoreScreen] },
+        controllerFactory: { DesktopWindowController(screen: $0) },
+        timeOfDayPhase: .dusk,
+        showHUD: false
+    )
+    let fsRestoreController = ManualFullscreenController(screenManager: restoreScreenManager)
+
+    // Test Roundtrip 1: Default click-through mode (-2147483623)
+    restoreScreenManager.applyInteractionMode(.clickThrough)
+    let preLevel1 = restoreScreenManager.primaryController?.window.level
+    let preIgnoresMouse1 = restoreScreenManager.primaryController?.window.ignoresMouseEvents
+    let preMode1 = restoreScreenManager.currentMode
+
+    fsRestoreController.enterFullscreen(targetScreen: mockRestoreScreen)
+    fsRestoreController.exitFullscreen()
+
+    let postLevel1 = restoreScreenManager.primaryController?.window.level
+    let postIgnoresMouse1 = restoreScreenManager.primaryController?.window.ignoresMouseEvents
+    let postMode1 = restoreScreenManager.currentMode
+
+    let roundtrip1Passed = (preLevel1 == postLevel1 &&
+                            preIgnoresMouse1 == postIgnoresMouse1 &&
+                            preMode1 == postMode1 &&
+                            postMode1 == .clickThrough)
+
+    // Test Roundtrip 2: Explicit interactive mode (-2147483602)
+    restoreScreenManager.applyInteractionMode(.interactive)
+    let preLevel2 = restoreScreenManager.primaryController?.window.level
+    let preIgnoresMouse2 = restoreScreenManager.primaryController?.window.ignoresMouseEvents
+    let preMode2 = restoreScreenManager.currentMode
+
+    fsRestoreController.enterFullscreen(targetScreen: mockRestoreScreen)
+    fsRestoreController.exitFullscreen()
+
+    let postLevel2 = restoreScreenManager.primaryController?.window.level
+    let postIgnoresMouse2 = restoreScreenManager.primaryController?.window.ignoresMouseEvents
+    let postMode2 = restoreScreenManager.currentMode
+
+    let roundtrip2Passed = (preLevel2 == postLevel2 &&
+                            preIgnoresMouse2 == postIgnoresMouse2 &&
+                            preMode2 == postMode2 &&
+                            postMode2 == .interactive)
+
+    // Entity preservation check: fish count must remain exactly 8
+    let fishPreserved = (restoreScreenManager.primaryController?.wallpaperView.simulation.fish.count == 8)
+
+    stateRestorationPassed = roundtrip1Passed && roundtrip2Passed && fishPreserved
+    stateRestorationDetails = "clickThroughRestored=\(roundtrip1Passed), interactiveRestored=\(roundtrip2Passed), fishPreserved=\(fishPreserved)"
+    restoreScreenManager.teardown()
+}
+
+recordTest(.m5Fullscreen, "T10.3 Previous Desktop State Restoration Across Fullscreen Roundtrip",
+           passed: stateRestorationPassed,
+           details: stateRestorationDetails)
+
+// T10.4 Idle Policy Separation & Zero System Sleep/Lock Interference Audit
+var idleAuditPassed = false
+var idleAuditDetails = ""
+
+do {
+    // 1. Verify IdleBehaviorPolicy separation and default state
+    let idlePolicy = IdleBehaviorPolicy()
+    let defaultDisabled = (!idlePolicy.isEnabled && idlePolicy.action == .none)
+
+    // 2. Static source code audit for forbidden system power/sleep/screensaver APIs
+    let sourceRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Sources")
+    var prohibitedHits: [String] = []
+    let forbiddenPatterns = [
+        "IOPMAssertionCreateWithName",
+        "IOPMAssertionDeclareUserActivity",
+        "caffeinate",
+        "pmset",
+        "com.apple.screensaver",
+        "ScreenSaverView",
+        "ScreenSaverDefaults"
+    ]
+
+    if let enumerator = FileManager.default.enumerator(at: sourceRoot, includingPropertiesForKeys: [.isRegularFileKey]) {
+        for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" && !fileURL.path.contains("KoiWallpaperVerify") {
+            if let content = try? String(contentsOf: fileURL, encoding: .utf8) {
+                for pattern in forbiddenPatterns {
+                    if content.contains(pattern) {
+                        prohibitedHits.append("\(fileURL.lastPathComponent):\(pattern)")
+                    }
+                }
+            }
+        }
+    }
+
+    let zeroProhibitedAPIs = prohibitedHits.isEmpty
+    idleAuditPassed = defaultDisabled && zeroProhibitedAPIs
+    idleAuditDetails = "idleDefaultDisabled=\(defaultDisabled), prohibitedHits=\(prohibitedHits), zeroPowerInterference=\(zeroProhibitedAPIs)"
+}
+
+recordTest(.m5Fullscreen, "T10.4 Idle Policy Separation & Zero System Sleep/Lock Interference Audit",
+           passed: idleAuditPassed,
+           details: idleAuditDetails)
 
 // Worker process termination: Save metrics and exit cleanly.
 // T9.11, final summary, and post-process filesystem isolation verification

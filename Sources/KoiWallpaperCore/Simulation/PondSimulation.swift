@@ -15,6 +15,7 @@ public final class PondSimulation: @unchecked Sendable {
     public private(set) var pellets: [FoodPellet] = []
     public private(set) var ripples: [WaterRipple] = []
     public private(set) var clickTargets: [ClickTarget] = []
+    public private(set) var visitors: [PondVisitor] = []
 
     public var isPaused: Bool = false
     public var mood: PondMood = .calm
@@ -42,6 +43,7 @@ public final class PondSimulation: @unchecked Sendable {
     public let maxPellets: Int = 48
     public let maxRipples: Int = 64
     public let maxFeedingFish: Int = 3
+    public let maxVisitors: Int = 6
 
     public init(
         bounds: PondBounds = PondBounds(width: 1280.0, height: 800.0),
@@ -138,6 +140,7 @@ public final class PondSimulation: @unchecked Sendable {
         pellets.removeAll()
         ripples.removeAll()
         clickTargets.removeAll()
+        visitors.removeAll()
         timeAccumulator = 0.0
         elapsedTime = 0.0
         initializeEightKoi()
@@ -149,6 +152,7 @@ public final class PondSimulation: @unchecked Sendable {
         // Capture positions before bounds.didSet clamps the previous world.
         let positions = fish.map(\.position)
         let pelletPositions = pellets.map(\.position)
+        let visitorPositions = visitors.map(\.position)
         bounds = PondBounds(width: width, height: height, margin: bounds.margin)
 
         let scaleX = width / oldBounds.width
@@ -160,6 +164,9 @@ public final class PondSimulation: @unchecked Sendable {
         }
         for i in 0..<pellets.count {
             pellets[i].position = PondVector(x: pelletPositions[i].x * scaleX, y: pelletPositions[i].y * scaleY)
+        }
+        for i in 0..<visitors.count {
+            visitors[i].position = PondVector(x: visitorPositions[i].x * scaleX, y: visitorPositions[i].y * scaleY)
         }
 
         clampAllEntitiesToBounds()
@@ -174,6 +181,9 @@ public final class PondSimulation: @unchecked Sendable {
         }
         for i in 0..<pellets.count {
             pellets[i].position = bounds.clamped(pellets[i].position, inset: pellets[i].radius + 4.0)
+        }
+        for i in 0..<visitors.count {
+            visitors[i].position = bounds.clamped(visitors[i].position, inset: visitors[i].radius + 4.0)
         }
     }
 
@@ -285,9 +295,84 @@ public final class PondSimulation: @unchecked Sendable {
     }
 
     /// Directly sets an attraction or steering target for a specific fish by index.
-    public func setFishTarget(at index: Int, target: PondVector, state: KoiBehaviorState, duration: Double) {
+    public func setFishTarget(at index: Int, target: PondVector, state: KoiBehaviorState, duration: Double, visitorId: UUID? = nil) {
         guard index >= 0 && index < fish.count else { return }
-        fish[index].setTarget(target, state: state, duration: duration)
+        fish[index].setTarget(target, state: state, duration: duration, visitorId: visitorId)
+    }
+
+    // MARK: - Visitor Management
+
+    /// Adds an existing visitor to the pond, subject to the capacity cap.
+    public func addVisitor(_ visitor: PondVisitor) {
+        guard visitors.count < maxVisitors else { return }
+        visitors.append(visitor)
+    }
+
+    /// Spawns a surface visitor (such as an elegant swan or floating temari ball) in the pond.
+    @discardableResult
+    public func spawnVisitor(
+        type: PondVisitorType,
+        at point: PondVector? = nil,
+        lifetime: Double? = nil
+    ) -> PondVisitor {
+        if visitors.count >= maxVisitors {
+            // Remove the oldest visitor if cap reached, clearing fish targets for it
+            let oldest = visitors.removeFirst()
+            for i in 0..<fish.count {
+                if fish[i].targetVisitorId == oldest.id {
+                    fish[i].clearTarget()
+                }
+            }
+        }
+
+        let spawnPos: PondVector
+        if let explicitPoint = point {
+            spawnPos = bounds.clamped(explicitPoint, inset: 30.0)
+        } else {
+            // Spawn at an organic, aesthetic location
+            let margin = 70.0
+            let sx = Double.random(in: (bounds.minX + margin)...(bounds.maxX - margin), using: &rng)
+            let sy = Double.random(in: (bounds.minY + margin)...(bounds.maxY - margin), using: &rng)
+            spawnPos = PondVector(x: sx, y: sy)
+        }
+
+        let heading = Double.random(in: -Double.pi...Double.pi, using: &rng)
+        let seed = rng.next()
+        let visitor = PondVisitor(
+            type: type,
+            position: spawnPos,
+            heading: heading,
+            lifetime: lifetime,
+            seed: seed
+        )
+        visitors.append(visitor)
+
+        // Spawn a welcoming water ripple
+        if ripples.count < maxRipples {
+            ripples.append(WaterRipple(center: spawnPos, type: .waterCall))
+        }
+
+        return visitor
+    }
+
+    /// Removes a visitor by its identifier and guarantees no fish remains stuck on a missing target.
+    public func removeVisitor(id: UUID) {
+        visitors.removeAll { $0.id == id }
+        for i in 0..<fish.count {
+            if fish[i].targetVisitorId == id || (visitors.isEmpty && fish[i].state == .investigatingVisitor) {
+                fish[i].clearTarget()
+            }
+        }
+    }
+
+    /// Clears all visitors from the pond, immediately resetting any investigating fish back to wandering.
+    public func clearVisitors() {
+        visitors.removeAll()
+        for i in 0..<fish.count {
+            if fish[i].state == .investigatingVisitor || fish[i].targetVisitorId != nil {
+                fish[i].clearTarget()
+            }
+        }
     }
 
     // MARK: - Time Stepping & Physics Update
@@ -408,6 +493,86 @@ public final class PondSimulation: @unchecked Sendable {
             ripples[i].update(dt: dt)
         }
         ripples.removeAll { $0.isDead }
+
+        // 6. Update Visitors & Fish Interaction Dynamics
+        for i in 0..<visitors.count {
+            visitors[i].update(dt: dt, bounds: bounds)
+        }
+
+        // Purge expired visitors and clear targets of fish following them
+        let expiredVisitors = visitors.filter(\.isExpired)
+        if !expiredVisitors.isEmpty {
+            let expiredIds = Set(expiredVisitors.map(\.id))
+            visitors.removeAll { $0.isExpired }
+            for i in 0..<fish.count {
+                if let vid = fish[i].targetVisitorId, expiredIds.contains(vid) {
+                    fish[i].clearTarget()
+                }
+            }
+        }
+
+        // Update fish targeting visitors & enforce zero stuck fish guarantee
+        for i in 0..<fish.count {
+            if fish[i].state == .investigatingVisitor {
+                if let vid = fish[i].targetVisitorId, let activeVisitor = visitors.first(where: { $0.id == vid }) {
+                    // Update target point to current visitor position (or escort offset)
+                    let escortOffset: PondVector
+                    if activeVisitor.type == .swan {
+                        let angle = activeVisitor.heading + .pi * 0.75
+                        escortOffset = PondVector.fromAngle(angle, length: activeVisitor.radius + 18.0)
+                    } else {
+                        escortOffset = .zero
+                    }
+                    let target = bounds.clamped(activeVisitor.position + escortOffset, inset: fish[i].physicalRadius)
+                    fish[i].setTarget(target, state: .investigatingVisitor, duration: 5.5, visitorId: vid)
+                } else {
+                    // Visitor has been removed or ID missing: immediately return to wandering!
+                    fish[i].clearTarget()
+                }
+            }
+        }
+
+        // Attract wandering fish to nearby visitors if no food is present
+        if !visitors.isEmpty && pellets.isEmpty {
+            for visitor in visitors {
+                for i in 0..<fish.count {
+                    guard fish[i].state == .wandering && fish[i].currentTarget == nil else { continue }
+                    let dist = fish[i].position.distance(to: visitor.position)
+                    if dist < visitor.interactionRadius {
+                        let curiosityThreshold = (mood == .playful) ? 0.35 : 0.55
+                        if fish[i].traits.curiosity >= curiosityThreshold {
+                            let escortOffset: PondVector
+                            if visitor.type == .swan {
+                                let angle = visitor.heading + .pi * 0.75
+                                escortOffset = PondVector.fromAngle(angle, length: visitor.radius + 18.0)
+                            } else {
+                                escortOffset = .zero
+                            }
+                            let target = bounds.clamped(visitor.position + escortOffset, inset: fish[i].physicalRadius)
+                            fish[i].setTarget(target, state: .investigatingVisitor, duration: 5.5, visitorId: visitor.id)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ball nudge physics: when fish mouth touches the ball, impart gentle impulse and ripple
+        for vIdx in 0..<visitors.count where visitors[vIdx].type == .ball {
+            for fIdx in 0..<fish.count {
+                let mouthPos = fish[fIdx].mouthPosition
+                let dist = mouthPos.distance(to: visitors[vIdx].position)
+                if dist < (fish[fIdx].mouthRadius + visitors[vIdx].radius + 4.0) {
+                    let impulse = PondVector.fromAngle(fish[fIdx].heading, length: 28.0)
+                    visitors[vIdx].applyImpulse(impulse)
+                    if ripples.count < maxRipples {
+                        ripples.append(WaterRipple(center: visitors[vIdx].position, type: .waterCall))
+                    }
+                    if fish[fIdx].state == .investigatingVisitor {
+                        fish[fIdx].clearTarget()
+                    }
+                }
+            }
+        }
 
         // Atmospheric rain drops: strictly capped to maxRainRipples
         if isRainActive {

@@ -405,10 +405,16 @@ public final class PondRenderer {
                     customShadowStyle: shadowStyle
                 )
             }
+            for visitor in simulation.visitors {
+                PondArtwork.drawVisitorShadow(visitor, in: bitmap, shadowStyle: shadowStyle)
+            }
             for fish in simulation.fish {
                 KoiArtwork.draw(fish, in: bitmap, theme: toTheme)
             }
             PondArtwork.drawPellets(simulation.pellets, in: bitmap)
+            for visitor in simulation.visitors {
+                PondArtwork.drawVisitor(visitor, in: bitmap, theme: toTheme)
+            }
             bitmap.restoreGState()
 
             if let image = bitmap.makeImage() {

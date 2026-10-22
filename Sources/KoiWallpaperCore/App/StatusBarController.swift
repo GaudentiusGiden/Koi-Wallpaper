@@ -12,6 +12,9 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidToggleHUD(_ controller: StatusBarController)
     func statusBarDidResetSettings(_ controller: StatusBarController)
     func statusBarDidRequestQuit(_ controller: StatusBarController)
+    func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType)
+    func statusBarDidRequestClearVisitors(_ controller: StatusBarController)
+    func statusBarDidToggleFullscreen(_ controller: StatusBarController)
 }
 
 extension StatusBarControllerDelegate {
@@ -22,6 +25,9 @@ extension StatusBarControllerDelegate {
     }
     public func statusBarDidSelectMood(_ controller: StatusBarController, mood: PondMood) {}
     public func statusBarDidToggleRain(_ controller: StatusBarController) {}
+    public func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType) {}
+    public func statusBarDidRequestClearVisitors(_ controller: StatusBarController) {}
+    public func statusBarDidToggleFullscreen(_ controller: StatusBarController) {}
 }
 
 public final class StatusBarController {
@@ -31,7 +37,7 @@ public final class StatusBarController {
     private let menu = NSMenu()
 
     // Primary menu items
-    private let headerItem = NSMenuItem(title: "Koi Wallpaper (M4)", action: nil, keyEquivalent: "")
+    private let headerItem = NSMenuItem(title: "Koi Wallpaper (M5)", action: nil, keyEquivalent: "")
     private let pauseStatusItem = NSMenuItem(title: "Status Kolam: Aktif", action: nil, keyEquivalent: "")
     private let pauseToggleItem = NSMenuItem(
         title: "Jeda Kolam (Pause)",
@@ -45,6 +51,13 @@ public final class StatusBarController {
         keyEquivalent: "i"
     )
     private let interactionDescItem = NSMenuItem(title: "Status: Tembus Klik Finder (Default)", action: nil, keyEquivalent: "")
+
+    // Fullscreen manual mode
+    private let fullscreenToggleItem = NSMenuItem(
+        title: "Mode Layar Penuh (Escape untuk Keluar)",
+        action: #selector(fullscreenToggled),
+        keyEquivalent: "f"
+    )
 
     // Time of Day & Theme submenu
     private let timeOfDayMenuItem = NSMenuItem(title: "Tema & Waktu Kolam", action: nil, keyEquivalent: "")
@@ -73,6 +86,14 @@ public final class StatusBarController {
         action: #selector(rainToggled),
         keyEquivalent: ""
     )
+
+    // Visitors submenu
+    private let visitorsMenuItem = NSMenuItem(title: "Pengunjung Kolam (Visitors)", action: nil, keyEquivalent: "")
+    private let visitorsMenu = NSMenu(title: "Pengunjung")
+    private let spawnSwanItem = NSMenuItem(title: "Undang Angsa (Swan)", action: #selector(spawnSwanClicked), keyEquivalent: "")
+    private let spawnBallItem = NSMenuItem(title: "Lepas Bola Temari (Ball)", action: #selector(spawnBallClicked), keyEquivalent: "")
+    private let clearVisitorsItem = NSMenuItem(title: "Bersihkan Pengunjung (Clear)", action: #selector(clearVisitorsClicked), keyEquivalent: "")
+    private let visitorsStatusItem = NSMenuItem(title: "Pengunjung Aktif: 0", action: nil, keyEquivalent: "")
 
     // Settings submenu
     private let settingsMenuItem = NSMenuItem(title: "Pengaturan (Settings)", action: nil, keyEquivalent: "")
@@ -108,7 +129,7 @@ public final class StatusBarController {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.title = "🐟"
-            button.toolTip = "Koi Wallpaper (M4)"
+            button.toolTip = "Koi Wallpaper (M5)"
         }
 
         setupMenu()
@@ -121,10 +142,12 @@ public final class StatusBarController {
         pauseStatusItem.isEnabled = false
         interactionDescItem.isEnabled = false
         currentPhaseInfoItem.isEnabled = false
+        visitorsStatusItem.isEnabled = false
 
         // Action targets
         pauseToggleItem.target = self
         interactionToggleItem.target = self
+        fullscreenToggleItem.target = self
         autoTimeItem.target = self
         systemThemeItem.target = self
         dawnItem.target = self
@@ -137,6 +160,9 @@ public final class StatusBarController {
         calmMoodItem.target = self
         playfulMoodItem.target = self
         rainToggleItem.target = self
+        spawnSwanItem.target = self
+        spawnBallItem.target = self
+        clearVisitorsItem.target = self
         pauseOnBatteryItem.target = self
         showHUDItem.target = self
         resetSettingsItem.target = self
@@ -172,6 +198,15 @@ public final class StatusBarController {
         moodMenu.addItem(playfulMoodItem)
         moodMenuItem.submenu = moodMenu
 
+        // Build Visitors submenu
+        visitorsMenu.addItem(spawnSwanItem)
+        visitorsMenu.addItem(spawnBallItem)
+        visitorsMenu.addItem(NSMenuItem.separator())
+        visitorsMenu.addItem(clearVisitorsItem)
+        visitorsMenu.addItem(NSMenuItem.separator())
+        visitorsMenu.addItem(visitorsStatusItem)
+        visitorsMenuItem.submenu = visitorsMenu
+
         // Build Settings submenu
         settingsMenu.addItem(pauseOnBatteryItem)
         settingsMenu.addItem(showHUDItem)
@@ -187,10 +222,12 @@ public final class StatusBarController {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(interactionToggleItem)
         menu.addItem(interactionDescItem)
+        menu.addItem(fullscreenToggleItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(timeOfDayMenuItem)
         menu.addItem(moodMenuItem)
         menu.addItem(rainToggleItem)
+        menu.addItem(visitorsMenuItem)
         menu.addItem(settingsMenuItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(quitItem)
@@ -260,6 +297,17 @@ public final class StatusBarController {
         rainToggleItem.state = isRainActive ? .on : .off
     }
 
+    public func updateFullscreenState(isFullscreen: Bool) {
+        fullscreenToggleItem.state = isFullscreen ? .on : .off
+        fullscreenToggleItem.title = isFullscreen
+            ? "Keluar dari Layar Penuh (Escape)"
+            : "Mode Layar Penuh (Escape untuk Keluar)"
+    }
+
+    public func updateVisitorsState(count: Int) {
+        visitorsStatusItem.title = "Pengunjung Aktif: \(count)"
+    }
+
     private func updateStatusIcon(isInteractive: Bool, isPaused: Bool) {
         guard let button = statusItem?.button else { return }
         if isPaused {
@@ -327,6 +375,22 @@ public final class StatusBarController {
 
     @objc private func rainToggled() {
         delegate?.statusBarDidToggleRain(self)
+    }
+
+    @objc private func fullscreenToggled() {
+        delegate?.statusBarDidToggleFullscreen(self)
+    }
+
+    @objc private func spawnSwanClicked() {
+        delegate?.statusBarDidRequestSpawnVisitor(self, type: .swan)
+    }
+
+    @objc private func spawnBallClicked() {
+        delegate?.statusBarDidRequestSpawnVisitor(self, type: .ball)
+    }
+
+    @objc private func clearVisitorsClicked() {
+        delegate?.statusBarDidRequestClearVisitors(self)
     }
 
     @objc private func pauseOnBatteryToggled() {

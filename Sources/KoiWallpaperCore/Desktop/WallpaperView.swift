@@ -10,6 +10,7 @@ public final class WallpaperView: NSView {
     private lazy var sceneLayer = PondSceneLayer(renderer: renderer)
     private let overlayView = PondOverlayView(frame: .zero)
     public private(set) var totalRenderedFrames: Int = 0
+    public var isFullscreenPresentation: Bool = false
     public override var wantsUpdateLayer: Bool { true }
 
     public var theme: PondTheme = .day {
@@ -330,9 +331,13 @@ public final class WallpaperView: NSView {
         overlayView.drawOverlay = { [weak self] context in
             guard let self else { return }
             context.translateBy(x: -self.overlayView.frame.minX, y: -self.overlayView.frame.minY)
-            if self.isInteractionMode { self.drawInteractionModeBanner() }
+            if self.isFullscreenPresentation {
+                self.drawFullscreenBanner()
+            } else if self.isInteractionMode {
+                self.drawInteractionModeBanner()
+            }
             if self.showHUD { self.drawHUD(in: context) }
-            if self.greetingRemainingDuration > 0, let msg = self.currentGreetingMessage, !self.isInteractionMode {
+            if self.greetingRemainingDuration > 0, let msg = self.currentGreetingMessage, !self.isInteractionMode && !self.isFullscreenPresentation {
                 self.drawGreetingBanner(message: msg)
             }
         }
@@ -357,8 +362,34 @@ public final class WallpaperView: NSView {
         )
         totalRenderedFrames += 1
         overlayView.frame = overlayFrame
-        overlayView.isHidden = !showHUD && !isInteractionMode && (greetingRemainingDuration <= 0)
+        overlayView.isHidden = !showHUD && !isInteractionMode && (greetingRemainingDuration <= 0) && !isFullscreenPresentation
         if !overlayView.isHidden { overlayView.needsDisplay = true }
+    }
+
+    private func drawFullscreenBanner() {
+        let bannerRect = NSRect(x: 24, y: bounds.height - 70, width: 490, height: 46)
+        let bgPath = NSBezierPath(roundedRect: bannerRect, xRadius: 8, yRadius: 8)
+        NSColor.black.withAlphaComponent(0.70).setFill()
+        bgPath.fill()
+
+        NSColor.systemTeal.withAlphaComponent(0.85).setStroke()
+        bgPath.lineWidth = 1.0
+        bgPath.stroke()
+
+        let title = "Mode Layar Penuh (Fullscreen)"
+        let subtitle = "Tekan tombol Escape (⎋) untuk kembali ke Desktop · Klik untuk berinteraksi"
+
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let subAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: NSColor.lightGray
+        ]
+
+        title.draw(at: NSPoint(x: bannerRect.minX + 14, y: bannerRect.minY + 24), withAttributes: titleAttrs)
+        subtitle.draw(at: NSPoint(x: bannerRect.minX + 14, y: bannerRect.minY + 8), withAttributes: subAttrs)
     }
 
     private func drawGreetingBanner(message: String) {
@@ -430,17 +461,16 @@ public final class WallpaperView: NSView {
             .foregroundColor: NSColor.lightGray
         ]
 
-        "Koi Wallpaper (M4) — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
+        "Koi Wallpaper (M5) — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
         statusText.draw(at: NSPoint(x: hudRect.minX + 165, y: hudRect.maxY - 22), withAttributes: statusAttrs)
 
         let stats = String(
-            format: "Cadence: %.0f Hz  ·  Koi: %d  ·  Pellets: %d/%d  ·  Ripples: %d/%d",
+            format: "Cadence: %.0f Hz  ·  Koi: %d  ·  Visitors: %d  ·  Pellets: %d/%d",
             timerCadenceFPS,
             simulation.fish.count,
+            simulation.visitors.count,
             simulation.pellets.count,
-            simulation.maxPellets,
-            simulation.ripples.count,
-            simulation.maxRipples
+            simulation.maxPellets
         )
         stats.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 42), withAttributes: bodyAttrs)
 

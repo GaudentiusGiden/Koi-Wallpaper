@@ -195,20 +195,28 @@ Selesai ketika:
 
 ### M5 — Pengunjung dan tampilan penuh
 
+Status: **SELESAI & TERVERIFIKASI SECARA OTOMATIS** (Implementasi kode M5 selesai 100%, suite otomatis 23/23 pada `KoiWallpaperSimTest` dan 53/53 assertion pada `KoiWallpaperVerify` lulus; validasi integrasi desktop nyata melalui WindowServer, interaksi level `floatingWindow`, dan penekanan tombol Escape fisik dari pengguna masih berstatus PENDING). Diimplementasikan dengan model pengunjung permukaan kolam (`PondVisitor` dengan variasi Angsa/Swan dan Bola/Temari Ball), interaksi ketertarikan renang ikan koi (`.investigatingVisitor`), dorongan impuls fisik bola dengan riak air, jaminan pertahanan ganda ketiadaan target macet (*zero stuck fish guarantee*) pada skenario teruji saat pengunjung dihapus/kedaluwarsa, mode kolam fullscreen manual (`FullscreenPondWindow` dan `ManualFullscreenController`) dengan tingkat jendela `floatingWindow`, kemampuan penerimaan input keyboard (`canBecomeKey = true`), jalur penutupan via `cancelOperation` / Escape, pemulihan mode interaksi desktop sebelumnya secara presisi melintasi mode tembus klik maupun interaktif, serta pemisahan tegas kebijakan *idle* otomatis (`IdleBehaviorPolicy`) yang dinonaktifkan secara bawaan tanpa memodifikasi setelan tidur, penguncian layar, atau manajemen daya macOS.
+
+Suite `KoiWallpaperVerify` Bagian 10 (T10.1–T10.4) dijalankan secara live pada runtime macOS dan seluruhnya lulus (4/4 assertion baru, total suite 53 assertion):
+- `T10.1`: Surface Visitors (Swan & Ball) & Stuck Target Prevention (target pengunjung dihapus seketika me-reset koi ke wandering pada skenario teruji; min displacement $> 50$ pt membuktikan ketiadaan ikan macet).
+- `T10.2`: Manual Fullscreen Presentation, Key Handling & Direct cancelOperation Exit (`canBecomeKey = true`, level `floatingWindow`, view interaktif, dan keluar bersih via pemanggilan langsung `cancelOperation(nil)` pada jendela fullscreen; penekanan tombol Escape fisik oleh pengguna dan integrasi WindowServer nyata belum diuji dan tetap berstatus PENDING).
+- `T10.3`: Previous Desktop State Restoration Across Fullscreen Roundtrip (pemulihan presisi mode `.clickThrough` layer `-2147483623` dan `.interactive` layer `-2147483602`, tanpa kehilangan 8 koi; status pause global dan visibilitas kursor tidak diuji dalam assertion ini).
+- `T10.4`: Idle Policy Separation & Static Power API Audit (kebijakan idle dinonaktifkan secara bawaan; pemindaian statis pada berkas Swift di `Sources` menemukan nol kemunculan dari 7 pola terlarang yang dicari, tanpa menyimpulkan ketiadaan API daya secara umum di luar pola tersebut).
+
 Pekerjaan:
 
-- [ ] Tambahkan bola atau angsa dengan perilaku sederhana yang memengaruhi target ikan.
-- [ ] Tambahkan mode kolam fullscreen manual dan jalur keluar yang jelas, termasuk tombol Escape.
-- [ ] Tentukan kebutuhan idle otomatis secara terpisah dari fullscreen manual.
-- [ ] Dokumentasikan keputusan arsitektur di `docs/decisions/`.
+- [x] Tambahkan bola atau angsa dengan perilaku sederhana yang memengaruhi target ikan (`PondVisitor` swan glides & boundary avoidance; ball drifts & bounces; koi escort & nudge impulse).
+- [x] Tambahkan mode kolam fullscreen manual dan jalur keluar yang jelas (`ManualFullscreenController`, `FullscreenPondWindow` di level floating, penanganan Escape keycode 53, `cancelOperation`, dan menu bar; verifikasi otomatis via pemanggilan langsung `cancelOperation(nil)`).
+- [x] Tentukan kebutuhan idle otomatis secara terpisah dari fullscreen manual (`IdleBehaviorPolicy`, independen dari fullscreen manual dan dinonaktifkan bawaan).
+- [x] Dokumentasikan keputusan arsitektur di [decisions/2026-10-22-m5-visitors-and-fullscreen.md](decisions/2026-10-22-m5-visitors-and-fullscreen.md).
 
 Selesai ketika:
 
-- Pengunjung dapat ditambahkan/dihapus dan tidak membuat ikan macet pada target yang sudah hilang.
-- Fullscreen dapat ditutup melalui Escape serta mengembalikan keadaan desktop sebelumnya.
-- Mode ini tidak mengubah konfigurasi penguncian atau waktu sleep sistem.
+- [x] Pengunjung dapat ditambahkan/dihapus dan tidak membuat ikan macet pada target yang sudah hilang (terverifikasi via `KoiWallpaperSimTest` T12.1–T12.4 dan `KoiWallpaperVerify` T10.1 pada skenario teruji).
+- [x] Fullscreen dapat ditutup melalui Escape serta mengembalikan keadaan desktop sebelumnya (terverifikasi secara programatik via `KoiWallpaperVerify` T10.2 melalui pemanggilan langsung `cancelOperation(nil)` & T10.3; pengujian penekanan Escape fisik dan integrasi WindowServer nyata tetap PENDING).
+- [x] Mode ini tidak mengubah konfigurasi penguncian atau waktu sleep sistem (terverifikasi via audit statis leksikal pada berkas Swift di `Sources` oleh `KoiWallpaperVerify` T10.4).
 
-Integrasi screen saver sistem, bila diperlukan, menjadi target tambahan tersendiri. Jangan menyebut fullscreen aplikasi sebagai integrasi screen saver macOS.
+Integrasi screen saver sistem, bila diperlukan, menjadi target tambahan tersendiri. Jangan menyebut fullscreen aplikasi sebagai integrasi screen saver macOS. Mode ini murni merupakan sajian imersif internal aplikasi.
 
 ## Struktur kode yang diusulkan
 

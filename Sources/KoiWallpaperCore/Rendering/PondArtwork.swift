@@ -245,6 +245,132 @@ public enum PondArtwork {
         context.restoreGState()
     }
 
+    // MARK: - Surface Visitors Artwork (Swan & Temari Ball)
+
+    public static func drawVisitorShadow(
+        _ visitor: PondVisitor,
+        in context: CGContext,
+        shadowStyle: PondLighting.ShadowStyle
+    ) {
+        context.saveGState()
+        let offset = PondLighting.shadowOffset(distance: 22.0)
+        context.translateBy(x: CGFloat(visitor.position.x) + offset.x, y: CGFloat(visitor.position.y) + offset.y)
+        context.rotate(by: CGFloat(visitor.heading))
+
+        let c = shadowStyle.color
+        switch visitor.type {
+        case .swan:
+            // Soft underwater drop shadow of the swan hull
+            context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.penumbraAlpha)
+            context.fillEllipse(in: CGRect(x: -22, y: -12, width: 44, height: 24))
+            context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.coreAlpha)
+            context.fillEllipse(in: CGRect(x: -18, y: -9, width: 36, height: 18))
+
+        case .ball:
+            // Circular shadow of the floating ball
+            let r = CGFloat(visitor.radius)
+            context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.penumbraAlpha)
+            context.fillEllipse(in: CGRect(x: -r * 1.1, y: -r * 1.1, width: r * 2.2, height: r * 2.2))
+            context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.coreAlpha)
+            context.fillEllipse(in: CGRect(x: -r * 0.85, y: -r * 0.85, width: r * 1.7, height: r * 1.7))
+        }
+        context.restoreGState()
+    }
+
+    public static func drawVisitor(
+        _ visitor: PondVisitor,
+        in context: CGContext,
+        theme: PondTheme = .day
+    ) {
+        context.saveGState()
+        let bob = CGFloat(sin(visitor.bobbingPhase) * 1.6)
+        context.translateBy(x: CGFloat(visitor.position.x), y: CGFloat(visitor.position.y))
+
+        switch visitor.type {
+        case .swan:
+            context.rotate(by: CGFloat(visitor.heading))
+
+            // Waterline gentle wake contact ring
+            context.setStrokeColor(red: 0.85, green: 0.95, blue: 0.95, alpha: 0.35)
+            context.setLineWidth(1.5)
+            context.strokeEllipse(in: CGRect(x: -24, y: -14 + bob * 0.5, width: 48, height: 28))
+
+            // Swan body (smooth white/cream plumage)
+            context.setFillColor(red: 0.96, green: 0.97, blue: 0.95, alpha: 1.0)
+            context.fillEllipse(in: CGRect(x: -20, y: -11 + bob, width: 38, height: 22))
+
+            // Wing contours & feather shading
+            context.setStrokeColor(red: 0.82, green: 0.86, blue: 0.88, alpha: 0.70)
+            context.setLineWidth(1.2)
+            context.strokeEllipse(in: CGRect(x: -16, y: -9 + bob, width: 30, height: 18))
+
+            // Back tail plumage tip
+            let tailPath = CGMutablePath()
+            tailPath.move(to: CGPoint(x: -18, y: 0 + bob))
+            tailPath.addLine(to: CGPoint(x: -26, y: 2 + bob))
+            tailPath.addLine(to: CGPoint(x: -20, y: -4 + bob))
+            tailPath.closeSubpath()
+            context.setFillColor(red: 0.94, green: 0.95, blue: 0.92, alpha: 1.0)
+            context.addPath(tailPath)
+            context.fillPath()
+
+            // Neck & head
+            context.setFillColor(red: 0.97, green: 0.98, blue: 0.96, alpha: 1.0)
+            context.fillEllipse(in: CGRect(x: 10, y: -6 + bob, width: 14, height: 12))
+
+            // Orange beak
+            let beakPath = CGMutablePath()
+            beakPath.move(to: CGPoint(x: 21, y: 1 + bob))
+            beakPath.addLine(to: CGPoint(x: 28, y: 0 + bob))
+            beakPath.addLine(to: CGPoint(x: 21, y: -3 + bob))
+            beakPath.closeSubpath()
+            context.setFillColor(red: 0.98, green: 0.48, blue: 0.12, alpha: 1.0)
+            context.addPath(beakPath)
+            context.fillPath()
+
+            // Black facial basal mask & eye
+            context.setFillColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 0.90)
+            context.fillEllipse(in: CGRect(x: 18, y: -1 + bob, width: 3.5, height: 3.5))
+
+        case .ball:
+            let r = CGFloat(visitor.radius)
+
+            // Surface water contact halo
+            context.setStrokeColor(red: 0.90, green: 0.95, blue: 1.0, alpha: 0.40)
+            context.setLineWidth(1.2)
+            context.strokeEllipse(in: CGRect(x: -r * 1.25, y: -r * 1.25 + bob * 0.4, width: r * 2.5, height: r * 2.5))
+
+            // Spherical base: rich Japanese vermilion
+            context.setFillColor(red: 0.88, green: 0.22, blue: 0.16, alpha: 1.0)
+            context.fillEllipse(in: CGRect(x: -r, y: -r + bob, width: r * 2, height: r * 2))
+
+            // Temari decorative geometric bands (arcs)
+            context.setStrokeColor(red: 0.96, green: 0.82, blue: 0.25, alpha: 0.95)
+            context.setLineWidth(2.2)
+            let arc1 = CGMutablePath()
+            arc1.addArc(center: CGPoint(x: 0, y: bob), radius: r * 0.85, startAngle: -.pi * 0.7, endAngle: .pi * 0.3, clockwise: false)
+            context.addPath(arc1)
+            context.strokePath()
+
+            context.setStrokeColor(red: 0.20, green: 0.72, blue: 0.75, alpha: 0.95)
+            context.setLineWidth(1.6)
+            let arc2 = CGMutablePath()
+            arc2.addArc(center: CGPoint(x: 0, y: bob), radius: r * 0.85, startAngle: .pi * 0.2, endAngle: .pi * 1.2, clockwise: false)
+            context.addPath(arc2)
+            context.strokePath()
+
+            // Center gold star / cross intersection
+            context.setFillColor(red: 1.0, green: 0.92, blue: 0.55, alpha: 1.0)
+            context.fillEllipse(in: CGRect(x: -2.5, y: -2.5 + bob, width: 5.0, height: 5.0))
+
+            // Top-left specular gloss highlight
+            context.setFillColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.75)
+            context.fillEllipse(in: CGRect(x: -r * 0.55, y: bob + r * 0.15, width: r * 0.5, height: r * 0.5))
+        }
+
+        context.restoreGState()
+    }
+
     // MARK: - Water Surface Ripples
 
     public static func drawRipples(_ ripples: [WaterRipple], in context: CGContext) {

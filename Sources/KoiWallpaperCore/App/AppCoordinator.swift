@@ -13,6 +13,9 @@ public final class AppCoordinator: NSObject,
     public let inputCoordinator: InputCoordinator
     public let timeOfDayController: TimeOfDayController
     public let screenManager: ScreenManager
+    public let manualFullscreenController: ManualFullscreenController
+    public var idleBehaviorPolicy: IdleBehaviorPolicy
+
     public var desktopWindowController: DesktopWindowController? {
         screenManager.primaryController
     }
@@ -28,7 +31,9 @@ public final class AppCoordinator: NSObject,
         lifecyclePolicy: LifecyclePolicy? = nil,
         inputCoordinator: InputCoordinator? = nil,
         timeOfDayController: TimeOfDayController? = nil,
-        screenManager: ScreenManager? = nil
+        screenManager: ScreenManager? = nil,
+        manualFullscreenController: ManualFullscreenController? = nil,
+        idleBehaviorPolicy: IdleBehaviorPolicy = IdleBehaviorPolicy()
     ) {
         self.settingsManager = settingsManager
 
@@ -59,12 +64,20 @@ public final class AppCoordinator: NSObject,
         )
         self.screenManager = scrMgr
 
+        let fsCtrl = manualFullscreenController ?? ManualFullscreenController(screenManager: scrMgr)
+        fsCtrl.screenManager = scrMgr
+        self.manualFullscreenController = fsCtrl
+        self.idleBehaviorPolicy = idleBehaviorPolicy
+
         super.init()
 
         self.lifecyclePolicy.delegate = self
         self.inputCoordinator.delegate = self
         self.timeOfDayController.onThemeChanged = { [weak self] newTheme in
             self?.handleThemeChanged(newTheme)
+        }
+        self.manualFullscreenController.onFullscreenStateChanged = { [weak self] isFullscreen in
+            self?.statusBarController?.updateFullscreenState(isFullscreen: isFullscreen)
         }
     }
 
@@ -122,9 +135,11 @@ public final class AppCoordinator: NSObject,
         )
         statusController.updateMoodState(mood: settingsManager.settings.pondMood)
         statusController.updateRainState(isRainActive: settingsManager.settings.isRainActive)
+        statusController.updateFullscreenState(isFullscreen: manualFullscreenController.isFullscreen)
+        statusController.updateVisitorsState(count: screenManager.totalVisitorsCount)
         self.statusBarController = statusController
 
-        logger.info("KoiWallpaper M4 started successfully across \(self.screenManager.screenCount) screen(s).")
+        logger.info("KoiWallpaper M5 started successfully across \(self.screenManager.screenCount) screen(s).")
     }
 
     private func handleThemeChanged(_ newTheme: PondTheme) {
@@ -283,8 +298,26 @@ public final class AppCoordinator: NSObject,
         )
     }
 
+    public func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType) {
+        logger.info("User requested spawn visitor: \(type.rawValue)")
+        screenManager.spawnVisitor(type: type)
+        statusBarController?.updateVisitorsState(count: screenManager.totalVisitorsCount)
+    }
+
+    public func statusBarDidRequestClearVisitors(_ controller: StatusBarController) {
+        logger.info("User requested clear visitors.")
+        screenManager.clearVisitors()
+        statusBarController?.updateVisitorsState(count: 0)
+    }
+
+    public func statusBarDidToggleFullscreen(_ controller: StatusBarController) {
+        logger.info("User requested toggle fullscreen mode.")
+        manualFullscreenController.toggleFullscreen()
+    }
+
     /// Cleanly tears down screen managers, unbinds window observers from lifecycle policy, and stops timers.
     public func teardown() {
+        manualFullscreenController.exitFullscreen()
         timeOfDayController.stopMonitoring()
         for controller in screenManager.controllers {
             lifecyclePolicy.unbindWindow(controller.window)
