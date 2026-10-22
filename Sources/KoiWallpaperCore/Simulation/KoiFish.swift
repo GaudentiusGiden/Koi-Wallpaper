@@ -5,6 +5,7 @@ public enum KoiBehaviorState: String, Sendable {
     case seekingFood = "Seeking Food"
     case investigatingClick = "Investigating Click"
     case investigatingVisitor = "Investigating Visitor"
+    case followingInsect = "Following Insect"
 }
 
 /// Represents an individual koi fish with natural swimming physics,
@@ -34,6 +35,7 @@ public struct KoiFish: Identifiable, Sendable {
     public private(set) var currentTarget: PondVector?
     public private(set) var targetDurationRemaining: Double
     public private(set) var targetVisitorId: UUID?
+    public private(set) var targetInsectId: UUID?
     public var traits: FishTraits
 
     public init(
@@ -74,6 +76,7 @@ public struct KoiFish: Identifiable, Sendable {
         self.currentTarget = nil
         self.targetDurationRemaining = 0.0
         self.targetVisitorId = nil
+        self.targetInsectId = nil
     }
 
     /// The coordinate of the koi's mouth (front of head).
@@ -189,12 +192,18 @@ public struct KoiFish: Identifiable, Sendable {
         KoiSpineGeometry.testBodyCollision(fish1: self, fish2: other, safetyMargin: safetyMargin)
     }
 
-    /// Sets a temporary attraction target (e.g. water ripple, food pellet, or surface visitor).
-    public mutating func setTarget(_ target: PondVector, state: KoiBehaviorState, duration: Double, visitorId: UUID? = nil) {
+    /// Sets a temporary attraction target (e.g. water ripple, food pellet, surface visitor, or insect).
+    public mutating func setTarget(_ target: PondVector, state: KoiBehaviorState, duration: Double, visitorId: UUID? = nil, insectId: UUID? = nil) {
         self.currentTarget = target
         self.state = state
         self.targetDurationRemaining = duration
         self.targetVisitorId = visitorId
+        self.targetInsectId = insectId
+    }
+
+    /// Smoothly updates a dynamic target position (e.g. flying insect or swimming swan) without resetting duration.
+    public mutating func updateMovingTarget(_ target: PondVector) {
+        self.currentTarget = target
     }
 
     public mutating func clearTarget() {
@@ -202,6 +211,7 @@ public struct KoiFish: Identifiable, Sendable {
         self.state = .wandering
         self.targetDurationRemaining = 0.0
         self.targetVisitorId = nil
+        self.targetInsectId = nil
     }
 
     /// Main physics and steering step for the koi fish.
@@ -227,7 +237,15 @@ public struct KoiFish: Identifiable, Sendable {
         if let target = currentTarget {
             targetDurationRemaining -= dt
             let dist = position.distance(to: target)
-            let arrivalDist = (state == .investigatingVisitor) ? (mouthRadius + 14.0) : (mouthRadius + 6.0)
+            let arrivalDist: Double
+            switch state {
+            case .investigatingVisitor:
+                arrivalDist = mouthRadius + 14.0
+            case .followingInsect:
+                arrivalDist = mouthRadius + 10.0
+            default:
+                arrivalDist = mouthRadius + 6.0
+            }
             if targetDurationRemaining <= 0.0 || dist < arrivalDist {
                 clearTarget()
             }
@@ -256,6 +274,7 @@ public struct KoiFish: Identifiable, Sendable {
                 case .seekingFood: baseSeek = 2.4
                 case .investigatingClick: baseSeek = 1.8
                 case .investigatingVisitor: baseSeek = 1.9
+                case .followingInsect: baseSeek = 1.8
                 case .wandering: baseSeek = 1.5
                 }
                 targetPull = toTarget.normalized() * (baseSeek * arrivalRamp)
@@ -333,6 +352,7 @@ public struct KoiFish: Identifiable, Sendable {
         case .seekingFood: stateUrgency = 1.0
         case .investigatingClick: stateUrgency = 0.5
         case .investigatingVisitor: stateUrgency = 0.6
+        case .followingInsect: stateUrgency = 0.55
         case .wandering: stateUrgency = 0.0
         }
         let urgency = max(avoidanceUrgency, stateUrgency)
@@ -361,6 +381,8 @@ public struct KoiFish: Identifiable, Sendable {
             targetSpeed = baseSpeed * 1.35 * moodSpeedMultiplier
         case .investigatingVisitor:
             targetSpeed = baseSpeed * 1.25 * moodSpeedMultiplier
+        case .followingInsect:
+            targetSpeed = baseSpeed * 1.30 * moodSpeedMultiplier
         }
 
         // Smoothly yield and decelerate if another fish is directly ahead in our path

@@ -818,6 +818,326 @@ recordSimTest(
 )
 
 // -------------------------------------------------------------
+// TEST 13: Pond Insects & Koi Curiosity Reaction
+// -------------------------------------------------------------
+print("\n--- 13. Pond Insects & Koi Curiosity Dynamics ---")
+
+// T13.1 Theme Insect Population & Species Selection
+let themesToTest: [PondTheme] = [.day, .dawn, .goldenHour, .dusk, .deepClear, .rain, .night]
+var allThemesCompliant = true
+var themeDetails: [String] = []
+
+for th in themesToTest {
+    let testSim = PondSimulation(theme: th)
+    let inCount = testSim.insects.count
+    let dfCount = testSim.insects.filter { $0.type == .dragonfly }.count
+    let bfCount = testSim.insects.filter { $0.type == .butterfly }.count
+    let ffCount = testSim.insects.filter { $0.type == .firefly }.count
+
+    if th.isNight {
+        let isCorrect = (inCount == 4 && ffCount == 4 && dfCount == 0 && bfCount == 0)
+        if !isCorrect { allThemesCompliant = false }
+        themeDetails.append("\(th.rawValue): ff=\(ffCount)/4")
+    } else {
+        let isCorrect = (inCount == 4 && dfCount == 2 && bfCount == 2 && ffCount == 0)
+        if !isCorrect { allThemesCompliant = false }
+        themeDetails.append("\(th.rawValue): df=\(dfCount),bf=\(bfCount)")
+    }
+}
+
+recordSimTest(
+    "T13.1 Theme Insect Population & Species Selection",
+    passed: allThemesCompliant,
+    details: themeDetails.joined(separator: ", ")
+)
+
+// T13.2 Theme Transition Insect Cross-Fading
+let transSim = PondSimulation(theme: .day)
+// Transition Day -> Night
+transSim.updateThemeTransition(from: .day, to: .night, progress: 0.0)
+let p0_dayOp = transSim.insects.filter { $0.type != .firefly }.map(\.opacity).first ?? 0
+let p0_nightOp = transSim.insects.filter { $0.type == .firefly }.map(\.opacity).first ?? 0
+
+transSim.updateThemeTransition(from: .day, to: .night, progress: 0.5)
+let p50_count = transSim.insects.count
+let p50_dayOp = transSim.insects.filter { $0.type != .firefly }.map(\.opacity).first ?? 0
+let p50_nightOp = transSim.insects.filter { $0.type == .firefly }.map(\.opacity).first ?? 0
+
+transSim.updateThemeTransition(from: .day, to: .night, progress: 1.0)
+let p100_count = transSim.insects.count
+let p100_allFireflies = transSim.insects.allSatisfy { $0.type == .firefly && $0.opacity == 1.0 }
+
+// Transition Night -> Dawn (Non-Night)
+transSim.updateThemeTransition(from: .night, to: .dawn, progress: 0.5)
+let back50_count = transSim.insects.count
+transSim.updateThemeTransition(from: .night, to: .dawn, progress: 1.0)
+let dawn_count = transSim.insects.count
+let dawn_nonNight = transSim.insects.filter { $0.type == .dragonfly }.count == 2 &&
+                    transSim.insects.filter { $0.type == .butterfly }.count == 2
+
+// Transition Day -> Dusk (Non-Night to Non-Night preserve same 4)
+let beforeDuskIds = transSim.insects.map(\.id)
+transSim.updateThemeTransition(from: .dawn, to: .dusk, progress: 0.5)
+transSim.updateThemeTransition(from: .dawn, to: .dusk, progress: 1.0)
+let dusk_count = transSim.insects.count
+let duskPreserved = (transSim.insects.map(\.id) == beforeDuskIds)
+
+let t13_2Passed = (p0_dayOp == 1.0 && p0_nightOp == 0.0) &&
+                  (p50_count == 8 && abs(p50_dayOp - 0.5) < 0.01 && abs(p50_nightOp - 0.5) < 0.01) &&
+                  (p100_count == 4 && p100_allFireflies) &&
+                  (back50_count == 8 && dawn_count == 4 && dawn_nonNight) &&
+                  (dusk_count == 4 && duskPreserved)
+
+recordSimTest(
+    "T13.2 Theme Transition Insect Cross-Fading",
+    passed: t13_2Passed,
+    details: "p0=(day:\(p0_dayOp),night:\(p0_nightOp)), p50=(count:\(p50_count),day:\(p50_dayOp),night:\(p50_nightOp)), p100=(count:\(p100_count),fireflies:\(p100_allFireflies)), duskPreserved=\(duskPreserved)"
+)
+
+// T13.3 Insect Kinematics, Bounds Confinement & Pause Freeze
+let kinSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), theme: .day)
+var allInBounds = true
+var sawDarting = false
+
+for _ in 0..<600 {
+    kinSim.stepSimulation(dt: 1.0 / 60.0)
+    for insect in kinSim.insects {
+        if !kinSim.bounds.contains(insect.position) {
+            allInBounds = false
+        }
+        if insect.isDarting { sawDarting = true }
+    }
+}
+
+// Pause freeze test
+kinSim.isPaused = true
+let frozenPositions = kinSim.insects.map(\.position)
+let frozenPhases = kinSim.insects.map(\.phase)
+for _ in 0..<60 {
+    kinSim.advance(deltaTime: 1.0 / 60.0)
+}
+let afterPausePositions = kinSim.insects.map(\.position)
+let afterPausePhases = kinSim.insects.map(\.phase)
+let freezeSuccess = (frozenPositions == afterPausePositions) && (frozenPhases == afterPausePhases)
+
+let t13_3Passed = allInBounds && sawDarting && freezeSuccess
+recordSimTest(
+    "T13.3 Insect Kinematics, Confinement & Pause Freeze",
+    passed: t13_3Passed,
+    details: "allInBounds=\(allInBounds), sawDarting=\(sawDarting), freezeSuccess=\(freezeSuccess)"
+)
+
+// T13.4 Koi Following Moving Insect Target, Duration Timeout & Zero Stuck Guarantee
+let followSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), theme: .day)
+let targetInsect = followSim.insects[0]
+followSim.setFishTarget(at: 0, target: targetInsect.position, state: .followingInsect, duration: 5.5, insectId: targetInsect.id)
+
+var trackedMovement = false
+let initialFishPos = followSim.fish[0].position
+
+for _ in 0..<120 {
+    followSim.stepSimulation(dt: 1.0 / 60.0)
+    if followSim.fish[0].state == .followingInsect {
+        if let currentTarget = followSim.fish[0].currentTarget {
+            let activeInsect = followSim.insects.first(where: { $0.id == targetInsect.id })!
+            if currentTarget.distance(to: activeInsect.position) < 0.01 {
+                trackedMovement = true
+            }
+        }
+    }
+}
+
+let movedDuringFollow = followSim.fish[0].position.distance(to: initialFishPos) > 10.0
+
+// Advance remaining steps until 5.5s timeout expires (330 steps total at 60Hz)
+for _ in 0..<250 {
+    followSim.stepSimulation(dt: 1.0 / 60.0)
+}
+let returnedToWanderAfterTimeout = (followSim.fish[0].state == .wandering && followSim.fish[0].currentTarget == nil)
+
+// Zero stuck fish guarantee on insect clear
+followSim.setFishTarget(at: 1, target: followSim.insects[1].position, state: .followingInsect, duration: 5.5, insectId: followSim.insects[1].id)
+let wasFollowingBeforeClear = (followSim.fish[1].state == .followingInsect)
+followSim.clearInsects()
+followSim.stepSimulation(dt: 1.0 / 60.0)
+let immediatelyClearedStuckFish = (followSim.fish[1].state == .wandering && followSim.fish[1].currentTarget == nil)
+
+let t13_4Passed = trackedMovement && movedDuringFollow && returnedToWanderAfterTimeout && wasFollowingBeforeClear && immediatelyClearedStuckFish
+recordSimTest(
+    "T13.4 Koi Following Moving Target, Timeout & Zero Stuck Guarantee",
+    passed: t13_4Passed,
+    details: "trackedMovement=\(trackedMovement), moved=\(movedDuringFollow), returnedAfterTimeout=\(returnedToWanderAfterTimeout), immediatelyCleared=\(immediatelyClearedStuckFish)"
+)
+
+// T13.5 Food and Click Priority Over Insect Following
+let prioSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), theme: .day)
+// Assign fish 0 to insect
+let insectToFollow = prioSim.insects[0]
+prioSim.setFishTarget(at: 0, target: insectToFollow.position, state: .followingInsect, duration: 5.5, insectId: insectToFollow.id)
+
+// Drop food near fish 0: fish 0 should immediately switch to .seekingFood
+prioSim.handleFoodDrop(at: prioSim.fish[0].position)
+let foodOverrodeInsect = (prioSim.fish[0].state == .seekingFood)
+
+// Assign fish 1 to insect
+prioSim.setFishTarget(at: 1, target: prioSim.insects[1].position, state: .followingInsect, duration: 5.5, insectId: prioSim.insects[1].id)
+// Click water near fish 1: should switch to .investigatingClick
+prioSim.handleWaterClick(at: prioSim.fish[1].position + PondVector(x: 20.0, y: 0.0))
+let clickOverrodeInsect = (prioSim.fish[1].state == .investigatingClick)
+
+let t13_5Passed = foodOverrodeInsect && clickOverrodeInsect
+recordSimTest(
+    "T13.5 Food & Click Priority Over Insect Following",
+    passed: t13_5Passed,
+    details: "foodOverrode=\(foodOverrodeInsect), clickOverrode=\(clickOverrodeInsect)"
+)
+
+// -------------------------------------------------------------
+// TEST 14: Pond Frog Simulation & Lifecycle Dynamics
+// -------------------------------------------------------------
+print("\n--- 14. Pond Frog (Katak Teratai) Lifecycle Dynamics ---")
+
+// T14.1 Initial Perched State & Lily Pad Alignment
+let frogSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), theme: .day)
+let initialFrog = frogSim.frog
+let initialPerched = (initialFrog.state == .perched)
+let initialVisible = initialFrog.isVisible
+let initialAtPerch = (initialFrog.position == initialFrog.perchPosition)
+let perchInBounds = frogSim.bounds.contains(PondVector(x: Double(initialFrog.perchPosition.x), y: Double(initialFrog.perchPosition.y)))
+
+let t14_1Passed = initialPerched && initialVisible && initialAtPerch && perchInBounds
+recordSimTest(
+    "T14.1 Pond Frog Initial Perched State & Pad Placement",
+    passed: t14_1Passed,
+    details: "state=\(initialFrog.state), isVisible=\(initialVisible), perchPos=(\(String(format: "%.1f", initialFrog.perchPosition.x)), \(String(format: "%.1f", initialFrog.perchPosition.y))), inBounds=\(perchInBounds)"
+)
+
+// T14.2 Idle Micro-Animations (Throat breathing, croak, blink, head twitch)
+var sawBreathing = false
+var sawBlink = false
+var sawCroak = false
+var sawHeadTwitch = false
+let initialThroat = frogSim.frog.throatPhase
+let initialHeadOffset = frogSim.frog.headAngleOffset
+
+// Step for 8 seconds (idle perched period)
+for _ in 0..<480 {
+    frogSim.stepSimulation(dt: 1.0 / 60.0)
+    if frogSim.frog.state == .perched {
+        if abs(frogSim.frog.throatPhase - initialThroat) > 1.0 { sawBreathing = true }
+        if frogSim.frog.isBlinking { sawBlink = true }
+        if frogSim.frog.croakProgress > 0.05 { sawCroak = true }
+        if abs(frogSim.frog.headAngleOffset - initialHeadOffset) > 0.01 { sawHeadTwitch = true }
+    }
+}
+
+let t14_2Passed = sawBreathing && (sawBlink || sawCroak || sawHeadTwitch)
+recordSimTest(
+    "T14.2 Pond Frog Idle Micro-Animations (Breathing, Blink, Croak)",
+    passed: t14_2Passed,
+    details: "sawBreathing=\(sawBreathing), sawBlink=\(sawBlink), sawCroak=\(sawCroak), sawHeadTwitch=\(sawHeadTwitch)"
+)
+
+// T14.3 Leap Out Arc, Parabolic Altitude & Water Landing Splash Ripple
+let jumpSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), theme: .day)
+jumpSim.frog.triggerJumpIfPerched() // Start leap
+let beganCrouch = (jumpSim.frog.state == .crouching)
+
+// Advance past crouch into jumpingOut
+jumpSim.stepSimulation(dt: 0.20)
+let inAirborneLeap = (jumpSim.frog.state == .jumpingOut)
+var maxAltitudeRecorded: CGFloat = 0.0
+
+let rippleCountBeforeSplash = jumpSim.ripples.count
+while jumpSim.frog.state == .jumpingOut {
+    maxAltitudeRecorded = max(maxAltitudeRecorded, jumpSim.frog.altitude)
+    jumpSim.stepSimulation(dt: 1.0 / 60.0)
+}
+
+let reachedApex = maxAltitudeRecorded >= 20.0
+let submergedAway = (jumpSim.frog.state == .away && !jumpSim.frog.isVisible)
+let splashRippleSpawned = (jumpSim.ripples.count > rippleCountBeforeSplash)
+
+let t14_3Passed = beganCrouch && inAirborneLeap && reachedApex && submergedAway && splashRippleSpawned
+recordSimTest(
+    "T14.3 Frog Parabolic Leap Out & Water Splash Ripple",
+    passed: t14_3Passed,
+    details: "beganCrouch=\(beganCrouch), inLeap=\(inAirborneLeap), apexAltitude=\(String(format: "%.1f", maxAltitudeRecorded))pt, submergedAway=\(submergedAway), splashRipple=\(splashRippleSpawned)"
+)
+
+// T14.4 Submerged Away Timing, Return Leap & Pad Touchdown
+var sawReturnLeap = false
+var returnApex: CGFloat = 0.0
+
+// Advance through away state until return leap triggers
+for _ in 0..<700 {
+    jumpSim.stepSimulation(dt: 1.0 / 60.0)
+    if jumpSim.frog.state == .jumpingIn {
+        sawReturnLeap = true
+        returnApex = max(returnApex, jumpSim.frog.altitude)
+    }
+    if jumpSim.frog.state == .landing || jumpSim.frog.state == .perched {
+        break
+    }
+}
+
+// Complete landing cushion into perched
+for _ in 0..<30 {
+    jumpSim.stepSimulation(dt: 1.0 / 60.0)
+}
+
+let returnedToPerch = (jumpSim.frog.state == .perched && jumpSim.frog.isVisible)
+let landedNearPerch = hypot(jumpSim.frog.position.x - jumpSim.frog.perchPosition.x, jumpSim.frog.position.y - jumpSim.frog.perchPosition.y) < 0.1
+
+let t14_4Passed = sawReturnLeap && (returnApex >= 20.0) && returnedToPerch && landedNearPerch
+recordSimTest(
+    "T14.4 Frog Away Timing, Return Leap & Lily Pad Touchdown",
+    passed: t14_4Passed,
+    details: "sawReturnLeap=\(sawReturnLeap), returnApex=\(String(format: "%.1f", returnApex))pt, returnedToPerch=\(returnedToPerch), landedAtPerch=\(landedNearPerch)"
+)
+
+// T14.5 Interactive Water Click Startle
+let frogClickSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), theme: .day)
+// Click far away -> frog remains perched
+frogClickSim.handleWaterClick(at: PondVector(x: 700.0, y: 500.0))
+let ignoredFarClick = (frogClickSim.frog.state == .perched)
+
+// Click right near frog -> startles into crouch & jump!
+let nearFrogPoint = PondVector(x: Double(frogClickSim.frog.position.x) + 15.0, y: Double(frogClickSim.frog.position.y) - 10.0)
+frogClickSim.handleWaterClick(at: nearFrogPoint)
+let startledByClick = (frogClickSim.frog.state == .crouching)
+
+let t14_5Passed = ignoredFarClick && startledByClick
+recordSimTest(
+    "T14.5 Interactive Click Near Frog Startles Leap",
+    passed: t14_5Passed,
+    details: "ignoredFarClick=\(ignoredFarClick), startledByClick=\(startledByClick)"
+)
+
+// T14.6 Bounds Resize Proportionality & Simulation Pause Freeze
+let resizeSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), theme: .day)
+let originalPerch = resizeSim.frog.perchPosition
+resizeSim.resize(width: 1200.0, height: 900.0)
+let resizedPerch = resizeSim.frog.perchPosition
+let perchMovedProportionally = (resizedPerch.x > originalPerch.x && resizedPerch.y > originalPerch.y)
+
+// Pause freeze test
+resizeSim.isPaused = true
+let frogPosFrozen = resizeSim.frog.position
+let frogThroatFrozen = resizeSim.frog.throatPhase
+for _ in 0..<60 {
+    resizeSim.advance(deltaTime: 1.0 / 60.0)
+}
+let pauseMaintained = (resizeSim.frog.position == frogPosFrozen && resizeSim.frog.throatPhase == frogThroatFrozen)
+
+let t14_6Passed = perchMovedProportionally && pauseMaintained
+recordSimTest(
+    "T14.6 Frog Bounds Resize Adaptability & Pause Freeze",
+    passed: t14_6Passed,
+    details: "proportionalResize=\(perchMovedProportionally), pauseMaintained=\(pauseMaintained)"
+)
+
+// -------------------------------------------------------------
 // SUMMARY & RESULTS
 // -------------------------------------------------------------
 print("\n=======================================================")

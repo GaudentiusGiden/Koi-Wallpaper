@@ -24,6 +24,7 @@ struct PondRenderFrame {
     let surface: [PondStroke]
     let flora: [PondImagePlacement]
     let floraTarget: [PondImagePlacement]
+    let insects: PondImagePlacement?
     let tint: CGColor?
     let transitionProgress: CGFloat
     let isTransitioning: Bool
@@ -49,6 +50,8 @@ public final class PondRenderer {
     private var waterB = PondWaterSurface()
     private var sceneContext: CGContext?
     private var scenePixels: CGSize = .zero
+    private var insectContext: CGContext?
+    private var insectPixels: CGSize = .zero
     private var cachedFloraA: [PondImagePlacement] = []
     private var cachedFloraB: [PondImagePlacement] = []
     private var floraSizeA: CGSize = .zero
@@ -261,6 +264,7 @@ public final class PondRenderer {
                 context.strokePath()
             }
             for placement in frame.flora { draw(placement, in: context) }
+            if let insects = frame.insects { draw(insects, in: context) }
             if let tint = frame.tint {
                 context.setFillColor(tint)
                 context.fill(CGRect(origin: .zero, size: rect.size))
@@ -326,6 +330,7 @@ public final class PondRenderer {
                 draw(placement, in: context)
                 context.restoreGState()
             }
+            if let insects = frame.insects { draw(insects, in: context) }
             if let tint = frame.tint {
                 context.setFillColor(tint)
                 context.fill(CGRect(origin: .zero, size: rect.size))
@@ -522,6 +527,33 @@ public final class PondRenderer {
             tintColor = Self.themeTint(toTheme)
         }
 
+        var insectPlacement: PondImagePlacement?
+        if !simulation.insects.isEmpty || simulation.frog.isVisible {
+            if insectContext == nil || pixels != insectPixels {
+                insectPixels = pixels
+                insectContext = CGContext(data: nil, width: Int(pixels.width), height: Int(pixels.height),
+                                          bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            }
+            if let bitmap = insectContext {
+                bitmap.clear(CGRect(origin: .zero, size: pixels))
+                bitmap.saveGState()
+                bitmap.scaleBy(x: 1 / pixelSize, y: 1 / pixelSize)
+                bitmap.setShouldAntialias(false)
+                PondFrogArtwork.draw(simulation.frog, in: bitmap, time: simulation.elapsedTime)
+                PondInsectArtwork.drawInsects(simulation.insects, in: bitmap, time: simulation.elapsedTime)
+                bitmap.restoreGState()
+
+                if let image = bitmap.makeImage() {
+                    insectPlacement = PondImagePlacement(
+                        image: image,
+                        rect: CGRect(x: 0, y: 0, width: pixels.width * pixelSize, height: pixels.height * pixelSize),
+                        pixelated: true
+                    )
+                }
+            }
+        }
+
         return PondRenderFrame(
             size: size,
             bed: bedPlacementA,
@@ -532,6 +564,7 @@ public final class PondRenderer {
             surface: surfaceStrokes,
             flora: floraA,
             floraTarget: floraB,
+            insects: insectPlacement,
             tint: tintColor,
             transitionProgress: clampedP,
             isTransitioning: isTransitioning

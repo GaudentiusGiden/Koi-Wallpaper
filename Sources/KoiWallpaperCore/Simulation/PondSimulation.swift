@@ -16,14 +16,21 @@ public final class PondSimulation: @unchecked Sendable {
     public private(set) var ripples: [WaterRipple] = []
     public private(set) var clickTargets: [ClickTarget] = []
     public private(set) var visitors: [PondVisitor] = []
+    public private(set) var insects: [PondInsect] = []
+    public var frog: PondFrog
 
     public var isPaused: Bool = false
     public var mood: PondMood = .calm
     public var isRainActive: Bool = false
+    public private(set) var currentTheme: PondTheme = .day
     public let feedingRoutineManager: FeedingRoutineManager
     public let dailyGreetingManager: DailyGreetingManager
     private var rainTimer: Double = 0.0
     public let maxRainRipples: Int = 16
+
+    // Insect dynamics & periodic koi curiosity targeting
+    private var insectTargetTimer: Double = 0.0
+    private var nextInsectTargetInterval: Double = 14.0
 
     // Timing and frame-rate stability
     public let fixedDeltaTime: Double
@@ -44,6 +51,7 @@ public final class PondSimulation: @unchecked Sendable {
     public let maxRipples: Int = 64
     public let maxFeedingFish: Int = 3
     public let maxVisitors: Int = 6
+    public let maxInsects: Int = 4
 
     public init(
         bounds: PondBounds = PondBounds(width: 1280.0, height: 800.0),
@@ -51,9 +59,11 @@ public final class PondSimulation: @unchecked Sendable {
         maxCatchUpDelta: Double = 0.10,
         initialFish: [KoiFish]? = nil,
         initialPellets: [FoodPellet]? = nil,
+        initialInsects: [PondInsect]? = nil,
         seed: UInt64? = nil,
         mood: PondMood = .calm,
         isRainActive: Bool = false,
+        theme: PondTheme = .day,
         feedingRoutineManager: FeedingRoutineManager? = nil,
         dailyGreetingManager: DailyGreetingManager? = nil,
         feedingStore: FeedingStore? = nil,
@@ -65,6 +75,8 @@ public final class PondSimulation: @unchecked Sendable {
         self.rng = SeededRandomNumberGenerator(seed: seed ?? 0x1337_cafe_babe_dead)
         self.mood = mood
         self.isRainActive = isRainActive
+        self.currentTheme = theme
+        self.nextInsectTargetInterval = Double.random(in: 12.0...20.0, using: &self.rng)
 
         if let routineMgr = feedingRoutineManager {
             self.feedingRoutineManager = routineMgr
@@ -82,6 +94,8 @@ public final class PondSimulation: @unchecked Sendable {
             self.dailyGreetingManager = DailyGreetingManager()
         }
 
+        self.frog = PondFrog.initial(bounds: bounds)
+
         if let customFish = initialFish {
             self.fish = customFish
         } else {
@@ -90,6 +104,12 @@ public final class PondSimulation: @unchecked Sendable {
 
         if let customPellets = initialPellets {
             self.pellets = customPellets
+        }
+
+        if let customInsects = initialInsects {
+            self.insects = customInsects
+        } else {
+            initializeInsects(for: theme)
         }
     }
 
@@ -143,6 +163,9 @@ public final class PondSimulation: @unchecked Sendable {
         visitors.removeAll()
         timeAccumulator = 0.0
         elapsedTime = 0.0
+        insectTargetTimer = 0.0
+        nextInsectTargetInterval = Double.random(in: 12.0...20.0, using: &rng)
+        initializeInsects(for: currentTheme)
         initializeEightKoi()
     }
 
@@ -153,6 +176,7 @@ public final class PondSimulation: @unchecked Sendable {
         let positions = fish.map(\.position)
         let pelletPositions = pellets.map(\.position)
         let visitorPositions = visitors.map(\.position)
+        let insectPositions = insects.map(\.position)
         bounds = PondBounds(width: width, height: height, margin: bounds.margin)
 
         let scaleX = width / oldBounds.width
@@ -168,6 +192,10 @@ public final class PondSimulation: @unchecked Sendable {
         for i in 0..<visitors.count {
             visitors[i].position = PondVector(x: visitorPositions[i].x * scaleX, y: visitorPositions[i].y * scaleY)
         }
+        for i in 0..<insects.count {
+            insects[i].position = PondVector(x: insectPositions[i].x * scaleX, y: insectPositions[i].y * scaleY)
+        }
+        frog.updateLocations(bounds: bounds)
 
         clampAllEntitiesToBounds()
         resolveFishSeparation()
@@ -185,6 +213,9 @@ public final class PondSimulation: @unchecked Sendable {
         for i in 0..<visitors.count {
             visitors[i].position = bounds.clamped(visitors[i].position, inset: visitors[i].radius + 4.0)
         }
+        for i in 0..<insects.count {
+            insects[i].position = bounds.clamped(insects[i].position, inset: 16.0)
+        }
     }
 
     // MARK: - Input Handling
@@ -193,6 +224,12 @@ public final class PondSimulation: @unchecked Sendable {
     /// distributed along the ripple perimeter so koi investigate without converging on a single point.
     public func handleWaterClick(at point: PondVector) {
         guard !isPaused else { return }
+
+        // Startle perched frog if click is nearby
+        let frogDist = hypot(point.x - Double(frog.position.x), point.y - Double(frog.position.y))
+        if frogDist < 48.0 {
+            frog.triggerJumpIfPerched()
+        }
 
         // Spawn ripple (cyan)
         if ripples.count < maxRipples {
@@ -270,7 +307,7 @@ public final class PondSimulation: @unchecked Sendable {
 
         // Alert closest fish to food presence (strictly capped at maxFeedingFish)
         let eligibleFish = fish.indices
-            .filter { fish[$0].state == .wandering }
+            .filter { fish[$0].state == .wandering || fish[$0].state == .followingInsect }
             .sorted { idx1, idx2 in
                 let d1 = fish[idx1].position.distanceSquared(to: point) / (0.5 + fish[idx1].traits.feedingEagerness)
                 let d2 = fish[idx2].position.distanceSquared(to: point) / (0.5 + fish[idx2].traits.feedingEagerness)
@@ -295,9 +332,9 @@ public final class PondSimulation: @unchecked Sendable {
     }
 
     /// Directly sets an attraction or steering target for a specific fish by index.
-    public func setFishTarget(at index: Int, target: PondVector, state: KoiBehaviorState, duration: Double, visitorId: UUID? = nil) {
+    public func setFishTarget(at index: Int, target: PondVector, state: KoiBehaviorState, duration: Double, visitorId: UUID? = nil, insectId: UUID? = nil) {
         guard index >= 0 && index < fish.count else { return }
-        fish[index].setTarget(target, state: state, duration: duration, visitorId: visitorId)
+        fish[index].setTarget(target, state: state, duration: duration, visitorId: visitorId, insectId: insectId)
     }
 
     // MARK: - Visitor Management
@@ -375,6 +412,183 @@ public final class PondSimulation: @unchecked Sendable {
         }
     }
 
+    // MARK: - Insect Simulation & Theme Transition
+
+    /// Initializes pond insects for a given theme:
+    /// 2 dragonflies + 2 butterflies on non-night themes (day, dawn, dusk, goldenHour, deepClear, rain),
+    /// and 4 fireflies on night theme.
+    public func initializeInsects(for theme: PondTheme) {
+        clearInsects()
+        insects = createInsects(for: theme, opacity: 1.0, targetOpacity: 1.0)
+    }
+
+    /// Clears all insects and any koi target following an insect.
+    public func clearInsects() {
+        insects.removeAll()
+        for i in 0..<fish.count {
+            if fish[i].state == .followingInsect {
+                fish[i].clearTarget()
+            }
+        }
+    }
+
+    /// Helper to generate a themed insect group.
+    public func createInsects(for theme: PondTheme, opacity: Double, targetOpacity: Double) -> [PondInsect] {
+        var group: [PondInsect] = []
+        let margin = 55.0
+        let minX = bounds.minX + margin
+        let maxX = bounds.maxX - margin
+        let minY = bounds.minY + margin
+        let maxY = bounds.maxY - margin
+        let spanX = max(40.0, maxX - minX)
+        let spanY = max(40.0, maxY - minY)
+
+        if theme.isNight {
+            // 4 Fireflies distributed across the pond
+            let offsets: [(Double, Double)] = [(0.25, 0.35), (0.75, 0.30), (0.35, 0.72), (0.72, 0.68)]
+            for (i, offset) in offsets.enumerated() {
+                let posX = minX + spanX * offset.0 + Double.random(in: -25...25, using: &rng)
+                let posY = minY + spanY * offset.1 + Double.random(in: -25...25, using: &rng)
+                let heading = Double.random(in: -Double.pi...Double.pi, using: &rng)
+                let seed = rng.next()
+                let firefly = PondInsect(
+                    type: .firefly,
+                    position: bounds.clamped(PondVector(x: posX, y: posY), inset: 20.0),
+                    heading: heading,
+                    opacity: opacity,
+                    targetOpacity: targetOpacity,
+                    colorVariant: i % 2,
+                    seed: seed
+                )
+                group.append(firefly)
+            }
+        } else {
+            // 2 Dragonflies and 2 Butterflies distributed across the pond
+            let offsets: [(Double, Double)] = [(0.28, 0.30), (0.72, 0.68), (0.68, 0.32), (0.32, 0.70)]
+            for i in 0..<4 {
+                let posX = minX + spanX * offsets[i].0 + Double.random(in: -25...25, using: &rng)
+                let posY = minY + spanY * offsets[i].1 + Double.random(in: -25...25, using: &rng)
+                let heading = Double.random(in: -Double.pi...Double.pi, using: &rng)
+                let seed = rng.next()
+                let type: PondInsectType = (i < 2) ? .dragonfly : .butterfly
+                let insect = PondInsect(
+                    type: type,
+                    position: bounds.clamped(PondVector(x: posX, y: posY), inset: 20.0),
+                    heading: heading,
+                    opacity: opacity,
+                    targetOpacity: targetOpacity,
+                    colorVariant: i % 2,
+                    seed: seed
+                )
+                group.append(insect)
+            }
+        }
+        return group
+    }
+
+    /// Sets the active theme, smoothly fading between night and non-night insect populations when animated.
+    public func setTheme(_ newTheme: PondTheme, animated: Bool = true) {
+        if !animated {
+            currentTheme = newTheme
+            for i in 0..<fish.count {
+                if fish[i].state == .followingInsect {
+                    fish[i].clearTarget()
+                }
+            }
+            initializeInsects(for: newTheme)
+            return
+        }
+
+        if newTheme.isNight == currentTheme.isNight {
+            currentTheme = newTheme
+            return
+        }
+
+        currentTheme = newTheme
+        // Cross-species theme transition: fade out existing group, fade in new group
+        for i in 0..<insects.count {
+            insects[i].targetOpacity = 0.0
+        }
+        for i in 0..<fish.count {
+            if fish[i].state == .followingInsect {
+                fish[i].clearTarget()
+            }
+        }
+
+        let targetType: PondInsectType = newTheme.isNight ? .firefly : .dragonfly
+        let hasNewSpecies = insects.contains { $0.type == targetType }
+        if !hasNewSpecies {
+            let newGroup = createInsects(for: newTheme, opacity: 0.0, targetOpacity: 1.0)
+            insects.append(contentsOf: newGroup)
+        } else {
+            for i in 0..<insects.count {
+                let matches = newTheme.isNight ? (insects[i].type == .firefly) : (insects[i].type != .firefly)
+                if matches {
+                    insects[i].targetOpacity = 1.0
+                }
+            }
+        }
+    }
+
+    /// Updates insect opacity during theme transitions driven by an external progress (0.0 to 1.0).
+    public func updateThemeTransition(from fromTheme: PondTheme, to toTheme: PondTheme, progress: Double) {
+        let p = max(0.0, min(1.0, progress))
+
+        if fromTheme.isNight == toTheme.isNight {
+            currentTheme = toTheme
+            let targetType: PondInsectType = toTheme.isNight ? .firefly : .dragonfly
+            let hasCorrectSpecies = insects.contains { $0.type == targetType }
+            if !hasCorrectSpecies || insects.count != 4 {
+                initializeInsects(for: toTheme)
+            } else {
+                for i in 0..<insects.count {
+                    insects[i].opacity = 1.0
+                    insects[i].targetOpacity = 1.0
+                }
+            }
+            return
+        }
+
+        currentTheme = (p >= 0.5) ? toTheme : fromTheme
+        let fromIsNight = fromTheme.isNight
+        let toIsNight = toTheme.isNight
+
+        let hasFromGroup = insects.contains { fromIsNight ? ($0.type == .firefly) : ($0.type != .firefly) }
+        let hasToGroup = insects.contains { toIsNight ? ($0.type == .firefly) : ($0.type != .firefly) }
+
+        if !hasFromGroup {
+            let group = createInsects(for: fromTheme, opacity: 1.0 - p, targetOpacity: 0.0)
+            insects.append(contentsOf: group)
+        }
+        if !hasToGroup {
+            let group = createInsects(for: toTheme, opacity: p, targetOpacity: 1.0)
+            insects.append(contentsOf: group)
+        }
+
+        for i in 0..<insects.count {
+            let isToGroup = toIsNight ? (insects[i].type == .firefly) : (insects[i].type != .firefly)
+            if isToGroup {
+                insects[i].opacity = p
+                insects[i].targetOpacity = 1.0
+            } else {
+                insects[i].opacity = 1.0 - p
+                insects[i].targetOpacity = 0.0
+            }
+        }
+
+        if p >= 1.0 {
+            currentTheme = toTheme
+            insects.removeAll { insect in
+                let isOld = toIsNight ? (insect.type != .firefly) : (insect.type == .firefly)
+                return isOld || insect.opacity <= 0.001
+            }
+            for i in 0..<insects.count {
+                insects[i].opacity = 1.0
+                insects[i].targetOpacity = 1.0
+            }
+        }
+    }
+
     // MARK: - Time Stepping & Physics Update
 
     /// Advances simulation by deltaTime, using a fixed timestep accumulator and catch-up limiting.
@@ -408,7 +622,7 @@ public final class PondSimulation: @unchecked Sendable {
         let neededFeeders = min(maxFeedingFish, activePellets.count) - activeFeeders.count
         if neededFeeders > 0 && !activePellets.isEmpty {
             let closestWanderers = fish.indices
-                .filter { fish[$0].state == .wandering }
+                .filter { fish[$0].state == .wandering || fish[$0].state == .followingInsect }
                 .sorted { idx1, idx2 in
                     let d1 = activePellets.map { fish[idx1].position.distanceSquared(to: $0.position) }.min() ?? Double.infinity
                     let d2 = activePellets.map { fish[idx2].position.distanceSquared(to: $0.position) }.min() ?? Double.infinity
@@ -608,7 +822,72 @@ public final class PondSimulation: @unchecked Sendable {
             }
         }
 
-        // 6. Update click targets
+        // 6. Update Insects & Koi Curiosity Interaction
+        for i in 0..<insects.count {
+            insects[i].update(dt: dt, bounds: bounds)
+        }
+        // Purge fully faded out insects
+        insects.removeAll { $0.targetOpacity == 0.0 && $0.opacity <= 0.001 }
+
+        // Update fish following insects: track moving target and ensure zero stuck fish guarantee
+        for i in 0..<fish.count {
+            if fish[i].state == .followingInsect {
+                if let targetInsectId = fish[i].targetInsectId,
+                   let activeInsect = insects.first(where: { $0.id == targetInsectId && $0.opacity > 0.05 }) {
+                    let target = bounds.clamped(activeInsect.position, inset: fish[i].physicalRadius)
+                    fish[i].updateMovingTarget(target)
+                } else {
+                    // Insect missing or faded out: return to wandering immediately!
+                    fish[i].clearTarget()
+                }
+            }
+        }
+
+        // Attract a curious wandering fish to follow a low-flying insect (approx every 12-20s)
+        // Food and click targets remain strictly prioritized!
+        if pellets.isEmpty && clickTargets.isEmpty && !fish.contains(where: { $0.state == .followingInsect }) {
+            insectTargetTimer += dt
+            if insectTargetTimer >= nextInsectTargetInterval {
+                insectTargetTimer = 0.0
+                nextInsectTargetInterval = Double.random(in: 12.0...20.0, using: &rng)
+
+                let activeInsects = insects.filter { $0.opacity >= 0.5 }
+                if !activeInsects.isEmpty {
+                    let lowFlying = activeInsects.filter(\.isFlyingLow)
+                    let chosenInsect = lowFlying.randomElement(using: &rng) ?? activeInsects.min(by: { $0.altitude < $1.altitude })!
+
+                    let eligibleFish = fish.indices.filter { fish[$0].state == .wandering && fish[$0].currentTarget == nil }
+                    if !eligibleFish.isEmpty {
+                        let chosenFishIdx = eligibleFish.max(by: { idx1, idx2 in
+                            let d1 = fish[idx1].position.distance(to: chosenInsect.position)
+                            let d2 = fish[idx2].position.distance(to: chosenInsect.position)
+                            let s1 = fish[idx1].traits.curiosity / (1.0 + d1 / 250.0)
+                            let s2 = fish[idx2].traits.curiosity / (1.0 + d2 / 250.0)
+                            return s1 < s2
+                        })!
+
+                        let target = bounds.clamped(chosenInsect.position, inset: fish[chosenFishIdx].physicalRadius)
+                        fish[chosenFishIdx].setTarget(target, state: .followingInsect, duration: 5.5, insectId: chosenInsect.id)
+                    }
+                }
+            }
+        }
+
+        // 7. Update Pond Frog
+        frog.update(dt: dt, bounds: bounds) { [weak self] point, rippleType in
+            guard let self = self else { return }
+            if self.ripples.count < self.maxRipples {
+                let p = PondVector(x: Double(point.x), y: Double(point.y))
+                self.ripples.append(WaterRipple(
+                    center: p,
+                    type: rippleType,
+                    initialRadius: 4.0,
+                    maxRadius: (rippleType == .waterCall ? 44.0 : 22.0)
+                ))
+            }
+        }
+
+        // 8. Update click targets
         for i in 0..<clickTargets.count {
             clickTargets[i].update(dt: dt)
         }

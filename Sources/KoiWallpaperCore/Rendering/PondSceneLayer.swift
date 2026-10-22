@@ -17,6 +17,7 @@ public final class PondSceneLayer: CALayer {
     private let surfaceLayer = CALayer()
     private let floraLayersA = (0..<6).map { _ in CALayer() }
     private let floraLayersB = (0..<6).map { _ in CALayer() }
+    private let insectLayer = CALayer()
     private let tintLayer = CALayer()
 
     public init(renderer: PondRenderer) {
@@ -44,6 +45,8 @@ public final class PondSceneLayer: CALayer {
         addSublayer(surfaceLayer)
         for layer in floraLayersA { addSublayer(layer) }
         for layer in floraLayersB { addSublayer(layer) }
+        insectLayer.name = "insects"
+        addSublayer(insectLayer)
         addSublayer(tintLayer)
 
         bedLayerB.isHidden = true
@@ -201,6 +204,15 @@ public final class PondSceneLayer: CALayer {
             } else {
                 layer.contents = nil
             }
+        }
+
+        // Insects layer (vector layer above flora and below atmospheric tint)
+        if let insects = frame.insects {
+            insectLayer.isHidden = false
+            apply(insects, to: insectLayer)
+        } else {
+            insectLayer.isHidden = true
+            insectLayer.contents = nil
         }
 
         // Atmospheric tint

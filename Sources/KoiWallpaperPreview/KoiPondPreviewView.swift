@@ -57,6 +57,7 @@ public final class KoiPondPreviewView: NSView {
             activeTheme = newTheme
             targetTheme = newTheme
             transitionProgress = 1.0
+            simulation.setTheme(newTheme, animated: false)
             needsDisplay = true
             return
         }
@@ -227,6 +228,11 @@ public final class KoiPondPreviewView: NSView {
                 }
             }
 
+            self.simulation.updateThemeTransition(
+                from: self.activeTheme,
+                to: self.targetTheme,
+                progress: Double(self.transitionProgress)
+            )
             self.simulation.advance(deltaTime: dt)
             self.needsDisplay = true
         }
@@ -262,6 +268,11 @@ public final class KoiPondPreviewView: NSView {
     public override func draw(_ dirtyRect: NSRect) { updateLayer() }
 
     public override func updateLayer() {
+        simulation.updateThemeTransition(
+            from: activeTheme,
+            to: targetTheme,
+            progress: Double(transitionProgress)
+        )
         sceneLayer.update(
             simulation: simulation,
             bounds: bounds,

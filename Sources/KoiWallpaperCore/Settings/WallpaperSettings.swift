@@ -58,6 +58,10 @@ public enum PondTheme: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    public var isNight: Bool {
+        self == .night
+    }
+
     public var asTimePhase: TimeOfDayPhase? {
         TimeOfDayPhase(rawValue: rawValue)
     }
