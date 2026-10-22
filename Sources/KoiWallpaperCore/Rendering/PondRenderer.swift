@@ -626,6 +626,24 @@ public final class PondRenderer {
                 width: unit * 0.25
             ))
         }
+
+        if simulation.isRainActive {
+            // Strictly bounded atmospheric falling rain streaks (16 streaks max)
+            for i in 0..<16 {
+                let seed = Double(i)
+                let rainX = CGFloat(fmod(Double(size.width) * (0.05 + Double(i) * 0.06) + simulation.elapsedTime * 60.0, Double(size.width)))
+                let rainY = CGFloat(fmod(Double(size.height) * (sin(seed * 3.1) * 0.5 + 0.5) + simulation.elapsedTime * 350.0, Double(size.height)))
+                let streakLength = unit * 4.5
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: rainX - streakLength * 0.35, y: rainY - streakLength))
+                path.addLine(to: CGPoint(x: rainX, y: rainY))
+                strokes.append(PondStroke(
+                    path: path,
+                    color: CGColor(red: 0.85, green: 0.92, blue: 0.98, alpha: 0.25),
+                    width: 1.0
+                ))
+            }
+        }
         for ripple in simulation.ripples where !ripple.isDead {
             let center = CGPoint(x: ripple.center.x, y: ripple.center.y)
             let radius = CGFloat(ripple.radius)
@@ -635,10 +653,12 @@ public final class PondRenderer {
             case .waterCall: color = (0.61, 0.91, 0.77)
             case .foodDrop: color = (0.98, 0.71, 0.34)
             case .eatingNibble: color = (0.93, 0.98, 0.86)
+            case .rainDrop: color = (0.78, 0.88, 0.95)
             }
+            let strokeWidth: CGFloat = (ripple.type == .rainDrop) ? 1.0 : 1.5
             let path = CGPath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2), transform: nil)
-            strokes.append(PondStroke(path: path, color: CGColor(red: color.0, green: color.1, blue: color.2, alpha: alpha * 0.75), width: 1.5))
-            if radius > 16 && ripple.type != .eatingNibble {
+            strokes.append(PondStroke(path: path, color: CGColor(red: color.0, green: color.1, blue: color.2, alpha: alpha * 0.75), width: strokeWidth))
+            if radius > 16 && ripple.type != .eatingNibble && ripple.type != .rainDrop {
                 let r = radius * 0.65
                 let inner = CGPath(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2), transform: nil)
                 strokes.append(PondStroke(path: inner, color: CGColor(red: color.0, green: color.1, blue: color.2, alpha: alpha * 0.35), width: 1))

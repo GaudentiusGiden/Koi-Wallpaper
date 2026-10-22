@@ -17,6 +17,12 @@ public final class PondSimulation: @unchecked Sendable {
     public private(set) var clickTargets: [ClickTarget] = []
 
     public var isPaused: Bool = false
+    public var mood: PondMood = .calm
+    public var isRainActive: Bool = false
+    public let feedingRoutineManager: FeedingRoutineManager
+    public let dailyGreetingManager: DailyGreetingManager
+    private var rainTimer: Double = 0.0
+    public let maxRainRipples: Int = 16
 
     // Timing and frame-rate stability
     public let fixedDeltaTime: Double
@@ -43,12 +49,36 @@ public final class PondSimulation: @unchecked Sendable {
         maxCatchUpDelta: Double = 0.10,
         initialFish: [KoiFish]? = nil,
         initialPellets: [FoodPellet]? = nil,
-        seed: UInt64? = nil
+        seed: UInt64? = nil,
+        mood: PondMood = .calm,
+        isRainActive: Bool = false,
+        feedingRoutineManager: FeedingRoutineManager? = nil,
+        dailyGreetingManager: DailyGreetingManager? = nil,
+        feedingStore: FeedingStore? = nil,
+        greetingStore: DailyGreetingStore? = nil
     ) {
         self.bounds = bounds
         self.fixedDeltaTime = fixedDeltaTime
         self.maxCatchUpDelta = maxCatchUpDelta
         self.rng = SeededRandomNumberGenerator(seed: seed ?? 0x1337_cafe_babe_dead)
+        self.mood = mood
+        self.isRainActive = isRainActive
+
+        if let routineMgr = feedingRoutineManager {
+            self.feedingRoutineManager = routineMgr
+        } else if let store = feedingStore {
+            self.feedingRoutineManager = FeedingRoutineManager(store: store)
+        } else {
+            self.feedingRoutineManager = FeedingRoutineManager()
+        }
+
+        if let greetMgr = dailyGreetingManager {
+            self.dailyGreetingManager = greetMgr
+        } else if let store = greetingStore {
+            self.dailyGreetingManager = DailyGreetingManager(store: store)
+        } else {
+            self.dailyGreetingManager = DailyGreetingManager()
+        }
 
         if let customFish = initialFish {
             self.fish = customFish
@@ -163,9 +193,11 @@ public final class PondSimulation: @unchecked Sendable {
         let target = ClickTarget(position: point, duration: 4.5)
         clickTargets.append(target)
 
-        // Select the up to 3 closest fish
-        let sortedIndices = Array(fish.indices.sorted {
-            fish[$0].position.distanceSquared(to: point) < fish[$1].position.distanceSquared(to: point)
+        // Select the up to 3 closest curious fish
+        let sortedIndices = Array(fish.indices.sorted { idx1, idx2 in
+            let d1 = fish[idx1].position.distanceSquared(to: point) / (0.5 + fish[idx1].traits.curiosity)
+            let d2 = fish[idx2].position.distanceSquared(to: point) / (0.5 + fish[idx2].traits.curiosity)
+            return d1 < d2
         }.prefix(3))
 
         guard !sortedIndices.isEmpty else { return }
@@ -229,12 +261,19 @@ public final class PondSimulation: @unchecked Sendable {
         // Alert closest fish to food presence (strictly capped at maxFeedingFish)
         let eligibleFish = fish.indices
             .filter { fish[$0].state == .wandering }
-            .sorted { fish[$0].position.distanceSquared(to: point) < fish[$1].position.distanceSquared(to: point) }
+            .sorted { idx1, idx2 in
+                let d1 = fish[idx1].position.distanceSquared(to: point) / (0.5 + fish[idx1].traits.feedingEagerness)
+                let d2 = fish[idx2].position.distanceSquared(to: point) / (0.5 + fish[idx2].traits.feedingEagerness)
+                return d1 < d2
+            }
 
         let responseCount = min(maxFeedingFish, max(1, countToAdd))
         for idx in eligibleFish.prefix(responseCount) {
             fish[idx].setTarget(point, state: .seekingFood, duration: 5.0)
         }
+
+        // Record feeding event in long-term memory
+        feedingRoutineManager.recordFeeding(at: point, bounds: bounds, at: Date())
     }
 
     /// Directly adds a single pellet at exact coordinates without scatter.
@@ -242,6 +281,13 @@ public final class PondSimulation: @unchecked Sendable {
         guard !isPaused, pellets.count < maxPellets else { return }
         let clamped = bounds.clamped(point, inset: 10.0)
         pellets.append(FoodPellet(position: clamped))
+        feedingRoutineManager.recordFeeding(at: clamped, bounds: bounds, at: Date())
+    }
+
+    /// Directly sets an attraction or steering target for a specific fish by index.
+    public func setFishTarget(at index: Int, target: PondVector, state: KoiBehaviorState, duration: Double) {
+        guard index >= 0 && index < fish.count else { return }
+        fish[index].setTarget(target, state: state, duration: duration)
     }
 
     // MARK: - Time Stepping & Physics Update
@@ -315,7 +361,8 @@ public final class PondSimulation: @unchecked Sendable {
                 dt: dt,
                 bounds: bounds,
                 allFish: currentFish,
-                nearestFood: targetForThisFish
+                nearestFood: targetForThisFish,
+                mood: mood
             )
 
             // Check food consumption at fish mouth
@@ -361,6 +408,40 @@ public final class PondSimulation: @unchecked Sendable {
             ripples[i].update(dt: dt)
         }
         ripples.removeAll { $0.isDead }
+
+        // Atmospheric rain drops: strictly capped to maxRainRipples
+        if isRainActive {
+            rainTimer += dt
+            if rainTimer >= 0.22 {
+                rainTimer = 0.0
+                let activeRainRipples = ripples.reduce(0) { $0 + ($1.type == .rainDrop ? 1 : 0) }
+                if activeRainRipples < maxRainRipples && ripples.count < maxRipples {
+                    let rx = Double.random(in: bounds.minX...bounds.maxX, using: &rng)
+                    let ry = Double.random(in: bounds.minY...bounds.maxY, using: &rng)
+                    ripples.append(WaterRipple(center: PondVector(x: rx, y: ry), type: .rainDrop))
+                }
+            }
+        }
+
+        // Habitual feeding location bias: if no food is present and currently a confident feeding time
+        if pellets.isEmpty && feedingRoutineManager.isHabitualTime() {
+            if let habitTarget = feedingRoutineManager.habitualWorldTarget(for: bounds) {
+                for i in 0..<fish.count {
+                    if fish[i].state == .wandering && fish[i].currentTarget == nil && fish[i].traits.feedingEagerness > 0.65 {
+                        let chance = Double.random(in: 0...1, using: &rng)
+                        // Gently bias fish toward habit area occasionally
+                        if chance < (dt * 0.07) {
+                            let jitter = PondVector(
+                                x: Double.random(in: -35...35, using: &rng),
+                                y: Double.random(in: -35...35, using: &rng)
+                            )
+                            let target = bounds.clamped(habitTarget + jitter, inset: fish[i].physicalRadius)
+                            fish[i].setTarget(target, state: .wandering, duration: 4.0)
+                        }
+                    }
+                }
+            }
+        }
 
         // 6. Update click targets
         for i in 0..<clickTargets.count {

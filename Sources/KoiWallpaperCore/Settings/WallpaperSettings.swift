@@ -75,6 +75,19 @@ public enum PondTheme: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Global behavioral mood of the pond and koi fish.
+public enum PondMood: String, Codable, CaseIterable, Sendable {
+    case calm = "calm"
+    case playful = "playful"
+
+    public var displayName: String {
+        switch self {
+        case .calm: return "Tenang (Calm)"
+        case .playful: return "Lincah (Playful)"
+        }
+    }
+}
+
 /// Persistent user configuration for the koi wallpaper.
 public struct WallpaperSettings: Codable, Equatable, Sendable {
     public var timeOfDayMode: TimeOfDayMode
@@ -96,6 +109,8 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
     public var isManualPaused: Bool
     public var initialInteractionMode: InputInteractionMode
     public var showHUD: Bool
+    public var pondMood: PondMood
+    public var isRainActive: Bool
 
     public init(
         timeOfDayMode: TimeOfDayMode = .auto,
@@ -104,7 +119,9 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         pauseOnBattery: Bool = false,
         isManualPaused: Bool = false,
         initialInteractionMode: InputInteractionMode = .clickThrough,
-        showHUD: Bool = false
+        showHUD: Bool = false,
+        pondMood: PondMood = .calm,
+        isRainActive: Bool = false
     ) {
         self.timeOfDayMode = timeOfDayMode
         let resolvedTheme = manualTheme ?? manualTimePhase.theme
@@ -114,6 +131,8 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         self.isManualPaused = isManualPaused
         self.initialInteractionMode = initialInteractionMode
         self.showHUD = showHUD
+        self.pondMood = pondMood
+        self.isRainActive = isRainActive
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -124,6 +143,8 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         case isManualPaused
         case initialInteractionMode
         case showHUD
+        case pondMood
+        case isRainActive
     }
 
     public init(from decoder: Decoder) throws {
@@ -137,6 +158,8 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         isManualPaused = try container.decodeIfPresent(Bool.self, forKey: .isManualPaused) ?? false
         initialInteractionMode = try container.decodeIfPresent(InputInteractionMode.self, forKey: .initialInteractionMode) ?? .clickThrough
         showHUD = try container.decodeIfPresent(Bool.self, forKey: .showHUD) ?? false
+        pondMood = try container.decodeIfPresent(PondMood.self, forKey: .pondMood) ?? .calm
+        isRainActive = try container.decodeIfPresent(Bool.self, forKey: .isRainActive) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -148,5 +171,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         try container.encode(isManualPaused, forKey: .isManualPaused)
         try container.encode(initialInteractionMode, forKey: .initialInteractionMode)
         try container.encode(showHUD, forKey: .showHUD)
+        try container.encode(pondMood, forKey: .pondMood)
+        try container.encode(isRainActive, forKey: .isRainActive)
     }
 }

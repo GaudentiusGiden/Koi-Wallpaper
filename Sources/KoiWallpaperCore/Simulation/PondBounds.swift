@@ -18,6 +18,11 @@ public struct PondBounds: Equatable, Sendable {
         PondVector(x: width * 0.5, y: height * 0.5)
     }
 
+    public var minX: Double { 0.0 }
+    public var maxX: Double { width }
+    public var minY: Double { 0.0 }
+    public var maxY: Double { height }
+
     public func contains(_ point: PondVector, inset: Double = 0.0) -> Bool {
         point.x >= inset && point.x <= (width - inset) && point.y >= inset && point.y <= (height - inset)
     }

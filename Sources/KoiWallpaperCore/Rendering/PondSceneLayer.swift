@@ -40,6 +40,7 @@ public final class PondSceneLayer: CALayer {
             addSublayer(container)
         }
         addSublayer(swimmerLayer)
+        surfaceLayer.name = "surface"
         addSublayer(surfaceLayer)
         for layer in floraLayersA { addSublayer(layer) }
         for layer in floraLayersB { addSublayer(layer) }

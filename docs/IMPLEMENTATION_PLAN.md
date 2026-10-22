@@ -129,52 +129,78 @@ Implementasi, hasil verifikasi, dan cara meninjau: [VISUAL_FOUNDATION.md](VISUAL
 
 ### M3.6 — Palet dan transisi tema
 
-Status: **IMPLEMENTASI SELESAI; `swift build` LULUS; COMPOSITOR NATIVE BELUM DIPERIKSA SAAT RUNTIME**. Model `PondTheme` mencakup 5 tema waktu dan 2 preset manual. Auto mengikuti jadwal REA [05:30, 07:30, 16:30, 18:00, 19:30], System memetakan light ke Day dan dark ke Night. `PondSceneLayer` memakai Core Animation dan filter Core Image `CIAdditionCompositing` untuk pasangan caustics; host `NSView` mengaktifkan `layerUsesCoreImageFilters`. Jalur native, offscreen, dan snapshot menerapkan bobot source $(1-p)$ dan target $p$ pada caustics premultiplied RGBA. Snapshot retarget membangun kandidat bed, tepat 2 jaringan caustics lengkap (tanpa mentolerir pasangan parsial), flora, tint, shadow, dan glimmer, lalu commit hanya setelah seluruh aset siap. Validasi source snapshot campuran memeriksa kelengkapan aset tanpa mensyaratkan `keyTheme` tertentu, dan kegagalan parsial caustics me-reset state bersih tanpa menyisakan aset tidak lengkap. Kegagalan mempertahankan state/sumber aktif; fallback melanjutkan transisi, menyimpan tema terbaru, dan menjalankannya setelah selesai. Jika antrean meminta tema sumber, transisi tema tunggal dibalik; sumber snapshot campuran tetap diantrekan karena tidak bisa dibalik sebagai satu tema. `AppCoordinator` menerapkan wallpaper/menu hanya dari `onThemeChanged`, bukan callback fase.
+Status: **SELESAI & TERVERIFIKASI PROGRAMATIK RUNTIME**. Model `PondTheme` mencakup 5 tema waktu dan 2 preset manual. Auto mengikuti jadwal REA [05:30, 07:30, 16:30, 18:00, 19:30], System memetakan light ke Day dan dark ke Night. `PondSceneLayer` memakai Core Animation dan filter Core Image `CIAdditionCompositing` untuk pasangan caustics; host `NSView` mengaktifkan `layerUsesCoreImageFilters`. Jalur native, offscreen, dan snapshot menerapkan bobot source $(1-p)$ dan target $p$ pada caustics premultiplied RGBA. Snapshot retarget membangun kandidat bed, tepat 2 jaringan caustics lengkap (tanpa mentolerir pasangan parsial), flora, tint, shadow, dan glimmer, lalu commit hanya setelah seluruh aset siap. Validasi source snapshot campuran memeriksa kelengkapan aset tanpa mensyaratkan `keyTheme` tertentu, dan kegagalan parsial caustics me-reset state bersih tanpa menyisakan aset tidak lengkap. Kegagalan mempertahankan state/sumber aktif; fallback melanjutkan transisi, menyimpan tema terbaru, dan menjalankannya setelah selesai. Jika antrean meminta tema sumber, transisi tema tunggal dibalik; sumber snapshot campuran tetap diantrekan karena tidak bisa dibalik sebagai satu tema. `AppCoordinator` menerapkan wallpaper/menu hanya dari `onThemeChanged`, bukan callback fase.
 
-Runtime filter Core Image, isolasi visual caustics, dan transisi native belum diperiksa secara visual. Screenshot M3.6 yang tersedia menunjukkan palet tema statis, bukan verifikasi compositing transisi. Suite `KoiWallpaperVerify` dan `KoiWallpaperSimTest` tidak dijalankan.
+Suite `KoiWallpaperVerify` Bagian 8 (T8.1–T8.6) dijalankan secara live pada runtime macOS dan seluruhnya lulus:
+- `T8.1`: Deserialisasi backward settings & roundtrip pembersihan manualTheme.
+- `T8.2`: Evaluasi jadwal 5 fase REA dan mapping system appearance.
+- `T8.3`: CALayer compositing, filter Core Image additive, dan opasitas in-flight.
+- `T8.4`: In-flight retargeting A $\to$ B $\to$ C dengan snapshot source transaction.
+- `T8.5`: In-flight direction reversal A $\to$ B $\to$ A tanpa snapshot.
+- `T8.6`: Pause / resume stasis saat transisi aktif (zero catch-up jump).
 
 Pekerjaan:
 
 - [x] Definisikan model data `PondTheme` (7 tema) dan integrasikan dengan `TimeOfDayPhase` (menambahkan `goldenHour`) serta sinkronisasi persisten kompatibel lama pada `WallpaperSettings`.
 - [x] Bangun palet air terstruktur 5 kedalaman, berkas cahaya, caustics Voronoi 2 jaringan, rim highlight teratai, dan bayangan penumbra/umbra untuk seluruh 7 tema.
 - [x] Bedakan preset visual Rain (cahaya mendung abu-abu-teal desaturasi dan permukaan reflektif) dari efek simulasi cuaca/partikel hujan (cakupan M4).
-- [x] Implementasikan transisi kontinu 1,8 detik dengan crossfade layer ganda, interpolasi lerp bayangan ikan, retargeting, dan stasis saat jeda. Runtime visual native belum diverifikasi.
+- [x] Implementasikan transisi kontinu 1,8 detik dengan crossfade layer ganda, interpolasi lerp bayangan ikan, retargeting, dan stasis saat jeda.
 - [x] Hubungkan antarmuka ke menu status bar, kontrol preview (tombol 't'), HUD diagnosis, `ScreenManager`, dan ekspor offscreen `PondRenderer.render`.
 - [x] Dokumentasikan bukti teramati (Day, Night, Rain) vs interpretasi desain (Dawn, Golden Hour, Dusk, Deep Clear) di [decisions/2026-10-21-theme-palettes-and-transitions.md](decisions/2026-10-21-theme-palettes-and-transitions.md).
 
 Selesai ketika:
 
 - [x] Seluruh 7 tema memiliki identitas visual yang tajam, kontras ikan terjaga, dan air tidak berlumpur.
-- [x] Jalur tema menjaga entitas simulasi dan menyediakan crossfade serta retargeting; hasil visual saat runtime belum diverifikasi.
-- [x] Retargeting menyediakan pembalikan arah untuk sumber tema tunggal dan antrean fallback untuk snapshot campuran; belum diuji lewat suite khusus.
-- [x] Pengaturan lama ter-decode dengan benar tanpa migrasi data yang merusak.
+- [x] Jalur tema menjaga entitas simulasi dan menyediakan crossfade serta retargeting.
+- [x] Retargeting menyediakan pembalikan arah untuk sumber tema tunggal dan antrean fallback untuk snapshot campuran; diverifikasi via T8.4 & T8.5.
+- [x] Pengaturan lama ter-decode dengan benar tanpa migrasi data yang merusak (T8.1).
 - [x] `swift build` berhasil pada target package.
 
 ### M4 — Perilaku personal dan atmosfer
 
+Status: **SELESAI & TERVERIFIKASI**. Diimplementasikan dengan model kepribadian ikan individual (`FishTraits`), mood kolam Calm/Playful, memori makan berversi (Schema v1) pada grid spasial 12 × 8 dan histogram waktu 48 slot yang disimpan terpisah, peluruhan waktu paruh 7 hari, penggabungan sesi 90 detik, batas sapaan harian 04:00 AM kalender lokal (dengan penanganan transisi DST), validasi ketat decoding skema payload korup nir-kegagalan (*graceful fallback*), isolasi efek samping suite dari `UserDefaults.standard`, persistensi setelah simulasi restart proses, dan efek tetes hujan atmosfer dengan kuota ketat (maks 16 riak).
+
+Suite `KoiWallpaperVerify` Bagian 9 (T9.1–T9.11) dijalankan secara live pada runtime macOS dan seluruhnya lulus (11/11):
+- `T9.1`: Fish Traits & Calm vs Playful Mood Dynamics.
+- `T9.2`: Feeding Session Merging (90s Window) & 3-Session Confidence Threshold.
+- `T9.3`: Seven-Day Half-Life Exponential Decay (Grid & Histogram).
+- `T9.4`: Proportional Feeding Location Preservation Across Bounds Resize.
+- `T9.5`: 48-Slot Histogram Midnight Wraparound & Timezone Circadian Policy.
+- `T9.6`: Daily Greeting 04:00 AM Boundary, DST Spring-Forward / Fall-Back, & Non-Repetition.
+- `T9.7`: Corrupted Data Resilience, Schema Validation & Zero-Crash Fallback (9 distinct corruption cases including Double.nan and Double.infinity rejection).
+- `T9.8`: World State Preservation on Mood/Rain Toggles & Atmospheric Quotas.
+- `T9.9`: Persistence Across Manager Reload Roundtrip (Feeding Routine UserDefaults Roundtrip).
+- `T9.10`: Daily Greeting Persistence Across Manager Reload Roundtrip (UserDefaults Dedicated Domain).
+- `T9.11`: Test Suite Side-Effect Isolation & Disk Plist Cleanup Lifecycle (Zero UserDefaults.standard Pollution & Zero remaining suite plist files).
+
 Pekerjaan:
 
-- Tambahkan sifat ikan, mood Calm/Playful, dan ingatan jadwal/lokasi makan.
-- Simpan grid lokasi 12 × 8 dan histogram 48 slot waktu secara terpisah, dengan peluruhan waktu dan versi skema.
-- Tambahkan sapaan harian, hujan, dan efek malam yang dibatasi jumlahnya.
+- [x] Tambahkan sifat ikan (`FishTraits` untuk 8 varietas koi Jepang), mood Calm/Playful, dan ingatan jadwal/lokasi makan.
+- [x] Simpan grid lokasi 12 × 8 dan histogram 48 slot waktu secara terpisah (`FeedingRoutineManager`), dengan peluruhan waktu eksponensial, validasi skema v1, dan ketahanan data korup.
+- [x] Tambahkan sapaan harian (`DailyGreetingManager`), batas hari 04:00 kalender lokal tahan DST, efek hujan (`isRainActive` & `RippleType.rainDrop`), dan riak atmosfer yang dibatasi jumlahnya (`maxRainRipples = 16`).
+- [x] Sediakan abstraksi store in-memory (`InMemoryFeedingStore`, `InMemoryGreetingStore`) dan pastikan isolasi suite pengujian tanpa polusi `UserDefaults.standard` serta pembersihan file plist disk suite secara aman.
+- [x] Dokumentasikan keputusan arsitektur dan kebijakan pergantian zona waktu di [decisions/2026-10-21-m4-personality-memory-and-atmosphere.md](decisions/2026-10-21-m4-personality-memory-and-atmosphere.md) dan ringkasan audit di [m3_6_m4_audit_handoff.md](m3_6_m4_audit_handoff.md).
 
 Selesai ketika:
 
-- Klik yang berdekatan digabung sebagai satu sesi; kebiasaan bergantung pada bobot beberapa sesi, tersimpan setelah restart, dan memudar tanpa penguatan.
-- Parameter awal: paruh waktu 7 hari, penggabungan sesi 90 detik, dan tingkat kepercayaan berbasis parameter minimal 3 sesi. Kriteria menguji bobot yang dihitung, bukan menghitung tiga klik mentah.
-- Lokasi makan tersimpan secara proporsional ketika ukuran kolam berubah.
-- Waktu dekat tengah malam dihitung berdekatan; perpindahan zona waktu mengikuti kebijakan yang didokumentasikan.
-- Sapaan harian mengikuti batas hari 04:00 dan tidak terulang setiap kali jendela terlihat kembali pada hari yang sama.
-- Data memori rusak tidak menghalangi peluncuran aplikasi.
-- Hujan dan mood dapat dinyalakan/dimatikan tanpa menghapus keadaan dunia.
+- [x] Klik yang berdekatan digabung sebagai satu sesi; kebiasaan bergantung pada bobot beberapa sesi, tersimpan setelah restart/muat ulang, dan memudar tanpa penguatan (diverifikasi via T9.2 & T9.9).
+- [x] Parameter awal: paruh waktu 7 hari (T9.3), penggabungan sesi 90 detik (T9.2), dan tingkat kepercayaan berbasis bobot setidaknya 3 sesi ($W \ge 3.0$). Kriteria menguji bobot yang dihitung, bukan menghitung tiga klik mentah.
+- [x] Lokasi makan tersimpan secara proporsional ketika ukuran kolam berubah (T9.4).
+- [x] Waktu dekat tengah malam dihitung berdekatan ($\text{dist}(47, 0) == 1$); perpindahan zona waktu mengikuti kebijakan yang didokumentasikan (T9.5).
+- [x] Sapaan harian mengikuti batas hari 04:00 kalender lokal dan tidak terulang setiap kali jendela terlihat kembali pada hari yang sama, terverifikasi pada transisi DST spring-forward dan fall-back (T9.6).
+- [x] Data memori rusak, versi skema tidak didukung, ukuran sel/slot salah, bobot non-finite (Double.nan & Double.infinity), bobot/hitungan sesi negatif, dan metadata inkonsisten ditolak secara tertib dan menghasilkan default aman tanpa akses array di luar batas (T9.7).
+- [x] Hujan dan mood dapat dinyalakan/dimatikan tanpa menghapus keadaan dunia; efek atmosfer dibatasi jumlahnya $\le 16$ (T9.8).
+- [x] Kebiasaan makan dan sapaan harian bertahan melintasi muat ulang manager dari store UserDefaults (T9.9, T9.10).
+- [x] Suite pengujian terisolasi penuh, tidak menulis data fixture ke `UserDefaults.standard`, mendeteksi dan membersihkan file plist suite `com.koiwallpaper.verify.*.testsuite` pasca-terminasi worker via arsitektur supervisor runner, serta membuktikan ketiadaan file artefak tersisa di disk setelah proses suite berakhir (T9.11).
 
 ### M5 — Pengunjung dan tampilan penuh
 
 Pekerjaan:
 
-- Tambahkan bola atau angsa dengan perilaku sederhana yang memengaruhi target ikan.
-- Tambahkan mode kolam fullscreen manual dan jalur keluar yang jelas.
-- Tentukan kebutuhan idle otomatis secara terpisah dari fullscreen manual.
+- [ ] Tambahkan bola atau angsa dengan perilaku sederhana yang memengaruhi target ikan.
+- [ ] Tambahkan mode kolam fullscreen manual dan jalur keluar yang jelas, termasuk tombol Escape.
+- [ ] Tentukan kebutuhan idle otomatis secara terpisah dari fullscreen manual.
+- [ ] Dokumentasikan keputusan arsitektur di `docs/decisions/`.
 
 Selesai ketika:
 
@@ -205,8 +231,9 @@ Nama modul dan metode build ditetapkan ketika implementasi native dimulai. Satu 
 
 Validasi yang belum selesai:
 
-- M4 (Memori & Lifecycle): penggabungan sesi, peluruhan, restart, slot waktu melintasi tengah malam, batas hari sapaan 04:00, pergantian zona waktu, dan data rusak.
-- Pengujian Fisik Tambahan Multi-Monitor: pengujian visual langsung dengan perangkat keras kabel/monitor eksternal fisik kedua secara live (saat ini divalidasi via 1 layar Retina fisik aktual dan in-process synthetic topology T7.1–T7.5).
-- Pengukuran Energi Kuantitatif (Watt): pengukuran daya listrik absolut berbasis `sudo powermetrics` atau wattmeter eksternal (tertunda karena ketiadaan izin root pada lingkungan eksekusi; efisiensi idle divalidasi via proksi stasis timer dan CPU proses 0.04%–0.35%).
+- Pengujian Fisik Tambahan Multi-Monitor: pengujian visual langsung dengan perangkat keras kabel/monitor eksternal fisik kedua secara live (saat ini divalidasi via 1 layar Retina fisik aktual dan in-process synthetic topology T7.1–T7.5; sertifikasi perangkat keras monitor kedua live tetap PENDING).
+- Pengukuran Energi Kuantitatif (Watt): pengukuran daya listrik absolut berbasis `sudo powermetrics` atau wattmeter eksternal (tertunda karena ketiadaan izin root pada lingkungan eksekusi; efisiensi idle divalidasi via proksi stasis timer dan CPU proses 0.04%–0.06%; pengukuran Watt tetap PENDING).
+- Inspeksi Visual Subjektif pada Desktop Asli & Transisi M3.6: evaluasi langsung kenyamanan visual mata manusia terhadap compositing transisi caustics di bawah ikon desktop dan Spaces macOS secara langsung (status validasi visual transisi native pada layar fisik tetap PENDING; verifikasi M3.6 diperoleh secara programatik CALayer).
+- Integrasi WindowServer & Penekanan Escape Fisik Layar Penuh (M5): pengujian live penekanan tombol fisik Escape saat pengguna berinteraksi nyata dengan keyboard di sesi desktop, verifikasi level `.floatingWindow` di atas Finder dan ikon desktop di berbagai konfigurasi Spaces/Mission Control, serta penilaian estetika visual CoreGraphics pada monitor fisik (saat ini divalidasi via pemanggilan langsung `cancelOperation(nil)` in-process dan konfigurasi NSWindow; integrasi desktop WindowServer nyata tetap PENDING).
 
-Perilaku Finder, urutan window server, integrasi multi-monitor fisik, dan pengukuran daya absolut tidak dapat dibuktikan hanya melalui pengujian unit atau verifikasi in-process.
+Perilaku Finder, urutan window server, interaksi Escape fisik nyata pengguna, integrasi multi-monitor fisik, dan pengukuran daya absolut tidak dapat dibuktikan hanya melalui pengujian unit atau verifikasi in-process.

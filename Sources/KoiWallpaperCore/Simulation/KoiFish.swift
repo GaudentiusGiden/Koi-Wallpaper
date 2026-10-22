@@ -32,6 +32,7 @@ public struct KoiFish: Identifiable, Sendable {
     public private(set) var state: KoiBehaviorState
     public private(set) var currentTarget: PondVector?
     public private(set) var targetDurationRemaining: Double
+    public var traits: FishTraits
 
     public init(
         id: UUID = UUID(),
@@ -43,7 +44,8 @@ public struct KoiFish: Identifiable, Sendable {
         maxSpeed: Double = 120.0,
         maxTurnRate: Double = 2.4,
         seed: UInt64? = nil,
-        bodyWidthRatio: Double = 0.28
+        bodyWidthRatio: Double = 0.28,
+        traits: FishTraits? = nil
     ) {
         self.id = id
         self.variety = variety
@@ -56,6 +58,7 @@ public struct KoiFish: Identifiable, Sendable {
         self.velocity = PondVector.fromAngle(heading, length: baseSpeed)
         self.length = length
         self.bodyWidthRatio = min(0.4, max(0.2, bodyWidthRatio))
+        self.traits = traits ?? FishTraits.defaultTraits(for: variety)
 
         let initialSeed = seed ?? UInt64(truncatingIfNeeded: id.hashValue)
         var prng = SeededRandomNumberGenerator(seed: initialSeed)
@@ -183,7 +186,7 @@ public struct KoiFish: Identifiable, Sendable {
         KoiSpineGeometry.testBodyCollision(fish1: self, fish2: other, safetyMargin: safetyMargin)
     }
 
-    /// Sets a temporary attraction target (e.g. water ripple or food pellet).
+    /// Sets a temporary attraction target (e.g. water ripple, food pellet, or surface visitor).
     public mutating func setTarget(_ target: PondVector, state: KoiBehaviorState, duration: Double) {
         self.currentTarget = target
         self.state = state
@@ -201,7 +204,8 @@ public struct KoiFish: Identifiable, Sendable {
         dt: Double,
         bounds: PondBounds,
         allFish: [KoiFish],
-        nearestFood: PondVector?
+        nearestFood: PondVector?,
+        mood: PondMood = .calm
     ) {
         // 1. Target Evaluation
         if state == .seekingFood {
@@ -218,7 +222,8 @@ public struct KoiFish: Identifiable, Sendable {
         if let target = currentTarget {
             targetDurationRemaining -= dt
             let dist = position.distance(to: target)
-            if targetDurationRemaining <= 0.0 || dist < (mouthRadius + 6.0) {
+            let arrivalDist = mouthRadius + 6.0
+            if targetDurationRemaining <= 0.0 || dist < arrivalDist {
                 clearTarget()
             }
         }
@@ -320,7 +325,9 @@ public struct KoiFish: Identifiable, Sendable {
         }
         let urgency = max(avoidanceUrgency, stateUrgency)
         let calmTurnRate = max(0.9, maxTurnRate * 0.50)
-        let effectiveTurnRate = calmTurnRate + (maxTurnRate - calmTurnRate) * urgency
+        let baseTurnRate = calmTurnRate + (maxTurnRate - calmTurnRate) * urgency
+        let moodTurnFactor = (mood == .playful ? 1.15 : 1.0)
+        let effectiveTurnRate = baseTurnRate * traits.agility * moodTurnFactor
 
         let maxTurnThisStep = effectiveTurnRate * dt
         let absDiff = abs(angleDiff)
@@ -331,13 +338,15 @@ public struct KoiFish: Identifiable, Sendable {
 
         // 4. Smooth Speed Control
         var targetSpeed: Double
+        let moodSpeedMultiplier = (mood == .playful ? 1.25 : 1.0)
         switch state {
         case .wandering:
-            targetSpeed = baseSpeed
+            targetSpeed = baseSpeed * moodSpeedMultiplier
         case .seekingFood:
-            targetSpeed = maxSpeed
+            let eagernessBonus = 0.90 + traits.boldness * 0.20
+            targetSpeed = maxSpeed * moodSpeedMultiplier * eagernessBonus
         case .investigatingClick:
-            targetSpeed = baseSpeed * 1.35
+            targetSpeed = baseSpeed * 1.35 * moodSpeedMultiplier
         }
 
         // Smoothly yield and decelerate if another fish is directly ahead in our path
@@ -361,7 +370,8 @@ public struct KoiFish: Identifiable, Sendable {
         position = bounds.clamped(position, inset: inset)
 
         // 6. Sinusoidal Swimming Wiggle & Smooth Spine Curvature
-        let wiggleRate = (speed / baseSpeed) * wiggleFrequency
+        let wiggleMoodFactor = (mood == .playful ? 1.20 : 1.0)
+        let wiggleRate = (speed / baseSpeed) * wiggleFrequency * wiggleMoodFactor
         wigglePhase += wiggleRate * dt
         if wigglePhase > 2.0 * .pi {
             wigglePhase -= 2.0 * .pi

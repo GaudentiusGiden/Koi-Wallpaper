@@ -135,6 +135,34 @@ public final class WallpaperView: NSView {
         }
     }
 
+    public var pondMood: PondMood {
+        get { simulation.mood }
+        set {
+            simulation.mood = newValue
+            needsDisplay = true
+        }
+    }
+
+    public var isRainActive: Bool {
+        get { simulation.isRainActive }
+        set {
+            simulation.isRainActive = newValue
+            needsDisplay = true
+        }
+    }
+
+    public private(set) var currentGreetingMessage: String?
+    public private(set) var greetingRemainingDuration: Double = 0.0
+
+    public func triggerGreetingIfDue(at date: Date = Date()) {
+        let (shouldGreet, message) = simulation.dailyGreetingManager.checkAndTriggerGreeting(at: date)
+        if shouldGreet, let msg = message {
+            currentGreetingMessage = msg
+            greetingRemainingDuration = 8.0
+            needsDisplay = true
+        }
+    }
+
     public var isPaused: Bool = false {
         didSet {
             guard oldValue != isPaused else { return }
@@ -218,6 +246,16 @@ public final class WallpaperView: NSView {
         needsDisplay = true
     }
 
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0
+            layer?.contentsScale = scale
+            triggerGreetingIfDue()
+        }
+        needsDisplay = true
+    }
+
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         simulation.resize(width: Double(newSize.width), height: Double(newSize.height))
@@ -257,6 +295,14 @@ public final class WallpaperView: NSView {
                 }
             }
 
+            if self.greetingRemainingDuration > 0 {
+                self.greetingRemainingDuration = max(0.0, self.greetingRemainingDuration - dt)
+                if self.greetingRemainingDuration <= 0 {
+                    self.currentGreetingMessage = nil
+                    self.needsDisplay = true
+                }
+            }
+
             self.simulation.advance(deltaTime: dt)
             self.needsDisplay = true
         }
@@ -286,6 +332,9 @@ public final class WallpaperView: NSView {
             context.translateBy(x: -self.overlayView.frame.minX, y: -self.overlayView.frame.minY)
             if self.isInteractionMode { self.drawInteractionModeBanner() }
             if self.showHUD { self.drawHUD(in: context) }
+            if self.greetingRemainingDuration > 0, let msg = self.currentGreetingMessage, !self.isInteractionMode {
+                self.drawGreetingBanner(message: msg)
+            }
         }
         addSubview(overlayView)
     }
@@ -308,8 +357,25 @@ public final class WallpaperView: NSView {
         )
         totalRenderedFrames += 1
         overlayView.frame = overlayFrame
-        overlayView.isHidden = !showHUD && !isInteractionMode
+        overlayView.isHidden = !showHUD && !isInteractionMode && (greetingRemainingDuration <= 0)
         if !overlayView.isHidden { overlayView.needsDisplay = true }
+    }
+
+    private func drawGreetingBanner(message: String) {
+        let bannerRect = NSRect(x: 24, y: bounds.height - 60, width: min(470, bounds.width - 48), height: 42)
+        let bgPath = NSBezierPath(roundedRect: bannerRect, xRadius: 8, yRadius: 8)
+        NSColor.black.withAlphaComponent(0.70).setFill()
+        bgPath.fill()
+
+        NSColor.systemOrange.withAlphaComponent(0.85).setStroke()
+        bgPath.lineWidth = 1.0
+        bgPath.stroke()
+
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor(calibratedRed: 0.98, green: 0.95, blue: 0.88, alpha: 1.0)
+        ]
+        message.draw(at: NSPoint(x: bannerRect.minX + 14, y: bannerRect.minY + 12), withAttributes: titleAttrs)
     }
 
     private func drawInteractionModeBanner() {
@@ -364,7 +430,7 @@ public final class WallpaperView: NSView {
             .foregroundColor: NSColor.lightGray
         ]
 
-        "Koi Wallpaper (M3) — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
+        "Koi Wallpaper (M4) — ".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 22), withAttributes: titleAttrs)
         statusText.draw(at: NSPoint(x: hudRect.minX + 165, y: hudRect.maxY - 22), withAttributes: statusAttrs)
 
         let stats = String(
@@ -379,11 +445,12 @@ public final class WallpaperView: NSView {
         stats.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 42), withAttributes: bodyAttrs)
 
         let transitionInfo = transitionProgress < 1.0 ? String(format: " (blending %.0f%%)", transitionProgress * 100) : ""
-        let phaseStr = "Theme: \(targetTheme.displayName)\(transitionInfo)"
+        let phaseStr = "Theme: \(targetTheme.displayName)\(transitionInfo)  ·  Mood: \(simulation.mood.displayName)"
         phaseStr.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 62), withAttributes: bodyAttrs)
 
-        let modeStr = isInteractionMode ? "Mode: Interactive Capture" : "Mode: Finder Click-Through"
-        modeStr.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 80), withAttributes: bodyAttrs)
+        let rainStr = simulation.isRainActive ? "Rain: ON" : "Rain: OFF"
+        let modeStr = isInteractionMode ? "Mode: Interactive" : "Mode: Passthrough"
+        "\(modeStr)  ·  \(rainStr)".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 80), withAttributes: bodyAttrs)
     }
 
     // MARK: - Mouse Event Handling

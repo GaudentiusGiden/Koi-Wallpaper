@@ -34,6 +34,8 @@ public final class ScreenManager {
     public private(set) var currentTheme: PondTheme = .day
     public private(set) var currentShowHUD: Bool = false
     public private(set) var isGloballyPaused: Bool = false
+    public private(set) var currentMood: PondMood = .calm
+    public private(set) var currentIsRainActive: Bool = false
     public weak var inputCoordinator: InputCoordinator?
 
     public var onControllersChanged: (([DesktopWindowController]) -> Void)?
@@ -50,7 +52,9 @@ public final class ScreenManager {
         timeOfDayPhase: TimeOfDayPhase = .day,
         theme: PondTheme? = nil,
         showHUD: Bool = false,
-        isGloballyPaused: Bool = false
+        isGloballyPaused: Bool = false,
+        mood: PondMood = .calm,
+        isRainActive: Bool = false
     ) {
         self.screenProvider = screenProvider
         self.controllerFactory = controllerFactory
@@ -60,6 +64,8 @@ public final class ScreenManager {
         self.currentPhase = resolvedTheme.asTimePhase ?? timeOfDayPhase
         self.currentShowHUD = showHUD
         self.isGloballyPaused = isGloballyPaused
+        self.currentMood = mood
+        self.currentIsRainActive = isRainActive
         if let input = inputCoordinator {
             self.currentMode = input.currentMode
         }
@@ -132,6 +138,8 @@ public final class ScreenManager {
         controller.wallpaperView.inputCoordinator = inputCoordinator
         controller.wallpaperView.theme = currentTheme
         controller.wallpaperView.showHUD = currentShowHUD
+        controller.applyMood(currentMood)
+        controller.applyRain(currentIsRainActive)
         controller.applyInteractionMode(currentMode)
         controller.setGloballyPaused(isGloballyPaused)
         if !isGloballyPaused {
@@ -191,6 +199,20 @@ public final class ScreenManager {
         self.isGloballyPaused = isPaused
         for controller in controllers {
             controller.setGloballyPaused(isPaused)
+        }
+    }
+
+    public func applyMood(_ mood: PondMood) {
+        self.currentMood = mood
+        for controller in controllers {
+            controller.applyMood(mood)
+        }
+    }
+
+    public func applyRain(_ isRainActive: Bool) {
+        self.currentIsRainActive = isRainActive
+        for controller in controllers {
+            controller.applyRain(isRainActive)
         }
     }
 

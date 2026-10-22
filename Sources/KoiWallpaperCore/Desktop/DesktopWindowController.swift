@@ -52,6 +52,16 @@ public final class DesktopWindowController {
         wallpaperView.isInteractionMode = (mode == .interactive)
     }
 
+    public func applyMood(_ mood: PondMood) {
+        wallpaperView.simulation.mood = mood
+        wallpaperView.needsDisplay = true
+    }
+
+    public func applyRain(_ isRainActive: Bool) {
+        wallpaperView.simulation.isRainActive = isRainActive
+        wallpaperView.needsDisplay = true
+    }
+
     // MARK: - Display & Geometry Updates
 
     /// Updates this host to match a reconfigured screen geometry or display scale factor.

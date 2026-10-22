@@ -28,6 +28,22 @@ public final class KoiPondPreviewView: NSView {
         set { theme = newValue.theme }
     }
 
+    public var pondMood: PondMood {
+        get { simulation.mood }
+        set {
+            simulation.mood = newValue
+            needsDisplay = true
+        }
+    }
+
+    public var isRainActive: Bool {
+        get { simulation.isRainActive }
+        set {
+            simulation.isRainActive = newValue
+            needsDisplay = true
+        }
+    }
+
     public private(set) var activeTheme: PondTheme = .day
     public private(set) var targetTheme: PondTheme = .day
     public private(set) var pendingTheme: PondTheme? = nil
@@ -307,7 +323,7 @@ public final class KoiPondPreviewView: NSView {
         let hints = "Click: Splash  ·  Opt+Click: Feed  ·  Space: Pause  ·  R: Reset"
         hints.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 62), withAttributes: hintAttrs)
 
-        let hints2 = "F: Feed  ·  C: Splash  ·  H: HUD  ·  T: Theme (\(targetTheme.displayName))"
+        let hints2 = "T: Theme  ·  M: Mood (\(simulation.mood.displayName))  ·  W: Rain  ·  G: Greet"
         hints2.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 80), withAttributes: hintAttrs)
     }
 
@@ -344,6 +360,16 @@ public final class KoiPondPreviewView: NSView {
             simulation.handleWaterClick(at: simulation.bounds.center)
         case "h":
             showHUD.toggle()
+        case "m":
+            let nextMood: PondMood = (simulation.mood == .calm) ? .playful : .calm
+            simulation.mood = nextMood
+            print("[KoiPondPreviewView] Mood toggled to: \(nextMood.displayName)")
+        case "w":
+            simulation.isRainActive.toggle()
+            print("[KoiPondPreviewView] Rain effect toggled: \(simulation.isRainActive ? "ON" : "OFF")")
+        case "g":
+            let (shouldGreet, msg) = simulation.dailyGreetingManager.checkAndTriggerGreeting()
+            print("[KoiPondPreviewView] Daily Greeting: shouldGreet=\(shouldGreet), msg=\(msg ?? "already shown today")")
         case "t":
             let all = PondTheme.allCases
             if let idx = all.firstIndex(of: targetTheme) {

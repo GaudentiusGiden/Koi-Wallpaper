@@ -13,7 +13,6 @@ public final class AppCoordinator: NSObject,
     public let inputCoordinator: InputCoordinator
     public let timeOfDayController: TimeOfDayController
     public let screenManager: ScreenManager
-
     public var desktopWindowController: DesktopWindowController? {
         screenManager.primaryController
     }
@@ -76,6 +75,8 @@ public final class AppCoordinator: NSObject,
         screenManager.applyInteractionMode(inputCoordinator.currentMode)
         screenManager.applyTheme(timeOfDayController.currentTheme)
         screenManager.applyHUDVisibility(settingsManager.settings.showHUD)
+        screenManager.applyMood(settingsManager.settings.pondMood)
+        screenManager.applyRain(settingsManager.settings.isRainActive)
         screenManager.applyGlobalPause(lifecyclePolicy.isPaused)
 
         // Bind all active host windows to lifecycle policy for occlusion tracking
@@ -119,9 +120,11 @@ public final class AppCoordinator: NSObject,
             pauseOnBattery: settingsManager.settings.pauseOnBattery,
             showHUD: settingsManager.settings.showHUD
         )
+        statusController.updateMoodState(mood: settingsManager.settings.pondMood)
+        statusController.updateRainState(isRainActive: settingsManager.settings.isRainActive)
         self.statusBarController = statusController
 
-        logger.info("KoiWallpaper M3 started successfully across \(self.screenManager.screenCount) screen(s).")
+        logger.info("KoiWallpaper M4 started successfully across \(self.screenManager.screenCount) screen(s).")
     }
 
     private func handleThemeChanged(_ newTheme: PondTheme) {
@@ -209,6 +212,21 @@ public final class AppCoordinator: NSObject,
         statusBarDidSelectManualTheme(controller, theme: phase.theme)
     }
 
+    public func statusBarDidSelectMood(_ controller: StatusBarController, mood: PondMood) {
+        logger.info("User selected mood: \(mood.rawValue)")
+        settingsManager.updateSettings { $0.pondMood = mood }
+        screenManager.applyMood(mood)
+        statusBarController?.updateMoodState(mood: mood)
+    }
+
+    public func statusBarDidToggleRain(_ controller: StatusBarController) {
+        let newRain = !settingsManager.settings.isRainActive
+        logger.info("User toggled rain effect to: \(newRain)")
+        settingsManager.updateSettings { $0.isRainActive = newRain }
+        screenManager.applyRain(newRain)
+        statusBarController?.updateRainState(isRainActive: newRain)
+    }
+
     public func statusBarDidTogglePauseOnBattery(_ controller: StatusBarController) {
         let newPauseOnBattery = !settingsManager.settings.pauseOnBattery
         logger.info("User toggled pauseOnBattery to: \(newPauseOnBattery)")
@@ -246,8 +264,12 @@ public final class AppCoordinator: NSObject,
 
         screenManager.applyHUDVisibility(defaults.showHUD)
         screenManager.applyInteractionMode(defaults.initialInteractionMode)
+        screenManager.applyMood(defaults.pondMood)
+        screenManager.applyRain(defaults.isRainActive)
 
         statusBarController?.updateInteractionMode(defaults.initialInteractionMode)
+        statusBarController?.updateMoodState(mood: defaults.pondMood)
+        statusBarController?.updateRainState(isRainActive: defaults.isRainActive)
         if previousTheme == resolvedTheme {
             statusBarController?.updateThemeState(
                 mode: defaults.timeOfDayMode,

@@ -15,6 +15,10 @@ func recordSimTest(_ name: String, passed: Bool, details: String) {
     print("\(status) \(name): \(details)")
 }
 
+// Suite Isolation: Ensure pure simulation tests do not write to UserDefaults.standard
+FeedingRoutineManager.defaultStoreProvider = { InMemoryFeedingStore() }
+DailyGreetingManager.defaultStoreProvider = { InMemoryGreetingStore() }
+
 print("=======================================================")
 print("Koi Wallpaper M1 Simulation Test Suite")
 print("Target: Pure Simulation Core & Behavior Verification")

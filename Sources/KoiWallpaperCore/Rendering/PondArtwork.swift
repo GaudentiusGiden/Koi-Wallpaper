@@ -289,6 +289,12 @@ public enum PondArtwork {
                 context.setStrokeColor(red: 0.95, green: 0.98, blue: 1.0, alpha: alpha * 0.8)
                 context.setLineWidth(1.4)
                 context.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+
+            case .rainDrop:
+                // Delicate silver-cyan rain droplet ripple
+                context.setStrokeColor(red: 0.78, green: 0.88, blue: 0.95, alpha: alpha * 0.65)
+                context.setLineWidth(1.0)
+                context.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
             }
         }
 

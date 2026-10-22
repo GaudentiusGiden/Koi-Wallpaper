@@ -6,6 +6,8 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidSelectTimeOfDayMode(_ controller: StatusBarController, mode: TimeOfDayMode)
     func statusBarDidSelectManualTimePhase(_ controller: StatusBarController, phase: TimeOfDayPhase)
     func statusBarDidSelectManualTheme(_ controller: StatusBarController, theme: PondTheme)
+    func statusBarDidSelectMood(_ controller: StatusBarController, mood: PondMood)
+    func statusBarDidToggleRain(_ controller: StatusBarController)
     func statusBarDidTogglePauseOnBattery(_ controller: StatusBarController)
     func statusBarDidToggleHUD(_ controller: StatusBarController)
     func statusBarDidResetSettings(_ controller: StatusBarController)
@@ -18,6 +20,8 @@ extension StatusBarControllerDelegate {
             statusBarDidSelectManualTimePhase(controller, phase: phase)
         }
     }
+    public func statusBarDidSelectMood(_ controller: StatusBarController, mood: PondMood) {}
+    public func statusBarDidToggleRain(_ controller: StatusBarController) {}
 }
 
 public final class StatusBarController {
@@ -27,7 +31,7 @@ public final class StatusBarController {
     private let menu = NSMenu()
 
     // Primary menu items
-    private let headerItem = NSMenuItem(title: "Koi Wallpaper (M3)", action: nil, keyEquivalent: "")
+    private let headerItem = NSMenuItem(title: "Koi Wallpaper (M4)", action: nil, keyEquivalent: "")
     private let pauseStatusItem = NSMenuItem(title: "Status Kolam: Aktif", action: nil, keyEquivalent: "")
     private let pauseToggleItem = NSMenuItem(
         title: "Jeda Kolam (Pause)",
@@ -57,6 +61,18 @@ public final class StatusBarController {
     private let rainItem = NSMenuItem(title: "Hujan (Rain Preset)", action: #selector(rainSelected), keyEquivalent: "")
 
     private let currentPhaseInfoItem = NSMenuItem(title: "Tema Aktif: Siang (Day)", action: nil, keyEquivalent: "")
+
+    // Mood & Weather submenu
+    private let moodMenuItem = NSMenuItem(title: "Suasana Kolam (Mood)", action: nil, keyEquivalent: "")
+    private let moodMenu = NSMenu(title: "Suasana")
+    private let calmMoodItem = NSMenuItem(title: "Tenang (Calm)", action: #selector(calmMoodSelected), keyEquivalent: "")
+    private let playfulMoodItem = NSMenuItem(title: "Lincah (Playful)", action: #selector(playfulMoodSelected), keyEquivalent: "")
+
+    private let rainToggleItem = NSMenuItem(
+        title: "Efek Hujan Aktif",
+        action: #selector(rainToggled),
+        keyEquivalent: ""
+    )
 
     // Settings submenu
     private let settingsMenuItem = NSMenuItem(title: "Pengaturan (Settings)", action: nil, keyEquivalent: "")
@@ -92,7 +108,7 @@ public final class StatusBarController {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.title = "🐟"
-            button.toolTip = "Koi Wallpaper (M3)"
+            button.toolTip = "Koi Wallpaper (M4)"
         }
 
         setupMenu()
@@ -118,6 +134,9 @@ public final class StatusBarController {
         nightItem.target = self
         deepClearItem.target = self
         rainItem.target = self
+        calmMoodItem.target = self
+        playfulMoodItem.target = self
+        rainToggleItem.target = self
         pauseOnBatteryItem.target = self
         showHUDItem.target = self
         resetSettingsItem.target = self
@@ -148,6 +167,11 @@ public final class StatusBarController {
         timeOfDayMenu.addItem(currentPhaseInfoItem)
         timeOfDayMenuItem.submenu = timeOfDayMenu
 
+        // Build Mood submenu
+        moodMenu.addItem(calmMoodItem)
+        moodMenu.addItem(playfulMoodItem)
+        moodMenuItem.submenu = moodMenu
+
         // Build Settings submenu
         settingsMenu.addItem(pauseOnBatteryItem)
         settingsMenu.addItem(showHUDItem)
@@ -165,6 +189,8 @@ public final class StatusBarController {
         menu.addItem(interactionDescItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(timeOfDayMenuItem)
+        menu.addItem(moodMenuItem)
+        menu.addItem(rainToggleItem)
         menu.addItem(settingsMenuItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(quitItem)
@@ -225,6 +251,15 @@ public final class StatusBarController {
         showHUDItem.state = showHUD ? .on : .off
     }
 
+    public func updateMoodState(mood: PondMood) {
+        calmMoodItem.state = (mood == .calm) ? .on : .off
+        playfulMoodItem.state = (mood == .playful) ? .on : .off
+    }
+
+    public func updateRainState(isRainActive: Bool) {
+        rainToggleItem.state = isRainActive ? .on : .off
+    }
+
     private func updateStatusIcon(isInteractive: Bool, isPaused: Bool) {
         guard let button = statusItem?.button else { return }
         if isPaused {
@@ -280,6 +315,18 @@ public final class StatusBarController {
 
     @objc private func rainSelected() {
         delegate?.statusBarDidSelectManualTheme(self, theme: .rain)
+    }
+
+    @objc private func calmMoodSelected() {
+        delegate?.statusBarDidSelectMood(self, mood: .calm)
+    }
+
+    @objc private func playfulMoodSelected() {
+        delegate?.statusBarDidSelectMood(self, mood: .playful)
+    }
+
+    @objc private func rainToggled() {
+        delegate?.statusBarDidToggleRain(self)
     }
 
     @objc private func pauseOnBatteryToggled() {
