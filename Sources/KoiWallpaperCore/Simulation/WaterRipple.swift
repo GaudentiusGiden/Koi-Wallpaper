@@ -34,30 +34,36 @@ public struct WaterRipple: Identifiable, Equatable, Sendable {
 
         switch type {
         case .waterCall:
-            self.maxRadius = maxRadius ?? 90.0
-            self.growthRate = 45.0
-            self.fadeRate = 0.55
+            let maxR = maxRadius ?? 140.0
+            self.maxRadius = maxR
+            self.growthRate = max(0.0, (maxR - initialRadius) / 2.2)
+            self.fadeRate = max(0.0, initialAlpha / 2.5)
         case .foodDrop:
-            self.maxRadius = maxRadius ?? 60.0
-            self.growthRate = 35.0
-            self.fadeRate = 0.65
+            let maxR = maxRadius ?? 95.0
+            self.maxRadius = maxR
+            self.growthRate = max(0.0, (maxR - initialRadius) / 2.2)
+            self.fadeRate = max(0.0, initialAlpha / 2.5)
         case .eatingNibble:
             self.maxRadius = maxRadius ?? 25.0
             self.growthRate = 28.0
             self.fadeRate = 1.2
         case .rainDrop:
-            self.maxRadius = maxRadius ?? 18.0
-            self.growthRate = 22.0
-            self.fadeRate = 1.6
+            let maxR = maxRadius ?? 32.0
+            self.maxRadius = maxR
+            self.growthRate = max(0.0, (maxR - initialRadius) / 0.95)
+            self.fadeRate = max(0.0, initialAlpha / 1.05)
         }
     }
 
     public var isDead: Bool {
-        alpha <= 0.0 || radius >= maxRadius
+        alpha <= 0.0 || (radius >= maxRadius && alpha <= 0.001)
     }
 
     public mutating func update(dt: Double) {
         radius += growthRate * dt
+        if radius > maxRadius {
+            radius = maxRadius
+        }
         alpha -= fadeRate * dt
         if alpha < 0.0 {
             alpha = 0.0

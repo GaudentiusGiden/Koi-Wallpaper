@@ -260,54 +260,169 @@ public enum PondArtwork {
 
     // MARK: - Water Surface Ripples
 
+    /// Generates aligned ripple strokes matching realistic water surface splash reflections.
+    static func rippleStrokes(for ripple: WaterRipple) -> [PondStroke] {
+        guard !ripple.isDead, ripple.alpha > 0.001 else { return [] }
+
+        let center = CGPoint(x: CGFloat(ripple.center.x), y: CGFloat(ripple.center.y))
+        let radius = CGFloat(ripple.radius)
+        let alpha = CGFloat(ripple.alpha)
+
+        switch ripple.type {
+        case .eatingNibble:
+            // Delicate koi nibble with soft surface reflection
+            let nibblePath = CGMutablePath()
+            nibblePath.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+            if radius >= 8.0 {
+                let rInner = radius * 0.55
+                nibblePath.addEllipse(in: CGRect(x: center.x - rInner, y: center.y - rInner, width: rInner * 2, height: rInner * 2))
+            }
+            return [
+                PondStroke(
+                    path: nibblePath,
+                    color: CGColor(red: 0.94, green: 0.98, blue: 0.90, alpha: alpha * 0.75),
+                    width: 1.1
+                )
+            ]
+
+        case .rainDrop:
+            // Realistic atmospheric rain droplet impact & wide surface wave reflection
+            let rainPath = CGMutablePath()
+            let baseAngle = CGFloat((ripple.center.x * 0.041 + ripple.center.y * 0.067).truncatingRemainder(dividingBy: .pi))
+            let t = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: baseAngle)
+
+            // 1. Primary outer capillary droplet ring with slight organic eccentricity
+            let rx = radius * 1.025
+            let ry = radius * 0.975
+            rainPath.addEllipse(in: CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2), transform: t)
+
+            // 2. Specular reflection arc on the outer rim (sky glint)
+            let arcPath = CGMutablePath()
+            arcPath.addArc(center: .zero, radius: radius, startAngle: .pi * 0.22, endAngle: .pi * 0.80, clockwise: false)
+            let arcT = CGAffineTransform(scaleX: 1.025, y: 0.975).concatenating(t)
+            rainPath.addPath(arcPath, transform: arcT)
+
+            // 3. Fresnel counter-reflection on the opposing rim for wide splashes
+            if radius >= 12.0 {
+                let fresnelArc = CGMutablePath()
+                fresnelArc.addArc(center: .zero, radius: radius, startAngle: .pi * 1.25, endAngle: .pi * 1.75, clockwise: false)
+                rainPath.addPath(fresnelArc, transform: arcT)
+            }
+
+            // 4. Secondary graduated rebound droplet ring
+            if radius >= 8.0 {
+                let rInner = radius * 0.62
+                let innerRect = CGRect(x: -rInner * 0.98, y: -rInner * 1.02, width: rInner * 1.96, height: rInner * 2.04)
+                rainPath.addEllipse(in: innerRect, transform: t)
+            }
+
+            // 5. Tertiary wave crest as the ripple expands wide
+            if radius >= 18.0 {
+                let rCenter = radius * 0.36
+                let centerRect = CGRect(x: -rCenter * 1.01, y: -rCenter * 0.99, width: rCenter * 2.02, height: rCenter * 1.98)
+                rainPath.addEllipse(in: centerRect, transform: t)
+            }
+
+            // 6. Instant impact splash glint when droplet first touches surface
+            if radius <= 10.0 {
+                let pingR = max(2.0, radius * 0.38)
+                rainPath.addEllipse(in: CGRect(x: -pingR, y: -pingR, width: pingR * 2, height: pingR * 2), transform: t)
+            }
+
+            return [
+                PondStroke(
+                    path: rainPath,
+                    color: CGColor(red: 0.88, green: 0.94, blue: 0.98, alpha: min(1.0, alpha * 0.85)),
+                    width: 1.0
+                )
+            ]
+
+        case .waterCall, .foodDrop:
+            let isWater = (ripple.type == .waterCall)
+            // Color palettes
+            // Main wave body lines: clear refraction tone
+            let waveColor = isWater
+                ? CGColor(red: 0.40, green: 0.84, blue: 0.80, alpha: alpha * 0.65)
+                : CGColor(red: 0.96, green: 0.62, blue: 0.24, alpha: alpha * 0.70)
+            // Specular water reflection ("pantulan air"): luminous sky reflection
+            let specularColor = isWater
+                ? CGColor(red: 0.94, green: 0.99, blue: 0.98, alpha: min(1.0, alpha * 0.85))
+                : CGColor(red: 1.0, green: 0.96, blue: 0.82, alpha: min(1.0, alpha * 0.90))
+
+            let wavePath = CGMutablePath()
+            let highlightPath = CGMutablePath()
+
+            // Unique, deterministic orientation angle for this ripple based on its spawn location
+            let baseAngle = CGFloat((ripple.center.x * 0.037 + ripple.center.y * 0.053).truncatingRemainder(dividingBy: .pi))
+
+            // Graduated wave crest configurations: (radius fraction, rx scale, ry scale, angle offset, minRadiusToAppear)
+            let crestConfigs: [(fraction: CGFloat, scaleX: CGFloat, scaleY: CGFloat, angleOffset: CGFloat, minR: CGFloat)] = [
+                (1.00, 1.025, 0.975, 0.18, 0.0),
+                (0.68, 0.980, 1.020, -0.26, 8.0),
+                (0.44, 1.020, 0.985, 0.52, 10.0),
+                (0.25, 0.985, 1.015, -0.42, 10.0)
+            ]
+
+            for (fraction, scaleX, scaleY, angleOffset, minR) in crestConfigs {
+                let crestR = radius * fraction
+                guard crestR >= minR && crestR > 2.0 else { continue }
+
+                let rx = crestR * scaleX
+                let ry = crestR * scaleY
+                let angle = baseAngle + angleOffset
+
+                let t = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: angle)
+                let rect = CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2)
+                wavePath.addEllipse(in: rect, transform: t)
+
+                // Specular water reflection arcs on wave crests
+                if fraction >= 0.60 && crestR >= 5.0 {
+                    let arcPath = CGMutablePath()
+                    // Primary sky reflection facing ambient pond lighting (upper-left)
+                    let startA: CGFloat = (fraction > 0.9) ? (.pi * 0.22) : (.pi * 0.28)
+                    let endA: CGFloat = (fraction > 0.9) ? (.pi * 0.82) : (.pi * 0.76)
+                    arcPath.addArc(center: .zero, radius: crestR, startAngle: startA, endAngle: endA, clockwise: false)
+
+                    // Secondary Fresnel reflection on the opposing curved rim (bottom-right)
+                    if fraction > 0.9 && crestR >= 12.0 {
+                        arcPath.addArc(center: .zero, radius: crestR, startAngle: .pi * 1.25, endAngle: .pi * 1.75, clockwise: false)
+                    }
+
+                    let highlightTransform = CGAffineTransform(scaleX: scaleX, y: scaleY).concatenating(t)
+                    highlightPath.addPath(arcPath, transform: highlightTransform)
+                }
+            }
+
+            // Central splash impact reflection glint during the initial disturbance phase
+            if radius <= 36.0 {
+                let splashR = max(2.5, radius * 0.38)
+                let splashRect = CGRect(x: -splashR * 0.96, y: -splashR * 1.04, width: splashR * 1.92, height: splashR * 2.08)
+                let tCenter = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: baseAngle + 0.35)
+                highlightPath.addEllipse(in: splashRect, transform: tCenter)
+            }
+
+            var strokes: [PondStroke] = []
+            strokes.append(PondStroke(path: wavePath, color: waveColor, width: 1.1))
+
+            if !highlightPath.isEmpty {
+                strokes.append(PondStroke(path: highlightPath, color: specularColor, width: 1.2))
+            }
+
+            return strokes
+        }
+    }
+
     public static func drawRipples(_ ripples: [WaterRipple], in context: CGContext) {
         guard !ripples.isEmpty else { return }
         context.saveGState()
+        context.setLineCap(.round)
 
         for ripple in ripples where !ripple.isDead {
-            let center = CGPoint(x: CGFloat(ripple.center.x), y: CGFloat(ripple.center.y))
-            let r = CGFloat(ripple.radius)
-            let alpha = CGFloat(ripple.alpha)
-
-            switch ripple.type {
-            case .waterCall:
-                // Primary cyan ring
-                context.setStrokeColor(red: 0.35, green: 0.88, blue: 0.85, alpha: alpha * 0.85)
-                context.setLineWidth(2.0)
-                context.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-
-                // Inner secondary ring if large enough
-                if r > 16.0 {
-                    let rInner = r * 0.65
-                    context.setStrokeColor(red: 0.35, green: 0.88, blue: 0.85, alpha: alpha * 0.45)
-                    context.setLineWidth(1.2)
-                    context.strokeEllipse(in: CGRect(x: center.x - rInner, y: center.y - rInner, width: rInner * 2, height: rInner * 2))
-                }
-
-            case .foodDrop:
-                // Vibrant orange / amber ring
-                context.setStrokeColor(red: 1.0, green: 0.60, blue: 0.18, alpha: alpha * 0.9)
-                context.setLineWidth(2.4)
-                context.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-
-                if r > 12.0 {
-                    let rInner = r * 0.55
-                    context.setStrokeColor(red: 1.0, green: 0.75, blue: 0.35, alpha: alpha * 0.5)
-                    context.setLineWidth(1.2)
-                    context.strokeEllipse(in: CGRect(x: center.x - rInner, y: center.y - rInner, width: rInner * 2, height: rInner * 2))
-                }
-
-            case .eatingNibble:
-                // Soft white nibble ring
-                context.setStrokeColor(red: 0.95, green: 0.98, blue: 1.0, alpha: alpha * 0.8)
-                context.setLineWidth(1.4)
-                context.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-
-            case .rainDrop:
-                // Delicate silver-cyan rain droplet ripple
-                context.setStrokeColor(red: 0.78, green: 0.88, blue: 0.95, alpha: alpha * 0.65)
-                context.setLineWidth(1.0)
-                context.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+            for stroke in rippleStrokes(for: ripple) {
+                context.setStrokeColor(stroke.color)
+                context.setLineWidth(stroke.width)
+                context.addPath(stroke.path)
+                context.strokePath()
             }
         }
 

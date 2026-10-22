@@ -577,7 +577,7 @@ public final class PondSimulation: @unchecked Sendable {
         // Atmospheric rain drops: strictly capped to maxRainRipples
         if isRainActive {
             rainTimer += dt
-            if rainTimer >= 0.22 {
+            if rainTimer >= 0.08 {
                 rainTimer = 0.0
                 let activeRainRipples = ripples.reduce(0) { $0 + ($1.type == .rainDrop ? 1 : 0) }
                 if activeRainRipples < maxRainRipples && ripples.count < maxRipples {
