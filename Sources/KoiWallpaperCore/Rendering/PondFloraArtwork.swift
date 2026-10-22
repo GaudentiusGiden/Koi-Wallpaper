@@ -18,6 +18,7 @@ enum PondFloraArtwork {
         let mirror: CGFloat = index == 2 || index == 3 ? -1 : 1
         context.scaleBy(x: mirror, y: 1)
         var rng = SeededRandomNumberGenerator(seed: UInt64(6100 + index * 317))
+        let palette = theme.renderPalette
         func random(_ range: ClosedRange<Double>) -> CGFloat { CGFloat(Double.random(in: range, using: &rng)) }
 
         // Submerged stems and floating duckweed, with denser roots along the shore.
@@ -26,7 +27,8 @@ enum PondFloraArtwork {
             let y = random(-0.24...0.24)
             let x = random(-0.065...0.095) + sin(y * 27 + CGFloat(index)) * 0.023
             let length = random(0.012...0.035)
-            context.setStrokeColor(red: 0.10, green: 0.27, blue: 0.17, alpha: 0.45)
+            context.setStrokeColor(red: palette.stems.red, green: palette.stems.green,
+                                   blue: palette.stems.blue, alpha: 0.45)
             context.setLineWidth(0.002)
             context.move(to: CGPoint(x: x - 0.014, y: y - length))
             context.addQuadCurve(to: CGPoint(x: x + 0.010, y: y + length), control: CGPoint(x: x - 0.02, y: y))
@@ -37,13 +39,13 @@ enum PondFloraArtwork {
             let shadow = PondLighting.shadowOffset(distance: 0.024)
             context.fillEllipse(in: CGRect(x: x + shadow.x * mirror, y: y + shadow.y,
                                           width: radius * 3.0, height: radius * 2.4))
-            let greens: [(CGFloat, CGFloat, CGFloat)] = [(0.18, 0.40, 0.20), (0.28, 0.51, 0.22), (0.38, 0.59, 0.25), (0.22, 0.45, 0.23)]
-            let col = greens[i % greens.count]
-            context.setFillColor(red: col.0, green: col.1, blue: col.2, alpha: 1)
+            let col = palette.greens[i % palette.greens.count]
+            context.setFillColor(red: col.red, green: col.green, blue: col.blue, alpha: 1)
             context.fillEllipse(in: CGRect(x: x, y: y, width: radius * 2.1, height: radius * 1.5))
             context.fillEllipse(in: CGRect(x: x - radius, y: y + radius * 0.8, width: radius * 1.4, height: radius * 1.8))
             if i % 3 == 0 {
-                context.setFillColor(red: 0.53, green: 0.66, blue: 0.27, alpha: 1)
+                context.setFillColor(red: palette.duckweed.red, green: palette.duckweed.green,
+                                     blue: palette.duckweed.blue, alpha: 1)
                 context.fill(CGRect(x: x, y: y + radius, width: radius * 0.65, height: radius * 0.65))
             }
         }
@@ -71,6 +73,7 @@ enum PondFloraArtwork {
 
     private static func drawPad(in context: CGContext, center: CGPoint, radius: CGFloat,
                                 angle: CGFloat, variant: Int, flower: Bool, mirror: CGFloat, theme: PondTheme = .day) {
+        let palette = theme.renderPalette
         context.saveGState()
         context.translateBy(x: center.x, y: center.y)
         context.rotate(by: angle)
@@ -106,18 +109,26 @@ enum PondFloraArtwork {
         context.restoreGState()
 
         let shade = CGFloat(variant % 3) * 0.015
-        context.setFillColor(red: 0.055 + shade, green: 0.235 + shade, blue: 0.145 + shade, alpha: 1)
+        context.setFillColor(red: palette.leafBase.red + shade,
+                             green: palette.leafBase.green + shade,
+                             blue: palette.leafBase.blue + shade, alpha: 1)
         context.addPath(leaf)
         context.fillPath()
         context.saveGState()
         context.addPath(leaf)
         context.clip()
-        context.setFillColor(red: 0.085 + shade, green: 0.285 + shade, blue: 0.17 + shade, alpha: 1)
+        context.setFillColor(red: palette.leafHighlight.red + shade,
+                             green: palette.leafHighlight.green + shade,
+                             blue: palette.leafHighlight.blue + shade, alpha: 1)
         context.fillEllipse(in: CGRect(x: -radius * 1.03, y: -radius * 0.65, width: radius * 1.65, height: radius * 1.7))
-        context.setFillColor(red: 0.13 + shade, green: 0.33 + shade, blue: 0.19 + shade, alpha: 0.48)
+        context.setFillColor(red: palette.leafGlaze.color.red,
+                             green: palette.leafGlaze.color.green,
+                             blue: palette.leafGlaze.color.blue, alpha: palette.leafGlaze.alpha)
         context.fillEllipse(in: CGRect(x: -radius * 0.85, y: radius * 0.10, width: radius * 0.7, height: radius * 0.5))
         context.restoreGState()
-        context.setStrokeColor(red: 0.025, green: 0.16, blue: 0.10, alpha: 0.9)
+        context.setStrokeColor(red: palette.leafVeins.color.red,
+                               green: palette.leafVeins.color.green,
+                               blue: palette.leafVeins.color.blue, alpha: palette.leafVeins.alpha)
         context.setLineWidth(radius * 0.035)
         for i in 0..<7 {
             let theta = 0.45 + CGFloat(i) * (2 * .pi - 0.9) / 6
@@ -130,23 +141,10 @@ enum PondFloraArtwork {
             }
         }
         context.strokePath()
-        // Short, broken rim highlights tuned for active theme.
-        let rimColor: (CGFloat, CGFloat, CGFloat, CGFloat)
-        switch theme {
-        case .goldenHour:
-            rimColor = (0.65, 0.58, 0.28, 0.65)
-        case .night:
-            rimColor = (0.18, 0.38, 0.40, 0.40)
-        case .dusk:
-            rimColor = (0.38, 0.32, 0.40, 0.45)
-        case .dawn:
-            rimColor = (0.42, 0.52, 0.32, 0.55)
-        case .rain:
-            rimColor = (0.30, 0.45, 0.42, 0.45)
-        case .day, .deepClear:
-            rimColor = (0.23, 0.42, 0.24, 0.50)
-        }
-        context.setStrokeColor(red: rimColor.0, green: rimColor.1, blue: rimColor.2, alpha: rimColor.3)
+        // Short, broken rim highlights use the shared theme palette.
+        context.setStrokeColor(red: palette.leafRim.color.red,
+                               green: palette.leafRim.color.green,
+                               blue: palette.leafRim.color.blue, alpha: palette.leafRim.alpha)
         context.setLineWidth(radius * 0.022)
         context.addArc(center: .zero, radius: radius * 0.985, startAngle: 1.2, endAngle: 2.7, clockwise: false)
         context.strokePath()
@@ -155,6 +153,7 @@ enum PondFloraArtwork {
     }
 
     private static func drawFlower(in context: CGContext, radius: CGFloat, theme: PondTheme = .day) {
+        let palette = theme.renderPalette
         for tier in 0..<2 {
             let petal = CGMutablePath()
             for i in 0..<16 {
@@ -164,27 +163,16 @@ enum PondFloraArtwork {
                 if i == 0 { petal.move(to: p) } else { petal.addLine(to: p) }
             }
             petal.closeSubpath()
-            if tier == 0 {
-                switch theme {
-                case .goldenHour: context.setFillColor(red: 0.92, green: 0.42, blue: 0.38, alpha: 1)
-                case .dusk: context.setFillColor(red: 0.82, green: 0.35, blue: 0.52, alpha: 1)
-                case .night: context.setFillColor(red: 0.68, green: 0.38, blue: 0.56, alpha: 1)
-                default: context.setFillColor(red: 0.87, green: 0.34, blue: 0.48, alpha: 1)
-                }
-            } else {
-                switch theme {
-                case .goldenHour: context.setFillColor(red: 1.00, green: 0.78, blue: 0.68, alpha: 1)
-                case .dusk: context.setFillColor(red: 0.95, green: 0.72, blue: 0.82, alpha: 1)
-                case .night: context.setFillColor(red: 0.85, green: 0.70, blue: 0.82, alpha: 1)
-                default: context.setFillColor(red: 1.00, green: 0.70, blue: 0.72, alpha: 1)
-                }
-            }
+            let petalColor = tier == 0 ? palette.flowerPetal : palette.flowerInnerPetal
+            context.setFillColor(red: petalColor.red, green: petalColor.green, blue: petalColor.blue, alpha: 1)
             context.addPath(petal)
             context.fillPath()
         }
-        context.setFillColor(red: 0.97, green: 0.69, blue: 0.16, alpha: 1)
+        context.setFillColor(red: palette.flowerCenter.red, green: palette.flowerCenter.green,
+                             blue: palette.flowerCenter.blue, alpha: 1)
         context.fill(CGRect(x: -radius * 0.20, y: -radius * 0.20, width: radius * 0.40, height: radius * 0.40))
-        context.setFillColor(red: 0.50, green: 0.26, blue: 0.10, alpha: 1)
+        context.setFillColor(red: palette.flowerCore.red, green: palette.flowerCore.green,
+                             blue: palette.flowerCore.blue, alpha: 1)
         context.fill(CGRect(x: -radius * 0.09, y: -radius * 0.09, width: radius * 0.18, height: radius * 0.18))
     }
 }

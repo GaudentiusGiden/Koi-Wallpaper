@@ -3,6 +3,8 @@
 Tanggal: 21 Oktober 2026 (Asia/Jakarta).  
 Status: Implementasi 7 tema dan jalur transisi tersedia; `swift build` berhasil. Filter Core Image native belum diperiksa secara visual saat runtime.
 
+> Catatan pembaruan 22 Oktober: nilai palet dan perlakuan visual terbaru dipusatkan serta dikalibrasi ulang di [keputusan penyelarasan visual](2026-10-22-visual-alignment-nagomi.md). Dokumen ini tetap menyimpan desain awal M3.6 dan detail transisi yang tidak berubah.
+
 ## 1. Acuan Visual: Bukti Teramati vs Interpretasi Desain
 
 Sesuai panduan audit dan integritas dokumentasi proyek, pembagian sumber visual diklasifikasikan secara transparan:

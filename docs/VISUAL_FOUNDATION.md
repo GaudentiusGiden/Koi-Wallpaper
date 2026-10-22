@@ -2,6 +2,8 @@
 
 Tanggal: 21 Oktober 2026 (Asia/Jakarta).
 
+Palet dan perlakuan visual terbaru menyelaraskan tujuh tema dengan konsep Nagomi pada 22 Oktober. Rincian keputusan, bukti langsung, dan batas referensi ada di [keputusan penyelarasan visual](decisions/2026-10-22-visual-alignment-nagomi.md); angka di bawah ini tetap merekam revisi fondasi sebelumnya.
+
 Revisi pencahayaan berikutnya tersedia pada [review cahaya dan bayangan](../reports/water-shadow-review.html), dengan [catatan perubahan dan verifikasi](decisions/2026-10-21-background-visual-enhancement.md). Revisi tersebut menyesuaikan naungan kanopi, sorotan air, eksposur caustics, serta arah bayangan koi, teratai, dan ikan kecil. Screenshot serta angka dalam dokumen fondasi di bawah tetap merupakan rekaman revisi fondasi sebelumnya.
 
 Revisi ini melanjutkan implementasi M3.5 sebelumnya, dengan proporsi dan komposisi yang dinilai terhadap screenshot acuan. Pengguna menyetujui penyesuaian ukuran fisik koi bersama artwork serta penambahan ikan kecil dekoratif. Implementasi perangkat lunak M3 sudah selesai pada `f88406c`; validasi fisik monitor eksternal kedua dan pengukuran energi Watt tetap tertunda.

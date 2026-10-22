@@ -62,6 +62,7 @@ public final class PondRenderer {
 
     public private(set) var isSnapshotSource: Bool = false
     private var customSourceShadow: PondLighting.ShadowStyle?
+    private var customSourceFishAmbientStyle: PondLighting.FishAmbientStyle?
     private var customSourceTint: CGColor?
     private var customSourceGlimmer: GlimmerStyle?
     private(set) var lastFromTheme: PondTheme = .day
@@ -154,6 +155,10 @@ public final class PondRenderer {
         let styleB = PondLighting.shadowStyle(for: effectiveTo)
         let candidateShadow = PondLighting.ShadowStyle.lerp(from: styleA, to: styleB, t: p)
 
+        let fishAmbientA = customSourceFishAmbientStyle ?? PondLighting.fishAmbientStyle(for: effectiveFrom)
+        let fishAmbientB = PondLighting.fishAmbientStyle(for: effectiveTo)
+        let candidateFishAmbient = PondLighting.FishAmbientStyle.lerp(from: fishAmbientA, to: fishAmbientB, t: p)
+
         let tintA = customSourceTint ?? Self.themeTint(effectiveFrom)
         let tintB = Self.themeTint(effectiveTo)
         let candidateTint = Self.lerpColor(from: tintA, to: tintB, t: p)
@@ -174,6 +179,7 @@ public final class PondRenderer {
         floraPixelSizeB = pixelSize
         floraThemeB = effectiveTo
         customSourceShadow = candidateShadow
+        customSourceFishAmbientStyle = candidateFishAmbient
         customSourceTint = candidateTint
         customSourceGlimmer = candidateGlimmer
         isSnapshotSource = true
@@ -204,6 +210,7 @@ public final class PondRenderer {
     public func clearSnapshotSource() {
         isSnapshotSource = false
         customSourceShadow = nil
+        customSourceFishAmbientStyle = nil
         customSourceTint = nil
         customSourceGlimmer = nil
     }
@@ -389,6 +396,15 @@ public final class PondRenderer {
                 shadowStyle = PondLighting.shadowStyle(for: toTheme)
             }
 
+            let fishAmbientStyle: PondLighting.FishAmbientStyle
+            if isTransitioning {
+                let styleA = customSourceFishAmbientStyle ?? PondLighting.fishAmbientStyle(for: fromTheme)
+                let styleB = PondLighting.fishAmbientStyle(for: toTheme)
+                fishAmbientStyle = PondLighting.FishAmbientStyle.lerp(from: styleA, to: styleB, t: clampedP)
+            } else {
+                fishAmbientStyle = PondLighting.fishAmbientStyle(for: toTheme)
+            }
+
             DecorativeFishArtwork.draw(
                 in: bitmap,
                 size: size,
@@ -409,7 +425,7 @@ public final class PondRenderer {
                 PondArtwork.drawVisitorShadow(visitor, in: bitmap, shadowStyle: shadowStyle)
             }
             for fish in simulation.fish {
-                KoiArtwork.draw(fish, in: bitmap, theme: toTheme)
+                KoiArtwork.draw(fish, in: bitmap, theme: toTheme, customFishAmbientStyle: fishAmbientStyle)
             }
             PondArtwork.drawPellets(simulation.pellets, in: bitmap)
             for visitor in simulation.visitors {
@@ -533,14 +549,7 @@ public final class PondRenderer {
     }
 
     public static func themeTint(_ theme: PondTheme) -> CGColor? {
-        switch theme {
-        case .day, .deepClear: return nil
-        case .dawn: return CGColor(red: 0.95, green: 0.80, blue: 0.55, alpha: 0.03)
-        case .goldenHour: return CGColor(red: 0.98, green: 0.72, blue: 0.35, alpha: 0.05)
-        case .dusk: return CGColor(red: 0.80, green: 0.40, blue: 0.50, alpha: 0.06)
-        case .night: return CGColor(red: 0.04, green: 0.10, blue: 0.25, alpha: 0.10)
-        case .rain: return CGColor(red: 0.60, green: 0.72, blue: 0.78, alpha: 0.07)
-        }
+        theme.renderPalette.atmosphere?.cgColor
     }
 
     private static func tint(_ phase: TimeOfDayPhase) -> CGColor? {
@@ -569,22 +578,8 @@ public final class PondRenderer {
     }
 
     private static func glimmerStyle(for theme: PondTheme) -> (color: (CGFloat, CGFloat, CGFloat), alpha: CGFloat) {
-        switch theme {
-        case .day:
-            return ((0.77, 0.98, 0.82), 0.07)
-        case .dawn:
-            return ((0.95, 0.90, 0.76), 0.06)
-        case .goldenHour:
-            return ((1.00, 0.88, 0.60), 0.08)
-        case .dusk:
-            return ((0.92, 0.75, 0.85), 0.05)
-        case .night:
-            return ((0.60, 0.85, 1.00), 0.02)
-        case .deepClear:
-            return ((0.85, 1.00, 0.98), 0.08)
-        case .rain:
-            return ((0.88, 0.94, 0.96), 0.05)
-        }
+        let glimmer = theme.renderPalette.glimmer
+        return ((glimmer.color.red, glimmer.color.green, glimmer.color.blue), glimmer.alpha)
     }
 
     private static func lerpGlimmer(

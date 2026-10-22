@@ -41,9 +41,9 @@ final class PondWaterSurface {
         keyTheme = theme
         overscan = max(24, min(size.width, size.height) * 0.055)
         let meshSize = CGSize(width: size.width + overscan * 2, height: size.height + overscan * 2)
-        // Soft light does not need a full Retina backing store. Bounding all three
-        // textures avoids multiplying monitor memory across displays.
-        let rasterScale = min(scale, 1536 / max(meshSize.width, meshSize.height), sqrt(2_250_000 / (meshSize.width * meshSize.height)))
+        // Keep the water treatment softly stepped instead of rendering a full
+        // Retina texture. Bounding all three caches also limits multi-monitor memory.
+        let rasterScale = min(scale, 0.85, 1536 / max(meshSize.width, meshSize.height), sqrt(2_250_000 / (meshSize.width * meshSize.height)))
         guard let newBed = PondBitmap.makeImage(size: size, scale: rasterScale, draw: {
             PondArtwork.drawWater(in: $0, rect: CGRect(origin: .zero, size: size), theme: theme)
         }) else {
@@ -190,49 +190,11 @@ final class PondWaterSurface {
         context.setLineCap(.round)
         context.setLineJoin(.round)
 
-        // Phase/theme-specific caustic color palettes
-        let outerColor: (CGFloat, CGFloat, CGFloat)
-        let innerColor: (CGFloat, CGFloat, CGFloat)
-        let faintColor: (CGFloat, CGFloat, CGFloat)
-        let phaseAlphaGain: CGFloat
-
-        switch theme {
-        case .day:
-            outerColor = (0.58, 0.98, 0.80)
-            innerColor = (0.68, 1.00, 0.86)
-            faintColor = (0.46, 0.88, 0.68)
-            phaseAlphaGain = 1.0
-        case .dawn:
-            outerColor = (0.92, 0.90, 0.68)
-            innerColor = (0.98, 0.96, 0.78)
-            faintColor = (0.74, 0.82, 0.60)
-            phaseAlphaGain = 0.78
-        case .goldenHour:
-            outerColor = (0.98, 0.82, 0.46)
-            innerColor = (1.00, 0.92, 0.65)
-            faintColor = (0.85, 0.74, 0.40)
-            phaseAlphaGain = 0.88
-        case .dusk:
-            outerColor = (0.85, 0.62, 0.78)
-            innerColor = (0.94, 0.78, 0.88)
-            faintColor = (0.70, 0.52, 0.68)
-            phaseAlphaGain = 0.52
-        case .night:
-            outerColor = (0.38, 0.72, 0.95)
-            innerColor = (0.55, 0.88, 1.00)
-            faintColor = (0.28, 0.55, 0.82)
-            phaseAlphaGain = 0.45
-        case .deepClear:
-            outerColor = (0.45, 0.96, 0.92)
-            innerColor = (0.75, 1.00, 0.98)
-            faintColor = (0.35, 0.85, 0.82)
-            phaseAlphaGain = 1.12
-        case .rain:
-            outerColor = (0.65, 0.80, 0.82)
-            innerColor = (0.80, 0.90, 0.92)
-            faintColor = (0.50, 0.68, 0.70)
-            phaseAlphaGain = 0.48
-        }
+        let caustics = theme.renderPalette.caustics
+        let outerColor = caustics.outer.components
+        let innerColor = caustics.inner.components
+        let faintColor = caustics.faint.components
+        let phaseAlphaGain = caustics.alphaGain
 
         for band in 0..<4 {
             let exposure = [0.30, 0.55, 0.95, 1.65][band] * phaseAlphaGain

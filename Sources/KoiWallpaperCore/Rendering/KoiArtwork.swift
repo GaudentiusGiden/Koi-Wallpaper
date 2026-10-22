@@ -13,7 +13,8 @@ public enum KoiArtwork {
         in context: CGContext,
         drawShadowOnly: Bool = false,
         theme: PondTheme = .day,
-        customShadowStyle: PondLighting.ShadowStyle? = nil
+        customShadowStyle: PondLighting.ShadowStyle? = nil,
+        customFishAmbientStyle: PondLighting.FishAmbientStyle? = nil
     ) {
         context.saveGState()
         let length = CGFloat(fish.length)
@@ -145,17 +146,21 @@ public enum KoiArtwork {
         case .ogon:
             patch(0.07, 0.15, 0.50, 1.15, CGColor(red: 1, green: 0.78, blue: 0.21, alpha: 1), 1)
         }
-        // Jade shade along the underside, warm dorsal highlight along the spine.
+        // Theme-colored reflections stay on the existing light and shade areas,
+        // so the koi variety's base color and markings remain recognizable.
+        let fishAmbient = customFishAmbientStyle ?? PondLighting.fishAmbientStyle(for: theme)
         let shade = CGMutablePath()
         shade.move(to: CGPoint(x: spine[0].x, y: -halfWidth * 0.4))
         for p in spine.prefix(6) { shade.addLine(to: CGPoint(x: p.x, y: p.y - halfWidth * 0.55)) }
         shade.addLine(to: CGPoint(x: -length, y: -length))
         shade.addLine(to: CGPoint(x: length, y: -length))
         shade.closeSubpath()
-        context.setFillColor(red: 0.08, green: 0.29, blue: 0.23, alpha: 0.25)
+        context.setFillColor(red: fishAmbient.shadeColor.0, green: fishAmbient.shadeColor.1,
+                             blue: fishAmbient.shadeColor.2, alpha: fishAmbient.shadeAlpha)
         context.addPath(shade)
         context.fillPath()
-        context.setStrokeColor(red: 1, green: 0.98, blue: 0.78, alpha: 0.22)
+        context.setStrokeColor(red: fishAmbient.highlightColor.0, green: fishAmbient.highlightColor.1,
+                               blue: fishAmbient.highlightColor.2, alpha: fishAmbient.highlightAlpha)
         context.setLineWidth(length * 0.028)
         context.move(to: CGPoint(x: spine[1].x, y: spine[1].y + halfWidth * 0.25))
         context.addQuadCurve(to: spine[4], control: CGPoint(x: spine[3].x, y: spine[3].y + halfWidth * 0.18))

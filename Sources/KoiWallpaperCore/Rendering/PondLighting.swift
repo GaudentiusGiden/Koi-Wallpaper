@@ -33,58 +33,45 @@ public enum PondLighting {
         }
     }
 
-    public static func shadowStyle(for theme: PondTheme) -> ShadowStyle {
-        switch theme {
-        case .day:
-            return ShadowStyle(
-                color: (0.015, 0.125, 0.095),
-                coreAlpha: 0.36,
-                penumbraAlpha: 0.16,
-                smallFishAlpha: 0.24
-            )
-        case .dawn:
-            return ShadowStyle(
-                color: (0.035, 0.120, 0.075),
-                coreAlpha: 0.30,
-                penumbraAlpha: 0.13,
-                smallFishAlpha: 0.20
-            )
-        case .goldenHour:
-            return ShadowStyle(
-                color: (0.020, 0.085, 0.095),
-                coreAlpha: 0.34,
-                penumbraAlpha: 0.15,
-                smallFishAlpha: 0.22
-            )
-        case .dusk:
-            return ShadowStyle(
-                color: (0.025, 0.045, 0.095),
-                coreAlpha: 0.26,
-                penumbraAlpha: 0.11,
-                smallFishAlpha: 0.17
-            )
-        case .night:
-            return ShadowStyle(
-                color: (0.008, 0.022, 0.060),
-                coreAlpha: 0.22,
-                penumbraAlpha: 0.09,
-                smallFishAlpha: 0.14
-            )
-        case .deepClear:
-            return ShadowStyle(
-                color: (0.010, 0.110, 0.130),
-                coreAlpha: 0.38,
-                penumbraAlpha: 0.16,
-                smallFishAlpha: 0.26
-            )
-        case .rain:
-            return ShadowStyle(
-                color: (0.020, 0.050, 0.075),
-                coreAlpha: 0.24,
-                penumbraAlpha: 0.14,
-                smallFishAlpha: 0.16
+    /// Theme-colored reflected light on koi. Base colors and variety markings
+    /// remain intact while the underside shade and dorsal highlight blend with
+    /// the surrounding water.
+    public struct FishAmbientStyle {
+        public let shadeColor: (CGFloat, CGFloat, CGFloat)
+        public let shadeAlpha: CGFloat
+        public let highlightColor: (CGFloat, CGFloat, CGFloat)
+        public let highlightAlpha: CGFloat
+
+        public init(
+            shadeColor: (CGFloat, CGFloat, CGFloat),
+            shadeAlpha: CGFloat,
+            highlightColor: (CGFloat, CGFloat, CGFloat),
+            highlightAlpha: CGFloat
+        ) {
+            self.shadeColor = shadeColor
+            self.shadeAlpha = shadeAlpha
+            self.highlightColor = highlightColor
+            self.highlightAlpha = highlightAlpha
+        }
+
+        public static func lerp(from a: FishAmbientStyle, to b: FishAmbientStyle, t: CGFloat) -> FishAmbientStyle {
+            let clamped = max(0, min(1, t))
+            func mix(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x + (y - x) * clamped }
+            return FishAmbientStyle(
+                shadeColor: (mix(a.shadeColor.0, b.shadeColor.0), mix(a.shadeColor.1, b.shadeColor.1), mix(a.shadeColor.2, b.shadeColor.2)),
+                shadeAlpha: mix(a.shadeAlpha, b.shadeAlpha),
+                highlightColor: (mix(a.highlightColor.0, b.highlightColor.0), mix(a.highlightColor.1, b.highlightColor.1), mix(a.highlightColor.2, b.highlightColor.2)),
+                highlightAlpha: mix(a.highlightAlpha, b.highlightAlpha)
             )
         }
+    }
+
+    public static func shadowStyle(for theme: PondTheme) -> ShadowStyle {
+        theme.renderPalette.shadow
+    }
+
+    public static func fishAmbientStyle(for theme: PondTheme) -> FishAmbientStyle {
+        theme.renderPalette.fishAmbient
     }
 
     static func shadowStyle(for phase: TimeOfDayPhase) -> ShadowStyle {
