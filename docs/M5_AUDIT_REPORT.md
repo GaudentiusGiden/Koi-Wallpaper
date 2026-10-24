@@ -6,6 +6,20 @@ Dokumen ini merupakan **laporan hasil implementasi teknis dan bukti audit formal
 
 ## 1. Ringkasan Eksekutif & Status Verifikasi
 
+### Pembaruan setelah audit — 24 Oktober 2026
+
+Commit `dc0168c` menambahkan siklus hidup angsa otomatis pada wallpaper. Angsa
+muncul langsung di titik acak di dalam kolam, berenang dengan lintasan yang
+berubah perlahan, lalu menuju tepi terdekat setelah 18–30 detik. Angsa dihapus
+setelah seluruh siluet keluar dan kemunculan berikutnya dijadwalkan setelah
+jeda 5–9 detik. Artwork menggunakan skala `1.512`, atau 8% di atas skala
+sebelumnya `1.4`. Menu “Undang Angsa” diganti keterangan status.
+
+`swift build` dan `git diff --check` lulus untuk perubahan tersebut. Suite
+23/23 dan 53/53 di bawah adalah bukti baseline M5, bukan verifikasi siklus hidup
+angsa otomatis; suite tersebut belum dijalankan ulang untuk follow-up ini.
+Jalankan preview perilaku dengan `swift run KoiWallpaperPreview --preview-swan`.
+
 - **Status Kode & Kompilasi**:
   - Implementasi kode M5 telah selesai 100%.
   - `swift build` berhasil dengan exit code 0 tanpa error dan tanpa peringatan (*zero warnings*).
@@ -27,7 +41,7 @@ Dokumen ini merupakan **laporan hasil implementasi teknis dan bukti audit formal
   - **Item yang Tetap Tertunda (PENDING)**: Penekanan tombol fisik Escape secara mekanis oleh jari manusia pada keyboard perangkat keras nyata (*human physical mechanical key press*) tidak dapat dilakukan oleh agen perangkat lunak tanpa kehadiran fisik manusia di depan komputer; pengujian pada konfigurasi perangkat keras kabel/monitor fisik kedua juga tetap berstatus **PENDING**.
 - **Integritas Format & Git**:
   - `git diff --check` bersih (tidak ada *trailing whitespace* atau galat format).
-  - Seluruh perubahan berada di *working tree* lokal dan **belum di-commit** ke Git.
+  - Pernyataan status *working tree* dalam inventaris Bagian 5 berlaku untuk snapshot audit M5, bukan status Git saat ini.
 - **Kepatuhan Privilese & Keamanan Sistem**:
   - Audit statis T10.4 mencari 7 pola tertentu pada berkas Swift di `Sources` dan tidak menemukan kemunculan pola tersebut. Hasil ini terbatas pada pola yang diperiksa dan tidak menyimpulkan ketiadaan pemanggilan API manajemen daya secara umum di luar cakupan pemindaian tersebut.
   - Fitur layar penuh ditegaskan sebagai *Manual Fullscreen Pond Presentation*, tanpa klaim atau integrasi dengan bundel screensaver native macOS (`.saver`).
@@ -40,9 +54,9 @@ Dokumen ini merupakan **laporan hasil implementasi teknis dan bukti audit formal
 - **Lokasi Kode**: [`../Sources/KoiWallpaperCore/Simulation/PondVisitor.swift`](../Sources/KoiWallpaperCore/Simulation/PondVisitor.swift) dan batas kolam di [`../Sources/KoiWallpaperCore/Simulation/PondBounds.swift`](../Sources/KoiWallpaperCore/Simulation/PondBounds.swift)
 - **Model Pengunjung**:
   - `PondVisitorType.swan` (Angsa):
-    - Meluncur tenang dengan kecepatan konstan $24.0\text{ pt/s}$.
-    - Menghindari tepi kolam menggunakan margin lembut $50.0\text{ pt}$.
-    - Sudut haluan (`heading`) berinterpolasi halus mengikuti arah gerak.
+    - Visitor biasa/manual memakai kecepatan awal $24.0\text{ pt/s}$ dan steering penghindar batas.
+    - Mode otomatis wallpaper muncul di titik acak di dalam kolam dengan kecepatan dasar $34$–$44\text{ pt/s}$ dan variasi kecil. Haluan berubah bertahap; setelah 18–30 detik ia mengarah ke tepi terdekat dan keluar layar.
+    - Simulasi menghapusnya setelah seluruh siluet melewati batas kolam, lalu menunggu 5–9 detik sebelum membuat angsa berikutnya.
   - `PondVisitorType.ball` (Bola Temari):
     - Memiliki massa fisik, inersia, dan perlambatan hidrodinamis air ($0.985$/frame).
     - Memantul secara elastis saat menyentuh batas kolam (`minX`, `maxX`, `minY`, `maxY`) dengan koefisien redaman $0.85$.
@@ -74,6 +88,7 @@ Dokumen ini merupakan **laporan hasil implementasi teknis dan bukti audit formal
   - Badan bulu putih gading (*ivory white*) berbentuk tetesan air halus.
   - Sayap berlapis kiri-kanan dengan garis lekuk tipis.
   - Leher melengkung anggun, paruh oranye cerah, dan aksen topeng hitam di pangkal paruh.
+  - Skala gambar dan bayangan `1.512`, yakni 8% di atas skala desain sebelumnya `1.4`.
 - **Visual Bola Temari**:
   - Bayangan bulat redup di bawah bola.
   - Lingkaran dasar merah terang bergradasi halus (*spherical vermilion*).
@@ -176,11 +191,14 @@ Untuk menjaga integritas dan ketepatan audit, laporan ini membedakan secara tega
 
 ---
 
-## 5. Inventaris Berkas Repositori
+## 5. Inventaris Berkas Repositori pada Snapshot Audit M5
 
-Berdasarkan perbandingan aktual terhadap `git status` dan `git diff`, berikut adalah pemisahan tegas antara berkas Milestone M5 dan perubahan M4/M3.6 yang saat ini sama-sama berada di *working tree* (belum di-commit):
+Inventaris berikut merekam keadaan repositori saat audit M5 disusun. Label
+*untracked* dan *working tree* di bagian ini bersifat historis, bukan laporan
+`git status` saat ini. Siklus hidup angsa otomatis kemudian dicatat pada commit
+`dc0168c` dan dalam pembaruan di bagian atas dokumen ini.
 
-### 5.1 Berkas Baru Khusus Milestone M5 (Untracked)
+### 5.1 Berkas yang Diperkenalkan oleh Milestone M5
 1. [`../Sources/KoiWallpaperCore/Simulation/PondVisitor.swift`](../Sources/KoiWallpaperCore/Simulation/PondVisitor.swift)
    - Model pengunjung `PondVisitor`, jenis `.swan` dan `.ball`, kinematika, inersia, dorongan, dan penghindaran batas.
 2. [`../Sources/KoiWallpaperCore/Desktop/FullscreenPondWindow.swift`](../Sources/KoiWallpaperCore/Desktop/FullscreenPondWindow.swift)
@@ -201,7 +219,7 @@ Berdasarkan perbandingan aktual terhadap `git status` dan `git diff`, berikut ad
    - Bukti visual tangkapan layar saat mode layar penuh aktif dari status dasar interaktif (.interactive).
 
 ### 5.2 Berkas yang Dimodifikasi untuk Milestone M5
-*(Catatan: Sebagian berkas ini juga mengakomodasi perubahan M4 yang belum di-commit; rincian porsi M5 dijelaskan di bawah ini)*
+*(Catatan: pada snapshot audit, sebagian berkas ini juga mengakomodasi perubahan M4; rincian porsi M5 dijelaskan di bawah ini.)*
 1. [`../Sources/KoiWallpaperCore/Simulation/PondBounds.swift`](../Sources/KoiWallpaperCore/Simulation/PondBounds.swift)
    - **Porsi M5**: Penambahan properti batas `minX`, `maxX`, `minY`, dan `maxY` untuk kalkulasi pantulan dinding bola temari dan penahanan pengunjung.
 2. [`../Sources/KoiWallpaperCore/Rendering/PondSceneLayer.swift`](../Sources/KoiWallpaperCore/Rendering/PondSceneLayer.swift)
@@ -221,7 +239,7 @@ Berdasarkan perbandingan aktual terhadap `git status` dan `git diff`, berikut ad
 9. [`../Sources/KoiWallpaperCore/Settings/WallpaperSettings.swift`](../Sources/KoiWallpaperCore/Settings/WallpaperSettings.swift)
    - **Porsi M5**: Properti `idleBehaviorPolicy` dengan dekoding aman. *(Porsi M4 di berkas ini: properti `pondMood` dan `isRainActive`)*.
 10. [`../Sources/KoiWallpaperCore/App/StatusBarController.swift`](../Sources/KoiWallpaperCore/App/StatusBarController.swift)
-    - **Porsi M5**: Submenu Pengunjung Kolam (*Undang Angsa*, *Lepas Bola Temari*, *Bersihkan*) dan toggle Layar Penuh (*Escape untuk Keluar*). *(Porsi M4 di berkas ini: submenu suasana mood dan toggle efek hujan)*.
+    - **Porsi M5**: Submenu Pengunjung Kolam (status angsa otomatis, *Lepas Bola Temari*, *Bersihkan*) dan toggle Layar Penuh (*Escape untuk Keluar*). *(Porsi M4 di berkas ini: submenu suasana mood dan toggle efek hujan)*.
 11. [`../Sources/KoiWallpaperCore/App/AppCoordinator.swift`](../Sources/KoiWallpaperCore/App/AppCoordinator.swift)
     - **Porsi M5**: Pengkabelan instans `ManualFullscreenController`, delegasi pengunjung, dan teardown penutupan fullscreen. *(Porsi M4 di berkas ini: delegasi mood dan rain)*.
 12. [`../Sources/KoiWallpaperPreview/KoiPondPreviewView.swift`](../Sources/KoiWallpaperPreview/KoiPondPreviewView.swift)
@@ -233,8 +251,8 @@ Berdasarkan perbandingan aktual terhadap `git status` dan `git diff`, berikut ad
 15. [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
     - Pembaruan status Milestone M5 menjadi selesai dan terverifikasi secara faktual.
 
-### 5.3 Perubahan Tambahan di Working Tree Milik M4 / M3.6 (Bukan Bagian M5)
-Perubahan berikut ada di dalam working tree lokal namun merupakan cakupan Milestone M4 atau audit M3.6 yang belum di-commit:
+### 5.3 Perubahan Tambahan Milik M4 / M3.6 (Bukan Bagian M5)
+Pada snapshot audit, perubahan berikut ada di working tree lokal dan merupakan cakupan M4 atau audit M3.6, bukan M5:
 1. **Berkas Modifikasi Milik M4**:
    - [`../Sources/KoiWallpaperCore/Desktop/DesktopWindowController.swift`](../Sources/KoiWallpaperCore/Desktop/DesktopWindowController.swift): Metode `applyMood(_:)` dan `applyRain(_:)`.
    - [`../Sources/KoiWallpaperCore/Simulation/WaterRipple.swift`](../Sources/KoiWallpaperCore/Simulation/WaterRipple.swift): Penambahan jenis riak `.rainDrop` dan konfigurasi pertumbuhan/pemudaran riak hujan.

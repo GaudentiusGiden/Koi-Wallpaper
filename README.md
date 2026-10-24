@@ -1,13 +1,42 @@
 # Koi Wallpaper
 
-Rencana aplikasi wallpaper kolam koi interaktif untuk macOS, dengan Nagomi sebagai referensi perilaku produk.
+Wallpaper kolam koi untuk macOS 14+, dibuat dengan Swift, AppKit, CoreGraphics,
+dan simulasi yang dapat berjalan mandiri, dengan Nagomi sebagai referensi
+perilaku produk. Kode produk dan status validasinya
+dirinci di [rencana implementasi](docs/IMPLEMENTATION_PLAN.md) dan [audit M5](docs/M5_AUDIT_REPORT.md).
 
-Status: implementasi fondasi aplikasi macOS M0 dan bundle lokal `.app` sudah tersedia dan berhasil dibangun. Verifikasi in-process (15 uji model/event/lifecycle + audit TCC) serta inspeksi aman Window Server live lulus. Namun, kriteria interaksi desktop riil (Finder click-through/drag/marquee, fokus, Spaces, Show Desktop, occlusion nyata, dan sleep/wake perangkat keras) belum divalidasi langsung di sesi GUI macOS pengguna; penerimaan M0 masih tertunda.
+## Angsa otomatis
 
-- [Audit M0 dan status bukti](docs/M0_AUDIT.md)
-- [Analisis referensi dan rancangan teknis](docs/REA.md)
-- [Temuan dari REA CLI dan bukti interaksi](docs/REA_FINDINGS.md)
-- [Tahapan implementasi dan kriteria penerimaan](docs/IMPLEMENTATION_PLAN.md)
-- [Fondasi visual M3.5, perbandingan acuan, dan review native](docs/VISUAL_FOUNDATION.md)
+Wallpaper menampilkan angsa langsung di dalam kolam. Angsa berenang dengan
+lintasan yang berubah perlahan, lalu menuju tepi terdekat dan keluar layar.
+Setelah jeda singkat, angsa muncul kembali di titik kolam yang berbeda. Angsa
+memengaruhi rasa ingin tahu koi; menu tidak lagi menyediakan tombol untuk
+mengundangnya secara manual.
 
-Implementasi saat ini memakai Swift dan AppKit untuk macOS 14+ pada arsitektur Apple Silicon. SpriteKit, simulasi gerak koi, dan penyimpanan lokal berada pada milestone berikutnya (M1 & M2).
+Keputusan dan batas validasi fitur ini tercatat di
+[keputusan pengunjung M5](docs/decisions/2026-10-22-m5-visitors-and-fullscreen.md).
+
+## Menjalankan preview
+
+Dari direktori proyek, jalankan preview interaktif dengan angsa otomatis:
+
+```bash
+swift run KoiWallpaperPreview --preview-swan
+```
+
+Untuk merender gambar statis dengan renderer aplikasi:
+
+```bash
+swift run KoiWallpaperPreview --render-swan-design build/swan-design-preview.png
+open build/swan-design-preview.png
+```
+
+Preview interaktif hanya berjalan untuk ditinjau dan tidak memasang wallpaper.
+
+## Dokumen proyek
+
+- [Audit desktop M0](docs/M0_AUDIT.md)
+- [Analisis referensi produk](docs/REA.md)
+- [Temuan REA CLI](docs/REA_FINDINGS.md)
+- [Fondasi visual M3.5](docs/VISUAL_FOUNDATION.md)
+- [Keputusan arsitektur pengunjung dan fullscreen M5](docs/decisions/2026-10-22-m5-visitors-and-fullscreen.md)

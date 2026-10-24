@@ -1,7 +1,27 @@
 # Keputusan Arsitektur: M5 — Pengunjung dan Tampilan Penuh
 
 Tanggal: 22 Oktober 2026 (Asia/Jakarta).  
-Status: Diterima & Terverifikasi melalui Suite `KoiWallpaperVerify` (T10.1–T10.4, total 53 assertion) dan `KoiWallpaperSimTest` (T12.1–T12.4, total 23 pengujian).
+Status baseline M5: Diterima & Terverifikasi melalui Suite `KoiWallpaperVerify` (T10.1–T10.4, total 53 assertion) dan `KoiWallpaperSimTest` (T12.1–T12.4, total 23 pengujian).
+
+## Pembaruan pasca-M5 — siklus hidup angsa otomatis (24 Oktober 2026)
+
+Perilaku angsa pada wallpaper diperbarui setelah M5. Saat setiap wallpaper
+dibuat, satu angsa langsung muncul di titik acak di dalam kolam; pengguna tidak
+perlu memanggil aksi spawn. Angsa berkelok dengan perubahan haluan yang
+diperhalus dan variasi kecepatan kecil selama 18–30 detik, lalu mengarahkan diri
+ke tepi terdekat. Simulasi menghapusnya setelah seluruh siluet keluar dari
+batas kolam. Angsa berikutnya muncul setelah jeda acak 5–9 detik.
+
+Skala artwork berubah dari `1.4` menjadi `1.512`, yaitu kenaikan 8%. Aksi menu
+“Undang Angsa” diganti informasi “Angsa melintas otomatis”; hitungan pengunjung
+manual tidak memasukkan angsa otomatis. Preview interaktif yang menampilkan
+perilaku ini dijalankan dengan `swift run KoiWallpaperPreview --preview-swan`.
+Implementasi utamanya ada di [`PondSimulation`](../../Sources/KoiWallpaperCore/Simulation/PondSimulation.swift), [`PondVisitor`](../../Sources/KoiWallpaperCore/Simulation/PondVisitor.swift), [`PondArtwork`](../../Sources/KoiWallpaperCore/Rendering/PondArtwork.swift), [`ScreenManager`](../../Sources/KoiWallpaperCore/Desktop/ScreenManager.swift), dan [`KoiWallpaperPreview`](../../Sources/KoiWallpaperPreview/main.swift).
+
+> Catatan validasi: `swift build` dan `git diff --check` lulus untuk follow-up
+> ini. Suite 23/23 dan 53/53 pada status di atas adalah hasil verifikasi M5
+> sebelumnya; suite tersebut belum dijalankan ulang untuk siklus hidup angsa
+> otomatis.
 
 ---
 
@@ -20,8 +40,9 @@ Milestone M5 bertujuan menghadirkan interaksi dinamis tingkat lanjut pada ekosis
 ### 2.1 Model Data `PondVisitor` & Tipe Pengunjung
 Pengunjung dimodelkan melalui struktur `PondVisitor` dalam lapisan simulasi murni (`Simulation/PondVisitor.swift`):
 - **Angsa (Swan)** (`.swan`):
-  - Meluncur anggun di atas permukaan air dengan kecepatan jelajah $24.0$ pt/s.
-  - Memanfaatkan medan vektor penghindaran batas kolam (*boundary avoidance force*) dengan radius efektif $45.0$ pt dari tepi kolam sehingga berbelok halus tanpa menabrak dinding.
+  - Visitor biasa menggunakan kecepatan awal $24.0$ pt/s dan medan vektor penghindaran batas kolam; mode ini tetap tersedia untuk pemanggilan visitor manual.
+  - Mode otomatis wallpaper muncul di dalam kolam dengan kecepatan dasar acak $34$–$44$ pt/s dan variasi kecil. Haluan mengubah arah perlahan; angsa menjelajah selama 18–30 detik, lalu berbelok menuju tepi terdekat dan keluar layar.
+  - Setelah siluet sepenuhnya melewati batas kolam, visitor dihapus dan timer menjadwalkan kemunculan berikutnya setelah jeda 5–9 detik.
   - Menghasilkan fase anggukan/ombak lembut (*bobbing phase*) pada frekuensi $2.2$ rad/s.
 - **Bola Temari (Ball)** (`.ball`):
   - Mengapung dan hanyut di permukaan air dengan redaman hidrodinamik lembut ($0.08 \times \Delta t$).
