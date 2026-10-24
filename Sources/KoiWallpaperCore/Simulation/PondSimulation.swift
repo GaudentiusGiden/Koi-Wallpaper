@@ -32,6 +32,10 @@ public final class PondSimulation: @unchecked Sendable {
     private var insectTargetTimer: Double = 0.0
     private var nextInsectTargetInterval: Double = 14.0
 
+    // Production wallpaper swans enter from an edge, cross the pond, then return after a pause.
+    public private(set) var isAutomaticSwanEnabled = false
+    private var automaticSwanArrivalCountdown: Double?
+
     // Timing and frame-rate stability
     public let fixedDeltaTime: Double
     public let maxCatchUpDelta: Double
@@ -165,6 +169,9 @@ public final class PondSimulation: @unchecked Sendable {
         elapsedTime = 0.0
         insectTargetTimer = 0.0
         nextInsectTargetInterval = Double.random(in: 12.0...20.0, using: &rng)
+        automaticSwanArrivalCountdown = isAutomaticSwanEnabled
+            ? Double.random(in: 3.0...6.0, using: &rng)
+            : nil
         initializeInsects(for: currentTheme)
         initializeEightKoi()
     }
@@ -211,6 +218,7 @@ public final class PondSimulation: @unchecked Sendable {
             pellets[i].position = bounds.clamped(pellets[i].position, inset: pellets[i].radius + 4.0)
         }
         for i in 0..<visitors.count {
+            guard !visitors[i].isAutonomous else { continue }
             visitors[i].position = bounds.clamped(visitors[i].position, inset: visitors[i].radius + 4.0)
         }
         for i in 0..<insects.count {
@@ -339,6 +347,62 @@ public final class PondSimulation: @unchecked Sendable {
 
     // MARK: - Visitor Management
 
+    /// Enables or disables the recurring swan used by the live desktop wallpaper.
+    public func setAutomaticSwanEnabled(_ enabled: Bool) {
+        guard enabled != isAutomaticSwanEnabled else { return }
+        isAutomaticSwanEnabled = enabled
+
+        if enabled {
+            let swanAlreadyPresent = visitors.contains { $0.type == .swan }
+            automaticSwanArrivalCountdown = nil
+            if !swanAlreadyPresent {
+                createAutomaticSwan()
+            }
+        } else {
+            let autonomousIds = visitors.filter(\.isAutonomous).map(\.id)
+            for id in autonomousIds {
+                removeVisitor(id: id)
+            }
+            automaticSwanArrivalCountdown = nil
+        }
+    }
+
+    private func updateAutomaticSwan(dt: Double) {
+        guard isAutomaticSwanEnabled else { return }
+
+        // A manually created swan also prevents a second swan from overlapping it.
+        if visitors.contains(where: { $0.type == .swan }) {
+            automaticSwanArrivalCountdown = nil
+            return
+        }
+
+        if automaticSwanArrivalCountdown == nil {
+            automaticSwanArrivalCountdown = Double.random(in: 5.0...9.0, using: &rng)
+        }
+
+        automaticSwanArrivalCountdown! -= dt
+        guard automaticSwanArrivalCountdown! <= 0 else { return }
+
+        createAutomaticSwan()
+    }
+
+    private func createAutomaticSwan() {
+        let radius = 53.0
+        let insetX = min(radius + 52.0, bounds.width * 0.30)
+        let insetY = min(radius + 52.0, bounds.height * 0.30)
+        let position = PondVector(
+            x: Double.random(in: insetX...(bounds.width - insetX), using: &rng),
+            y: Double.random(in: insetY...(bounds.height - insetY), using: &rng)
+        )
+        let heading = Double.random(in: -Double.pi...Double.pi, using: &rng)
+        let speed = Double.random(in: 34.0...44.0, using: &rng)
+        let seed = rng.next()
+        let visitor = PondVisitor(type: .swan, position: position, heading: heading,
+                                  speed: speed, isAutonomous: true, seed: seed)
+        addVisitor(visitor)
+        automaticSwanArrivalCountdown = nil
+    }
+
     /// Adds an existing visitor to the pond, subject to the capacity cap.
     public func addVisitor(_ visitor: PondVisitor) {
         guard visitors.count < maxVisitors else { return }
@@ -410,6 +474,9 @@ public final class PondSimulation: @unchecked Sendable {
                 fish[i].clearTarget()
             }
         }
+        automaticSwanArrivalCountdown = isAutomaticSwanEnabled
+            ? Double.random(in: 5.0...9.0, using: &rng)
+            : nil
     }
 
     // MARK: - Insect Simulation & Theme Transition
@@ -713,17 +780,19 @@ public final class PondSimulation: @unchecked Sendable {
             visitors[i].update(dt: dt, bounds: bounds)
         }
 
-        // Purge expired visitors and clear targets of fish following them
-        let expiredVisitors = visitors.filter(\.isExpired)
-        if !expiredVisitors.isEmpty {
-            let expiredIds = Set(expiredVisitors.map(\.id))
-            visitors.removeAll { $0.isExpired }
+        // Purge expired or fully departed visitors and clear any koi targets for them.
+        let departedVisitors = visitors.filter { $0.isExpired || $0.hasCompletelyExited(bounds) }
+        if !departedVisitors.isEmpty {
+            let departedIds = Set(departedVisitors.map(\.id))
+            visitors.removeAll { $0.isExpired || $0.hasCompletelyExited(bounds) }
             for i in 0..<fish.count {
-                if let vid = fish[i].targetVisitorId, expiredIds.contains(vid) {
+                if let vid = fish[i].targetVisitorId, departedIds.contains(vid) {
                     fish[i].clearTarget()
                 }
             }
         }
+
+        updateAutomaticSwan(dt: dt)
 
         // Update fish targeting visitors & enforce zero stuck fish guarantee
         for i in 0..<fish.count {
@@ -749,6 +818,7 @@ public final class PondSimulation: @unchecked Sendable {
         // Attract wandering fish to nearby visitors if no food is present
         if !visitors.isEmpty && pellets.isEmpty {
             for visitor in visitors {
+                guard bounds.contains(visitor.position) else { continue }
                 for i in 0..<fish.count {
                     guard fish[i].state == .wandering && fish[i].currentTarget == nil else { continue }
                     let dist = fish[i].position.distance(to: visitor.position)

@@ -18,6 +18,8 @@ public enum PondVisitorType: String, Codable, CaseIterable, Sendable {
 public struct PondVisitor: Identifiable, Sendable {
     public let id: UUID
     public let type: PondVisitorType
+    public let isAutonomous: Bool
+    public private(set) var hasEnteredPond: Bool
     public var position: PondVector
     public var velocity: PondVector
     public var heading: Double
@@ -30,6 +32,12 @@ public struct PondVisitor: Identifiable, Sendable {
     public var lifetime: Double?
     public var age: Double
     public var rng: SeededRandomNumberGenerator
+    private var cruiseHeading: Double
+    private var autonomousStayDuration: Double
+    private var departureTarget: PondVector?
+    private var autonomousCourseOffset: Double
+    private var autonomousCourseOffsetTarget: Double
+    private var autonomousCourseChangeTimer: Double
 
     public var isExpired: Bool {
         if let maxAge = lifetime {
@@ -48,17 +56,30 @@ public struct PondVisitor: Identifiable, Sendable {
         radius: Double? = nil,
         interactionRadius: Double? = nil,
         lifetime: Double? = nil,
+        isAutonomous: Bool = false,
         seed: UInt64? = nil
     ) {
         self.id = id
         self.type = type
+        self.isAutonomous = isAutonomous
+        self.hasEnteredPond = true
         self.position = position
         self.heading = normalizeAngle(heading)
+        self.cruiseHeading = normalizeAngle(heading)
         self.lifetime = lifetime
         self.age = 0.0
+        self.departureTarget = nil
+        self.autonomousCourseOffset = 0.0
 
         let initialSeed = seed ?? UInt64(truncatingIfNeeded: id.hashValue)
         var prng = SeededRandomNumberGenerator(seed: initialSeed)
+        self.autonomousStayDuration = isAutonomous
+            ? Double.random(in: 18.0...30.0, using: &prng)
+            : 0.0
+        self.autonomousCourseOffsetTarget = 0.0
+        self.autonomousCourseChangeTimer = isAutonomous
+            ? Double.random(in: 2.5...5.0, using: &prng)
+            : 0.0
         self.bobbingPhase = Double.random(in: 0...(2 * .pi), using: &prng)
         self.wanderAngle = Double.random(in: -Double.pi...Double.pi, using: &prng)
         self.rng = prng
@@ -68,7 +89,7 @@ public struct PondVisitor: Identifiable, Sendable {
             let defaultSpeed = speed ?? 24.0
             self.speed = defaultSpeed
             self.velocity = velocity ?? PondVector.fromAngle(heading, length: defaultSpeed)
-            self.radius = radius ?? 24.0
+            self.radius = radius ?? 53.0
             self.interactionRadius = interactionRadius ?? 160.0
             self.bobbingSpeed = 2.2
         case .ball:
@@ -95,7 +116,47 @@ public struct PondVisitor: Identifiable, Sendable {
 
         switch type {
         case .swan:
-            // Smooth gliding motion with soft boundary avoidance
+            if isAutonomous {
+                if departureTarget == nil && age >= autonomousStayDuration {
+                    departureTarget = chooseDepartureTarget(in: bounds)
+                }
+
+                let desiredHeading: Double
+                if let departureTarget {
+                    desiredHeading = (departureTarget - position).angle
+                } else {
+                    // Change the long-term course in small eased steps for a natural wandering path.
+                    autonomousCourseChangeTimer -= dt
+                    if autonomousCourseChangeTimer <= 0.0 {
+                        autonomousCourseOffsetTarget = Double.random(in: -0.85...0.85, using: &rng)
+                        autonomousCourseChangeTimer = Double.random(in: 3.0...7.0, using: &rng)
+                    }
+                    let response = min(1.0, dt * 0.24)
+                    autonomousCourseOffset += (autonomousCourseOffsetTarget - autonomousCourseOffset) * response
+                    let ripple = sin(age * 0.22 + bobbingPhase) * 0.10
+                    let courseHeading = normalizeAngle(cruiseHeading + autonomousCourseOffset + ripple)
+                    let course = PondVector.fromAngle(courseHeading, length: speed)
+                    let boundaryForce = bounds.boundaryAvoidanceForce(
+                        for: position,
+                        heading: heading,
+                        strength: 7.0,
+                        marginOverride: radius + 75.0
+                    )
+                    desiredHeading = (course + boundaryForce * 1.4).angle
+                }
+
+                // Limit the turn rate so the body follows the course without abrupt heading changes.
+                let difference = normalizeAngle(desiredHeading - heading)
+                let maxTurn = (departureTarget == nil ? 0.48 : 0.62) * dt
+                heading = normalizeAngle(heading + min(max(difference, -maxTurn), maxTurn))
+
+                let speedVariation = 0.88 + 0.12 * (0.5 + 0.5 * sin(age * 0.43 + bobbingPhase))
+                velocity = PondVector.fromAngle(heading, length: speed * speedVariation)
+                position += velocity * dt
+                break
+            }
+
+            // Manually-created swans glide with soft boundary avoidance.
             wanderAngle += Double.random(in: -0.3...0.3, using: &rng) * dt * 1.4
             wanderAngle = normalizeAngle(wanderAngle)
 
@@ -157,6 +218,35 @@ public struct PondVisitor: Identifiable, Sendable {
             if velocity.lengthSquared > 0.001 {
                 heading = velocity.angle
             }
+        }
+    }
+
+    /// Whether the visitor's visible footprint overlaps the pond rectangle.
+    public func overlapsPond(_ bounds: PondBounds) -> Bool {
+        let extent = type == .swan ? radius + 35.0 : radius
+        return position.x + extent >= bounds.minX && position.x - extent <= bounds.maxX &&
+            position.y + extent >= bounds.minY && position.y - extent <= bounds.maxY
+    }
+
+    /// Autonomous visitors are removed only after their full artwork has cleared the pond.
+    public func hasCompletelyExited(_ bounds: PondBounds) -> Bool {
+        isAutonomous && hasEnteredPond && !overlapsPond(bounds)
+    }
+
+    private mutating func chooseDepartureTarget(in bounds: PondBounds) -> PondVector {
+        let distancesToEdges = [position.x, bounds.width - position.x, position.y, bounds.height - position.y]
+        let nearestEdge = distancesToEdges.enumerated().min { $0.element < $1.element }?.offset ?? 0
+        let margin = radius + 55.0
+
+        switch nearestEdge {
+        case 0:
+            return PondVector(x: -margin, y: Double.random(in: bounds.height * 0.18...bounds.height * 0.82, using: &rng))
+        case 1:
+            return PondVector(x: bounds.width + margin, y: Double.random(in: bounds.height * 0.18...bounds.height * 0.82, using: &rng))
+        case 2:
+            return PondVector(x: Double.random(in: bounds.width * 0.18...bounds.width * 0.82, using: &rng), y: -margin)
+        default:
+            return PondVector(x: Double.random(in: bounds.width * 0.18...bounds.width * 0.82, using: &rng), y: bounds.height + margin)
         }
     }
 

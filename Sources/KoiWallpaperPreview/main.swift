@@ -2,6 +2,41 @@ import AppKit
 import Foundation
 import KoiWallpaperCore
 
+private func renderSwanDesignPreview(to outputURL: URL) throws {
+    let size = CGSize(width: 1432, height: 1080)
+    let bounds = PondBounds(width: Double(size.width), height: Double(size.height))
+    let simulation = PondSimulation(bounds: bounds, initialInsects: [], seed: 42)
+    simulation.addVisitor(PondVisitor(
+        type: .swan,
+        position: bounds.center,
+        heading: 0.18,
+        seed: 42
+    ))
+
+    guard let context = CGContext(
+        data: nil,
+        width: Int(size.width),
+        height: Int(size.height),
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not create preview bitmap context."])
+    }
+
+    context.setShouldAntialias(true)
+    PondRenderer().render(simulation: simulation, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
+
+    guard let cgImage = context.makeImage(),
+          let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not encode swan preview as PNG."])
+    }
+
+    try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try png.write(to: outputURL)
+}
+
 final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var previewView: KoiPondPreviewView?
@@ -26,6 +61,10 @@ final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
         let review = CommandLine.arguments.contains("--review-style")
         let reviewSimulation = review ? PondSimulation(bounds: PondBounds(width: Double(defaultWidth), height: Double(defaultHeight)), seed: 42) : nil
         let preview = KoiPondPreviewView(frame: window.contentLayoutRect, simulation: reviewSimulation)
+        if CommandLine.arguments.contains("--preview-swan") {
+            preview.simulation.setAutomaticSwanEnabled(true)
+            print("[KoiWallpaperPreview] Automatic Swan preview enabled.")
+        }
         window.contentView = preview
 
         window.makeKeyAndOrderFront(nil)
@@ -431,8 +470,19 @@ final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-let app = NSApplication.shared
-let delegate = PreviewAppDelegate()
-app.setActivationPolicy(.regular)
-app.delegate = delegate
-app.run()
+if let renderIndex = CommandLine.arguments.firstIndex(of: "--render-swan-design") {
+    let outputPath = CommandLine.arguments.dropFirst(renderIndex + 1).first ?? "build/swan-design-preview.png"
+    do {
+        let outputURL = URL(fileURLWithPath: outputPath, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        try renderSwanDesignPreview(to: outputURL)
+        print("[KoiWallpaperPreview] Swan design rendered with the app renderer: \(outputURL.path)")
+    } catch {
+        fatalError("Could not render swan design preview: \(error)")
+    }
+} else {
+    let app = NSApplication.shared
+    let delegate = PreviewAppDelegate()
+    app.setActivationPolicy(.regular)
+    app.delegate = delegate
+    app.run()
+}

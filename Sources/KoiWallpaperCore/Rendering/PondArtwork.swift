@@ -4,6 +4,7 @@ import Foundation
 /// Procedural artwork generator for pond elements: deep water, underwater caustics,
 /// lily pads, lotus flowers, food pellets, and surface ripples.
 public enum PondArtwork {
+    private static let swanArtworkScale: CGFloat = 1.512
 
     // MARK: - Water Background & Caustics
 
@@ -143,15 +144,18 @@ public enum PondArtwork {
         let offset = PondLighting.shadowOffset(distance: 22.0)
         context.translateBy(x: CGFloat(visitor.position.x) + offset.x, y: CGFloat(visitor.position.y) + offset.y)
         context.rotate(by: CGFloat(visitor.heading))
+        if visitor.type == .swan {
+            context.scaleBy(x: swanArtworkScale, y: swanArtworkScale)
+        }
 
         let c = shadowStyle.color
         switch visitor.type {
         case .swan:
-            // Soft underwater drop shadow of the swan hull
+            // Soft underwater drop shadow sized to the full hull and curved neck.
             context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.penumbraAlpha)
-            context.fillEllipse(in: CGRect(x: -22, y: -12, width: 44, height: 24))
+            context.fillEllipse(in: CGRect(x: -36, y: -19, width: 70, height: 38))
             context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.coreAlpha)
-            context.fillEllipse(in: CGRect(x: -18, y: -9, width: 36, height: 18))
+            context.fillEllipse(in: CGRect(x: -31, y: -14, width: 59, height: 28))
 
         case .ball:
             // Circular shadow of the floating ball
@@ -176,48 +180,98 @@ public enum PondArtwork {
         switch visitor.type {
         case .swan:
             context.rotate(by: CGFloat(visitor.heading))
+            context.scaleBy(x: swanArtworkScale, y: swanArtworkScale)
+            context.translateBy(x: 0, y: bob)
 
-            // Waterline gentle wake contact ring
-            context.setStrokeColor(red: 0.85, green: 0.95, blue: 0.95, alpha: 0.35)
-            context.setLineWidth(1.5)
-            context.strokeEllipse(in: CGRect(x: -24, y: -14 + bob * 0.5, width: 48, height: 28))
-
-            // Swan body (smooth white/cream plumage)
-            context.setFillColor(red: 0.96, green: 0.97, blue: 0.95, alpha: 1.0)
-            context.fillEllipse(in: CGRect(x: -20, y: -11 + bob, width: 38, height: 22))
-
-            // Wing contours & feather shading
-            context.setStrokeColor(red: 0.82, green: 0.86, blue: 0.88, alpha: 0.70)
+            // Fine V-shaped surface wake, trailing behind the swan as it glides.
+            context.setStrokeColor(red: 0.82, green: 0.96, blue: 0.95, alpha: 0.30)
             context.setLineWidth(1.2)
-            context.strokeEllipse(in: CGRect(x: -16, y: -9 + bob, width: 30, height: 18))
+            let wake = CGMutablePath()
+            wake.move(to: CGPoint(x: 14, y: 8))
+            wake.addCurve(to: CGPoint(x: -42, y: 20), control1: CGPoint(x: -4, y: 17), control2: CGPoint(x: -25, y: 20))
+            wake.move(to: CGPoint(x: 14, y: -8))
+            wake.addCurve(to: CGPoint(x: -42, y: -20), control1: CGPoint(x: -4, y: -17), control2: CGPoint(x: -25, y: -20))
+            context.addPath(wake)
+            context.strokePath()
 
-            // Back tail plumage tip
-            let tailPath = CGMutablePath()
-            tailPath.move(to: CGPoint(x: -18, y: 0 + bob))
-            tailPath.addLine(to: CGPoint(x: -26, y: 2 + bob))
-            tailPath.addLine(to: CGPoint(x: -20, y: -4 + bob))
-            tailPath.closeSubpath()
-            context.setFillColor(red: 0.94, green: 0.95, blue: 0.92, alpha: 1.0)
-            context.addPath(tailPath)
-            context.fillPath()
-
-            // Neck & head
+            // Rounded, tapered hull with a readable tail and fuller breast.
+            let hull = CGMutablePath()
+            hull.move(to: CGPoint(x: -36, y: 0))
+            hull.addCurve(to: CGPoint(x: -21, y: 16), control1: CGPoint(x: -35, y: 12), control2: CGPoint(x: -29, y: 17))
+            hull.addCurve(to: CGPoint(x: 8, y: 14), control1: CGPoint(x: -7, y: 23), control2: CGPoint(x: 3, y: 20))
+            hull.addCurve(to: CGPoint(x: 18, y: 2), control1: CGPoint(x: 17, y: 12), control2: CGPoint(x: 22, y: 8))
+            hull.addCurve(to: CGPoint(x: 10, y: -12), control1: CGPoint(x: 22, y: -5), control2: CGPoint(x: 17, y: -12))
+            hull.addCurve(to: CGPoint(x: -14, y: -16), control1: CGPoint(x: 0, y: -20), control2: CGPoint(x: -8, y: -19))
+            hull.addCurve(to: CGPoint(x: -36, y: 0), control1: CGPoint(x: -29, y: -15), control2: CGPoint(x: -37, y: -10))
+            hull.closeSubpath()
             context.setFillColor(red: 0.97, green: 0.98, blue: 0.96, alpha: 1.0)
-            context.fillEllipse(in: CGRect(x: 10, y: -6 + bob, width: 14, height: 12))
-
-            // Orange beak
-            let beakPath = CGMutablePath()
-            beakPath.move(to: CGPoint(x: 21, y: 1 + bob))
-            beakPath.addLine(to: CGPoint(x: 28, y: 0 + bob))
-            beakPath.addLine(to: CGPoint(x: 21, y: -3 + bob))
-            beakPath.closeSubpath()
-            context.setFillColor(red: 0.98, green: 0.48, blue: 0.12, alpha: 1.0)
-            context.addPath(beakPath)
+            context.addPath(hull)
             context.fillPath()
 
-            // Black facial basal mask & eye
-            context.setFillColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 0.90)
-            context.fillEllipse(in: CGRect(x: 18, y: -1 + bob, width: 3.5, height: 3.5))
+            // Soft cool outline separates the white plumage from bright jade water.
+            context.setStrokeColor(red: 0.66, green: 0.77, blue: 0.76, alpha: 0.60)
+            context.setLineWidth(1.0)
+            context.addPath(hull)
+            context.strokePath()
+
+            // Folded wing and a few restrained feather arcs.
+            let wing = CGMutablePath()
+            wing.move(to: CGPoint(x: -25, y: 5))
+            wing.addCurve(to: CGPoint(x: 4, y: 8), control1: CGPoint(x: -13, y: 17), control2: CGPoint(x: 0, y: 17))
+            wing.addCurve(to: CGPoint(x: -8, y: -9), control1: CGPoint(x: 1, y: -5), control2: CGPoint(x: -1, y: -9))
+            wing.addCurve(to: CGPoint(x: -25, y: 5), control1: CGPoint(x: -19, y: -12), control2: CGPoint(x: -27, y: -5))
+            wing.closeSubpath()
+            context.setFillColor(red: 0.90, green: 0.92, blue: 0.91, alpha: 0.92)
+            context.addPath(wing)
+            context.fillPath()
+            context.setStrokeColor(red: 0.78, green: 0.84, blue: 0.84, alpha: 0.58)
+            context.setLineWidth(0.9)
+            context.addPath(wing)
+            context.strokePath()
+
+            context.setStrokeColor(red: 0.78, green: 0.84, blue: 0.84, alpha: 0.48)
+            context.setLineWidth(0.8)
+            let featherLines = CGMutablePath()
+            featherLines.move(to: CGPoint(x: -20, y: 6))
+            featherLines.addQuadCurve(to: CGPoint(x: -2, y: 8), control: CGPoint(x: -12, y: 11))
+            featherLines.move(to: CGPoint(x: -18, y: 1))
+            featherLines.addQuadCurve(to: CGPoint(x: 1, y: 3), control: CGPoint(x: -8, y: 7))
+            context.addPath(featherLines)
+            context.strokePath()
+
+            // S-curved neck rises from the breast into a small rounded head.
+            let neck = CGMutablePath()
+            neck.move(to: CGPoint(x: 6, y: 7))
+            neck.addCurve(to: CGPoint(x: 14, y: 25), control1: CGPoint(x: 14, y: 9), control2: CGPoint(x: 8, y: 21))
+            neck.addCurve(to: CGPoint(x: 25, y: 30), control1: CGPoint(x: 18, y: 33), control2: CGPoint(x: 23, y: 32))
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            context.setStrokeColor(red: 0.72, green: 0.81, blue: 0.81, alpha: 0.88)
+            context.setLineWidth(12.5)
+            context.addPath(neck)
+            context.strokePath()
+            context.setStrokeColor(red: 0.98, green: 0.99, blue: 0.97, alpha: 1.0)
+            context.setLineWidth(9.2)
+            context.addPath(neck)
+            context.strokePath()
+
+            context.setFillColor(red: 0.97, green: 0.98, blue: 0.96, alpha: 1.0)
+            context.fillEllipse(in: CGRect(x: 21, y: 26, width: 12, height: 8))
+
+            // Small black eye mask and warm orange beak.
+            context.setFillColor(red: 0.10, green: 0.12, blue: 0.13, alpha: 0.95)
+            context.fillEllipse(in: CGRect(x: 29, y: 28, width: 4.6, height: 3.2))
+            context.setFillColor(red: 0.04, green: 0.05, blue: 0.06, alpha: 1.0)
+            context.fillEllipse(in: CGRect(x: 27.8, y: 31, width: 1.8, height: 1.8))
+
+            let beak = CGMutablePath()
+            beak.move(to: CGPoint(x: 32, y: 30))
+            beak.addCurve(to: CGPoint(x: 43, y: 29), control1: CGPoint(x: 37, y: 32), control2: CGPoint(x: 41, y: 31))
+            beak.addCurve(to: CGPoint(x: 32, y: 26.5), control1: CGPoint(x: 40, y: 26), control2: CGPoint(x: 35, y: 25))
+            beak.closeSubpath()
+            context.setFillColor(red: 0.98, green: 0.48, blue: 0.12, alpha: 1.0)
+            context.addPath(beak)
+            context.fillPath()
 
         case .ball:
             let r = CGFloat(visitor.radius)

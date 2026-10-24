@@ -90,10 +90,10 @@ public final class StatusBarController {
     // Visitors submenu
     private let visitorsMenuItem = NSMenuItem(title: "Pengunjung Kolam (Visitors)", action: nil, keyEquivalent: "")
     private let visitorsMenu = NSMenu(title: "Pengunjung")
-    private let spawnSwanItem = NSMenuItem(title: "Undang Angsa (Swan)", action: #selector(spawnSwanClicked), keyEquivalent: "")
+    private let automaticSwanInfoItem = NSMenuItem(title: "Angsa melintas otomatis", action: nil, keyEquivalent: "")
     private let spawnBallItem = NSMenuItem(title: "Lepas Bola Temari (Ball)", action: #selector(spawnBallClicked), keyEquivalent: "")
     private let clearVisitorsItem = NSMenuItem(title: "Bersihkan Pengunjung (Clear)", action: #selector(clearVisitorsClicked), keyEquivalent: "")
-    private let visitorsStatusItem = NSMenuItem(title: "Pengunjung Aktif: 0", action: nil, keyEquivalent: "")
+    private let visitorsStatusItem = NSMenuItem(title: "Pengunjung manual aktif: 0", action: nil, keyEquivalent: "")
 
     // Settings submenu
     private let settingsMenuItem = NSMenuItem(title: "Pengaturan (Settings)", action: nil, keyEquivalent: "")
@@ -142,6 +142,7 @@ public final class StatusBarController {
         pauseStatusItem.isEnabled = false
         interactionDescItem.isEnabled = false
         currentPhaseInfoItem.isEnabled = false
+        automaticSwanInfoItem.isEnabled = false
         visitorsStatusItem.isEnabled = false
 
         // Action targets
@@ -160,7 +161,6 @@ public final class StatusBarController {
         calmMoodItem.target = self
         playfulMoodItem.target = self
         rainToggleItem.target = self
-        spawnSwanItem.target = self
         spawnBallItem.target = self
         clearVisitorsItem.target = self
         pauseOnBatteryItem.target = self
@@ -199,7 +199,7 @@ public final class StatusBarController {
         moodMenuItem.submenu = moodMenu
 
         // Build Visitors submenu
-        visitorsMenu.addItem(spawnSwanItem)
+        visitorsMenu.addItem(automaticSwanInfoItem)
         visitorsMenu.addItem(spawnBallItem)
         visitorsMenu.addItem(NSMenuItem.separator())
         visitorsMenu.addItem(clearVisitorsItem)
@@ -305,7 +305,7 @@ public final class StatusBarController {
     }
 
     public func updateVisitorsState(count: Int) {
-        visitorsStatusItem.title = "Pengunjung Aktif: \(count)"
+        visitorsStatusItem.title = "Pengunjung manual aktif: \(count)"
     }
 
     private func updateStatusIcon(isInteractive: Bool, isPaused: Bool) {
@@ -379,10 +379,6 @@ public final class StatusBarController {
 
     @objc private func fullscreenToggled() {
         delegate?.statusBarDidToggleFullscreen(self)
-    }
-
-    @objc private func spawnSwanClicked() {
-        delegate?.statusBarDidRequestSpawnVisitor(self, type: .swan)
     }
 
     @objc private func spawnBallClicked() {

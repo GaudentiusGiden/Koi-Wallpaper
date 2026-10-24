@@ -135,6 +135,7 @@ public final class ScreenManager {
 
     private func createController(for screen: NSScreen) -> DesktopWindowController {
         let controller = controllerFactory?(screen) ?? DesktopWindowController(screen: screen)
+        controller.wallpaperView.simulation.setAutomaticSwanEnabled(true)
         controller.wallpaperView.inputCoordinator = inputCoordinator
         controller.wallpaperView.theme = currentTheme
         controller.wallpaperView.showHUD = currentShowHUD
@@ -239,7 +240,9 @@ public final class ScreenManager {
     }
 
     public var totalVisitorsCount: Int {
-        primaryController?.wallpaperView.simulation.visitors.count ?? 0
+        controllers.reduce(0) { count, controller in
+            count + controller.wallpaperView.simulation.visitors.filter { !$0.isAutonomous }.count
+        }
     }
 
     // MARK: - Coordinate Conversion & Click Dispatch
