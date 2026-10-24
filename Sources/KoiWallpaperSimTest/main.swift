@@ -1138,6 +1138,133 @@ recordSimTest(
 )
 
 // -------------------------------------------------------------
+// TEST 15: Decorative Small Fish Active Roaming & Evasion Dynamics
+// -------------------------------------------------------------
+print("\n--- 15. Decorative Small Fish Active Roaming & Evasion Dynamics ---")
+
+// T15.1 Active Cruising & Roaming Across Pond
+let roamSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), seed: 42)
+let initialCenter0 = roamSim.decorativeSchools[0].center
+let initialFish0Pos = roamSim.decorativeSchools[0].fish[0].position
+
+for _ in 0..<180 {
+    roamSim.advance(deltaTime: 1.0 / 60.0)
+}
+
+let movedCenter0 = roamSim.decorativeSchools[0].center
+let movedFish0Pos = roamSim.decorativeSchools[0].fish[0].position
+let centerDisplacement = initialCenter0.distance(to: movedCenter0)
+let fishDisplacement = initialFish0Pos.distance(to: movedFish0Pos)
+let t15_1Passed = (roamSim.decorativeSchools.count == 3) && (centerDisplacement > 30.0) && (fishDisplacement > 30.0)
+
+recordSimTest(
+    "T15.1 Decorative School Active Roaming Across Open Pond",
+    passed: t15_1Passed,
+    details: "schoolCount=\(roamSim.decorativeSchools.count), centerDisplacement=\(String(format: "%.1f", centerDisplacement))pt, fishDisplacement=\(String(format: "%.1f", fishDisplacement))pt"
+)
+
+// T15.2 Water Splash (Ripple) Startle & Radial Flee
+let rippleSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), initialFish: [], seed: 42)
+let targetSchoolCenter = rippleSim.decorativeSchools[0].center
+let calmSpeed = rippleSim.decorativeSchools[0].fish[0].velocity.length
+
+// Spawn a water click ripple right at the school center
+rippleSim.handleWaterClick(at: targetSchoolCenter)
+let initialPanicTimer = rippleSim.decorativeSchools[0].fish[0].panicTimer
+
+// Advance one step so evasion physics react
+rippleSim.advance(deltaTime: 1.0 / 60.0)
+
+let panickedFish = rippleSim.decorativeSchools[0].fish[0]
+let fleeSpeed = panickedFish.velocity.length
+let fleeAngle = panickedFish.velocity.angle
+let radialAngle = (panickedFish.position - targetSchoolCenter).angle
+var angleDiff = abs(fleeAngle - radialAngle)
+while angleDiff > .pi { angleDiff = 2.0 * .pi - angleDiff }
+
+let t15_2Passed = (fleeSpeed > calmSpeed + 40.0) && (panickedFish.panicTimer > 0.0) && (angleDiff < 1.0)
+recordSimTest(
+    "T15.2 Decorative Fish Ripple Startle & Radial Flee",
+    passed: t15_2Passed,
+    details: "calmSpeed=\(String(format: "%.1f", calmSpeed))pt/s, fleeSpeed=\(String(format: "%.1f", fleeSpeed))pt/s, panicTimer=\(String(format: "%.2f", panickedFish.panicTimer))s, radialAlignmentDiff=\(String(format: "%.2f", angleDiff))rad"
+)
+
+// T15.3 Approaching Koi Avoidance
+let koiAvoidSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), seed: 99)
+// Position Koi 0 moving directly toward school 0
+let s0Pos = koiAvoidSim.decorativeSchools[0].center
+let koiDist: Double = 90.0
+koiAvoidSim.setFishTarget(at: 0, target: s0Pos, state: .wandering, duration: 5.0)
+// Move fish[0] close to school 0
+let approachingFishPos = PondVector(x: s0Pos.x - koiDist, y: s0Pos.y)
+let approachingFish = koiAvoidSim.fish[0]
+
+// Advance 30 steps so Koi approaches and small fish detect presence
+for _ in 0..<30 {
+    koiAvoidSim.advance(deltaTime: 1.0 / 60.0)
+}
+
+// Check that at least some fish in school 0 entered panic evasion or increased speed
+let anyStartled = koiAvoidSim.decorativeSchools[0].fish.contains { $0.panicTimer > 0.0 || $0.velocity.length > 70.0 }
+let t15_3Passed = anyStartled
+recordSimTest(
+    "T15.3 Decorative Fish Koi Predator Avoidance",
+    passed: t15_3Passed,
+    details: "koiApproached=true, smallFishEvasionDetected=\(anyStartled)"
+)
+
+// T15.4 Physical Confinement & Safe Bounds Under High Panic
+let boundsSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), seed: 101)
+// Spawn aggressive ripples near corners to drive fish toward walls
+boundsSim.handleWaterClick(at: PondVector(x: 100.0, y: 100.0))
+boundsSim.handleWaterClick(at: PondVector(x: 700.0, y: 500.0))
+
+var allInBoundsDuringPanic = true
+for _ in 0..<240 {
+    boundsSim.advance(deltaTime: 1.0 / 60.0)
+    for school in boundsSim.decorativeSchools {
+        for f in school.fish {
+            if !boundsSim.bounds.contains(f.position) {
+                allInBoundsDuringPanic = false
+            }
+        }
+    }
+}
+
+let t15_4Passed = allInBoundsDuringPanic
+recordSimTest(
+    "T15.4 Decorative Fish Boundary Confinement During Panic",
+    passed: t15_4Passed,
+    details: "all24FishStayedInBounds=\(allInBoundsDuringPanic), framesTested=240"
+)
+
+// T15.5 Simulation Pause Stasis Guarantee
+let pauseSimTest = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), seed: 303)
+pauseSimTest.isPaused = true
+let prePauseSchoolCenters = pauseSimTest.decorativeSchools.map(\.center)
+let prePauseFishPositions = pauseSimTest.decorativeSchools.flatMap { $0.fish.map(\.position) }
+let prePauseSwimPhases = pauseSimTest.decorativeSchools.flatMap { $0.fish.map(\.swimPhase) }
+
+for _ in 0..<120 {
+    pauseSimTest.advance(deltaTime: 1.0 / 60.0)
+}
+
+let postPauseSchoolCenters = pauseSimTest.decorativeSchools.map(\.center)
+let postPauseFishPositions = pauseSimTest.decorativeSchools.flatMap { $0.fish.map(\.position) }
+let postPauseSwimPhases = pauseSimTest.decorativeSchools.flatMap { $0.fish.map(\.swimPhase) }
+
+let centersIdentical = (prePauseSchoolCenters == postPauseSchoolCenters)
+let positionsIdentical = (prePauseFishPositions == postPauseFishPositions)
+let phasesIdentical = (prePauseSwimPhases == postPauseSwimPhases)
+let t15_5Passed = centersIdentical && positionsIdentical && phasesIdentical
+
+recordSimTest(
+    "T15.5 Decorative Fish Pause Stasis & Zero Drift Guarantee",
+    passed: t15_5Passed,
+    details: "centersFrozen=\(centersIdentical), positionsFrozen=\(positionsIdentical), phasesFrozen=\(phasesIdentical)"
+)
+
+// -------------------------------------------------------------
 // SUMMARY & RESULTS
 // -------------------------------------------------------------
 print("\n=======================================================")

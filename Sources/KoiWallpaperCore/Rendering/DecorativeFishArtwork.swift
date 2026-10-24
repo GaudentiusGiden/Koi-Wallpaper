@@ -73,6 +73,88 @@ public enum DecorativeFishArtwork {
         }
     }
 
+    /// Renders autonomous simulated decorative fish schools with active schooling and evasive kinematics.
+    public static func draw(
+        schools: [DecorativeSchool],
+        in context: CGContext,
+        size: CGSize,
+        time: Double,
+        theme: PondTheme = .day,
+        customShadowStyle: PondLighting.ShadowStyle? = nil
+    ) {
+        guard !schools.isEmpty else {
+            draw(in: context, size: size, time: time, theme: theme, customShadowStyle: customShadowStyle)
+            return
+        }
+
+        for school in schools {
+            let group = school.groupIndex
+            var instances: [(fish: DecorativeFishInstance, palette: FishPalette)] = []
+            instances.reserveCapacity(school.fish.count)
+
+            for fish in school.fish {
+                let pal = palette(for: group, index: fish.index)
+                instances.append((fish: fish, palette: pal))
+            }
+
+            // 1. Soft aquatic drop shadow grounded on pond bed (all fish shadows under all fish)
+            for item in instances {
+                let fish = item.fish
+                context.saveGState()
+                context.translateBy(x: CGFloat(fish.position.x), y: CGFloat(fish.position.y))
+                context.rotate(by: CGFloat(fish.turn))
+                drawShadow(
+                    in: context,
+                    length: CGFloat(fish.length),
+                    halfWidth: CGFloat(fish.halfWidth),
+                    heading: CGFloat(fish.turn),
+                    theme: theme,
+                    customShadowStyle: customShadowStyle
+                )
+                context.restoreGState()
+            }
+
+            // 2. Fish anatomy, fins, motifs, and eyes
+            for item in instances {
+                let fish = item.fish
+                context.saveGState()
+                context.translateBy(x: CGFloat(fish.position.x), y: CGFloat(fish.position.y))
+                context.rotate(by: CGFloat(fish.turn))
+                drawPectoralFins(
+                    in: context,
+                    length: CGFloat(fish.length),
+                    halfWidth: CGFloat(fish.halfWidth),
+                    palette: item.palette,
+                    time: time,
+                    index: fish.index,
+                    phase: fish.swimPhase
+                )
+                drawTailFin(
+                    in: context,
+                    length: CGFloat(fish.length),
+                    halfWidth: CGFloat(fish.halfWidth),
+                    palette: item.palette,
+                    time: time,
+                    index: fish.index,
+                    phase: fish.swimPhase
+                )
+                drawTorso(
+                    in: context,
+                    length: CGFloat(fish.length),
+                    halfWidth: CGFloat(fish.halfWidth),
+                    palette: item.palette,
+                    index: fish.index
+                )
+                drawEyes(
+                    in: context,
+                    length: CGFloat(fish.length),
+                    halfWidth: CGFloat(fish.halfWidth)
+                )
+                context.restoreGState()
+            }
+        }
+    }
+
     public static func draw(in context: CGContext, size: CGSize, time: Double, phase: TimeOfDayPhase) {
         draw(in: context, size: size, time: time, theme: phase.theme)
     }
@@ -206,9 +288,11 @@ public enum DecorativeFishArtwork {
         halfWidth: CGFloat,
         palette: FishPalette,
         time: Double,
-        index: Int
+        index: Int,
+        phase: Double? = nil
     ) {
-        let finStroke = CGFloat(sin(time * 3.8 + Double(index) * 1.4)) * length * 0.025
+        let p = phase ?? (time * 3.8 + Double(index) * 1.4)
+        let finStroke = CGFloat(sin(p)) * length * 0.025
         for side: CGFloat in [-1.0, 1.0] {
             let fin = CGMutablePath()
             fin.move(to: CGPoint(x: length * 0.14, y: side * halfWidth * 0.70))
@@ -234,9 +318,11 @@ public enum DecorativeFishArtwork {
         halfWidth: CGFloat,
         palette: FishPalette,
         time: Double,
-        index: Int
+        index: Int,
+        phase: Double? = nil
     ) {
-        let flutter = CGFloat(sin(time * 4.2 + Double(index) * 1.7)) * length * 0.10
+        let p = phase ?? (time * 4.2 + Double(index) * 1.7)
+        let flutter = CGFloat(sin(p)) * length * 0.10
         let tail = CGMutablePath()
         tail.move(to: CGPoint(x: -length * 0.26, y: halfWidth * 0.35))
         tail.addQuadCurve(to: CGPoint(x: -length * 0.62, y: halfWidth * 1.05 + flutter),

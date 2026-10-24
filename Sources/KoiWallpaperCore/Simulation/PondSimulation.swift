@@ -17,6 +17,7 @@ public final class PondSimulation: @unchecked Sendable {
     public private(set) var clickTargets: [ClickTarget] = []
     public private(set) var visitors: [PondVisitor] = []
     public private(set) var insects: [PondInsect] = []
+    public private(set) var decorativeSchools: [DecorativeSchool] = []
     public var frog: PondFrog
 
     public var isPaused: Bool = false
@@ -115,6 +116,16 @@ public final class PondSimulation: @unchecked Sendable {
         } else {
             initializeInsects(for: theme)
         }
+        initializeDecorativeSchools()
+    }
+
+    /// Initializes the 3 schools of decorative small schooling fish.
+    public func initializeDecorativeSchools() {
+        decorativeSchools.removeAll()
+        for group in 0..<DecorativeSchool.schoolCount {
+            let seed = UInt64(700 + group * 443)
+            decorativeSchools.append(DecorativeSchool(groupIndex: group, bounds: bounds, seed: seed))
+        }
     }
 
     /// Initializes exactly 8 koi fish, one of each variety, dispersed evenly.
@@ -174,6 +185,7 @@ public final class PondSimulation: @unchecked Sendable {
             : nil
         initializeInsects(for: currentTheme)
         initializeEightKoi()
+        initializeDecorativeSchools()
     }
 
     public func resize(width: Double, height: Double) {
@@ -201,6 +213,9 @@ public final class PondSimulation: @unchecked Sendable {
         }
         for i in 0..<insects.count {
             insects[i].position = PondVector(x: insectPositions[i].x * scaleX, y: insectPositions[i].y * scaleY)
+        }
+        for i in 0..<decorativeSchools.count {
+            decorativeSchools[i].resize(oldBounds: oldBounds, newBounds: bounds)
         }
         frog.updateLocations(bounds: bounds)
 
@@ -962,6 +977,34 @@ public final class PondSimulation: @unchecked Sendable {
             clickTargets[i].update(dt: dt)
         }
         clickTargets.removeAll { $0.isExpired }
+
+        // 9. Update Decorative Schooling Small Fish
+        // Compute inter-school repulsion so the 3 schools maintain separate paths
+        var schoolRepulsions = [PondVector](repeating: .zero, count: decorativeSchools.count)
+        let minSchoolClearance = 190.0
+        for i in 0..<decorativeSchools.count {
+            for j in (i + 1)..<decorativeSchools.count {
+                let diff = decorativeSchools[i].center - decorativeSchools[j].center
+                let distSq = diff.lengthSquared
+                if distSq < minSchoolClearance * minSchoolClearance && distSq > 0.001 {
+                    let dist = sqrt(distSq)
+                    let pushMag = ((minSchoolClearance - dist) / minSchoolClearance) * 55.0
+                    let pushDir = diff / dist
+                    schoolRepulsions[i] += pushDir * pushMag
+                    schoolRepulsions[j] -= pushDir * pushMag
+                }
+            }
+        }
+
+        for i in 0..<decorativeSchools.count {
+            decorativeSchools[i].update(
+                dt: dt,
+                bounds: bounds,
+                koiFish: fish,
+                ripples: ripples,
+                externalRepulsion: schoolRepulsions[i]
+            )
+        }
     }
 
     /// Enforces a physical non-penetration position relaxation constraint between fish bodies

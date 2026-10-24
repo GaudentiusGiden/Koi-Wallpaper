@@ -411,6 +411,7 @@ public final class PondRenderer {
             }
 
             DecorativeFishArtwork.draw(
+                schools: simulation.decorativeSchools,
                 in: bitmap,
                 size: size,
                 time: simulation.elapsedTime,
