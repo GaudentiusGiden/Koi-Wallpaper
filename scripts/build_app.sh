@@ -62,6 +62,16 @@ cat > "${CONTENTS_DIR}/Info.plist" << 'EOF'
 </plist>
 EOF
 
+# Build and embed Screen Saver bundle
+echo "==> Building embedded Screen Saver (${BUILD_CONFIG})..."
+"${SCRIPT_DIR}/build_saver.sh" "${BUILD_CONFIG}"
+
+SAVER_BUNDLE="${BUILD_DIR}/KoiWallpaper.saver"
+if [ -d "${SAVER_BUNDLE}" ]; then
+    echo "==> Embedding ${SAVER_BUNDLE} into ${RESOURCES_DIR}..."
+    cp -R "${SAVER_BUNDLE}" "${RESOURCES_DIR}/KoiWallpaper.saver"
+fi
+
 # Ad-hoc codesign the bundle
 echo "==> Applying ad-hoc code signature..."
 codesign --force --deep --sign - "${APP_BUNDLE}"

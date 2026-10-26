@@ -15,6 +15,9 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType)
     func statusBarDidRequestClearVisitors(_ controller: StatusBarController)
     func statusBarDidToggleFullscreen(_ controller: StatusBarController)
+    func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController)
+    func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController)
+    func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController)
 }
 
 extension StatusBarControllerDelegate {
@@ -28,6 +31,9 @@ extension StatusBarControllerDelegate {
     public func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType) {}
     public func statusBarDidRequestClearVisitors(_ controller: StatusBarController) {}
     public func statusBarDidToggleFullscreen(_ controller: StatusBarController) {}
+    public func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController) {}
+    public func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController) {}
+    public func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {}
 }
 
 public final class StatusBarController {
@@ -57,6 +63,13 @@ public final class StatusBarController {
         title: "Mode Layar Penuh (Escape untuk Keluar)",
         action: #selector(fullscreenToggled),
         keyEquivalent: "f"
+    )
+
+    // Screen Saver trigger
+    private let startScreenSaverItem = NSMenuItem(
+        title: "Mulai Screen Saver Kolam Koi Sekarang",
+        action: #selector(startScreenSaverClicked),
+        keyEquivalent: "s"
     )
 
     // Time of Day & Theme submenu
@@ -113,6 +126,16 @@ public final class StatusBarController {
         action: #selector(resetSettingsClicked),
         keyEquivalent: ""
     )
+    private let installScreenSaverItem = NSMenuItem(
+        title: "Pasang di Layar Terkunci (Screen Saver)...",
+        action: #selector(installScreenSaverClicked),
+        keyEquivalent: ""
+    )
+    private let openScreenSaverSettingsItem = NSMenuItem(
+        title: "Buka Pengaturan Screen Saver Sistem...",
+        action: #selector(openScreenSaverSettingsClicked),
+        keyEquivalent: ""
+    )
 
     // Quit
     private let quitItem = NSMenuItem(
@@ -154,6 +177,7 @@ public final class StatusBarController {
 
         // Action targets
         pauseToggleItem.target = self
+        startScreenSaverItem.target = self
         interactionToggleItem.target = self
         fullscreenToggleItem.target = self
         autoTimeItem.target = self
@@ -172,6 +196,8 @@ public final class StatusBarController {
         clearVisitorsItem.target = self
         pauseOnBatteryItem.target = self
         showHUDItem.target = self
+        installScreenSaverItem.target = self
+        openScreenSaverSettingsItem.target = self
         resetSettingsItem.target = self
         quitItem.target = self
 
@@ -218,6 +244,9 @@ public final class StatusBarController {
         settingsMenu.addItem(pauseOnBatteryItem)
         settingsMenu.addItem(showHUDItem)
         settingsMenu.addItem(NSMenuItem.separator())
+        settingsMenu.addItem(installScreenSaverItem)
+        settingsMenu.addItem(openScreenSaverSettingsItem)
+        settingsMenu.addItem(NSMenuItem.separator())
         settingsMenu.addItem(resetSettingsItem)
         settingsMenuItem.submenu = settingsMenu
 
@@ -227,9 +256,11 @@ public final class StatusBarController {
         menu.addItem(pauseToggleItem)
         menu.addItem(pauseStatusItem)
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(startScreenSaverItem)
+        menu.addItem(fullscreenToggleItem)
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(interactionToggleItem)
         menu.addItem(interactionDescItem)
-        menu.addItem(fullscreenToggleItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(timeOfDayMenuItem)
         menu.addItem(moodMenuItem)
@@ -494,6 +525,10 @@ public final class StatusBarController {
         delegate?.statusBarDidToggleFullscreen(self)
     }
 
+    @objc private func startScreenSaverClicked() {
+        delegate?.statusBarDidRequestStartScreenSaver(self)
+    }
+
     @objc private func spawnBallClicked() {
         delegate?.statusBarDidRequestSpawnVisitor(self, type: .ball)
     }
@@ -512,6 +547,14 @@ public final class StatusBarController {
 
     @objc private func resetSettingsClicked() {
         delegate?.statusBarDidResetSettings(self)
+    }
+
+    @objc private func installScreenSaverClicked() {
+        delegate?.statusBarDidRequestInstallScreenSaver(self)
+    }
+
+    @objc private func openScreenSaverSettingsClicked() {
+        delegate?.statusBarDidRequestOpenScreenSaverSettings(self)
     }
 
     @objc private func quitClicked() {

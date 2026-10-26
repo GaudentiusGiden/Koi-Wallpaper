@@ -322,6 +322,110 @@ public final class AppCoordinator: NSObject,
         manualFullscreenController.toggleFullscreen()
     }
 
+    public func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {
+        startScreenSaver()
+    }
+
+    public func startScreenSaver() {
+        logger.info("User requested start screen saver immediately.")
+        let url = URL(fileURLWithPath: "/System/Library/CoreServices/ScreenSaverEngine.app")
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { app, error in
+            if let error = error {
+                logger.error("Failed to launch ScreenSaverEngine via openApplication: \(error.localizedDescription)")
+                let script = "tell application \"System Events\" to start current screen saver"
+                NSAppleScript(source: script)?.executeAndReturnError(nil)
+            }
+        }
+    }
+
+    public func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController) {
+        installScreenSaver(showAlert: true)
+    }
+
+    public func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController) {
+        openScreenSaverSettings()
+    }
+
+    @discardableResult
+    public func installScreenSaver(
+        destinationDirectory: URL? = nil,
+        sourceBundleURL: URL? = nil,
+        showAlert: Bool = false
+    ) -> Bool {
+        let fileManager = FileManager.default
+        let destDir = destinationDirectory ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Screen Savers")
+        let destURL = destDir.appendingPathComponent("KoiWallpaper.saver")
+
+        var sourceURL: URL? = sourceBundleURL
+        if sourceURL == nil {
+            sourceURL = Bundle.main.url(forResource: "KoiWallpaper", withExtension: "saver")
+        }
+        if sourceURL == nil {
+            let possibleLocations = [
+                Bundle.main.resourceURL?.appendingPathComponent("KoiWallpaper.saver"),
+                Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/KoiWallpaper.saver"),
+                URL(fileURLWithPath: "build/KoiWallpaper.saver"),
+                Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("KoiWallpaper.saver")
+            ].compactMap { $0 }
+            sourceURL = possibleLocations.first(where: { fileManager.fileExists(atPath: $0.path) })
+        }
+
+        guard let validSource = sourceURL, fileManager.fileExists(atPath: validSource.path) else {
+            logger.error("Failed to locate KoiWallpaper.saver to install.")
+            if showAlert {
+                let alert = NSAlert()
+                alert.messageText = "Screen Saver Belum Ditemukan"
+                alert.informativeText = "Berkas KoiWallpaper.saver belum dikompilasi atau dibundel di dalam aplikasi. Silakan jalankan ./scripts/build_app.sh terlebih dahulu."
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+            return false
+        }
+
+        do {
+            try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: destURL.path) {
+                try fileManager.removeItem(at: destURL)
+            }
+            try fileManager.copyItem(at: validSource, to: destURL)
+            logger.info("Successfully installed screen saver to \(destURL.path)")
+
+            if showAlert {
+                let alert = NSAlert()
+                alert.messageText = "Screen Saver Berhasil Dipasang!"
+                alert.informativeText = "Koi Wallpaper telah dipasang ke ~/Library/Screen Savers.\n\nBuka Pengaturan Sistem untuk memilih 'Koi Wallpaper' sebagai Screen Saver / Wallpaper Layar Terkunci Anda."
+                alert.addButton(withTitle: "Buka Pengaturan Sistem")
+                alert.addButton(withTitle: "Selesai")
+                alert.alertStyle = .informational
+                let response = alert.runModal()
+                if response == .alertFirstButtonReturn {
+                    openScreenSaverSettings()
+                }
+            }
+            return true
+        } catch {
+            logger.error("Failed to copy screen saver: \(error.localizedDescription)")
+            if showAlert {
+                let alert = NSAlert()
+                alert.messageText = "Gagal Memasang Screen Saver"
+                alert.informativeText = "Terjadi kesalahan saat menyalin ke ~/Library/Screen Savers: \(error.localizedDescription)"
+                alert.alertStyle = .critical
+                alert.runModal()
+            }
+            return false
+        }
+    }
+
+    public func openScreenSaverSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.ScreenSaver-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        } else if let fallback = URL(string: "x-apple.systempreferences:com.apple.preference.desktopscreeneffect") {
+            NSWorkspace.shared.open(fallback)
+        }
+    }
+
     /// Cleanly tears down screen managers, unbinds window observers from lifecycle policy, and stops timers.
     public func teardown() {
         manualFullscreenController.exitFullscreen()

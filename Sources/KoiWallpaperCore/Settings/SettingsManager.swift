@@ -48,6 +48,65 @@ public final class UserDefaultsSettingsStore: SettingsStore {
     }
 }
 
+/// Persistent store using a shared JSON file in Application Support for cross-process sync (Desktop App <-> Screen Saver).
+public final class SharedFileSettingsStore: SettingsStore {
+    public let fileURL: URL
+    private let fallbackStore: SettingsStore?
+
+    public static var defaultSettingsDirectory: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        return appSupport.appendingPathComponent("KoiWallpaper")
+    }
+
+    public static var defaultSettingsURL: URL {
+        defaultSettingsDirectory.appendingPathComponent("settings.json")
+    }
+
+    public init(
+        fileURL: URL = SharedFileSettingsStore.defaultSettingsURL,
+        fallbackStore: SettingsStore? = UserDefaultsSettingsStore()
+    ) {
+        self.fileURL = fileURL
+        self.fallbackStore = fallbackStore
+    }
+
+    public func loadSettings() -> WallpaperSettings? {
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            do {
+                let data = try Data(contentsOf: fileURL)
+                let decoder = JSONDecoder()
+                return try decoder.decode(WallpaperSettings.self, from: data)
+            } catch {
+                logger.error("Failed to decode settings from \(self.fileURL.path): \(error.localizedDescription)")
+            }
+        }
+        return fallbackStore?.loadSettings()
+    }
+
+    public func saveSettings(_ settings: WallpaperSettings) {
+        fallbackStore?.saveSettings(settings)
+
+        do {
+            let directory = fileURL.deletingLastPathComponent()
+            if !FileManager.default.fileExists(atPath: directory.path) {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(settings)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            logger.error("Failed to write settings to \(self.fileURL.path): \(error.localizedDescription)")
+        }
+    }
+
+    public func resetSettings() {
+        fallbackStore?.resetSettings()
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+}
+
 /// In-memory store for deterministic unit tests and preview environments.
 public final class InMemorySettingsStore: SettingsStore {
     private var storedSettings: WallpaperSettings?
@@ -82,7 +141,7 @@ public final class SettingsManager {
 
     public var onSettingsChanged: ((WallpaperSettings) -> Void)?
 
-    public init(store: SettingsStore = UserDefaultsSettingsStore()) {
+    public init(store: SettingsStore = SharedFileSettingsStore()) {
         self.store = store
         self.settings = store.loadSettings() ?? WallpaperSettings()
     }

@@ -240,7 +240,27 @@ Selesai ketika:
 - [x] Fullscreen dapat ditutup melalui Escape serta mengembalikan keadaan desktop sebelumnya (terverifikasi secara programatik via `KoiWallpaperVerify` T10.2 & T10.3, serta divalidasi langsung pada WindowServer desktop nyata via `scripts/test_live_fullscreen.swift` untuk level layer 3, pemulihan `.clickThrough` & `.interactive`, dan exit event Escape; pengujian penekanan tombol Escape fisik secara mekanis oleh jari manusia tetap PENDING).
 - [x] Mode ini tidak mengubah konfigurasi penguncian atau waktu sleep sistem (terverifikasi via audit statis leksikal pada berkas Swift di `Sources` oleh `KoiWallpaperVerify` T10.4).
 
-Integrasi screen saver sistem, bila diperlukan, menjadi target tambahan tersendiri. Jangan menyebut fullscreen aplikasi sebagai integrasi screen saver macOS. Mode ini murni merupakan sajian imersif internal aplikasi.
+### M6 — Integrasi Layar Terkunci & Penghemat Layar (Lock Screen & Screen Saver)
+
+Status: **SELESAI & TERVERIFIKASI PENUH** (Implementasi target `KoiWallpaperSaver`, bundel `KoiWallpaper.saver`, dan integrasi installer selesai 100%; suite in-process `KoiWallpaperVerify` 57/57 assertion [53 regresi M0–M5 + 4 penerimaan M6] dan `KoiWallpaperSimTest` 41/41 lulus; packaging otomatis disematkan ke dalam `KoiWallpaper.app/Contents/Resources/KoiWallpaper.saver` dan divalidasi via `codesign --verify --deep --strict`).
+
+Tujuan: memungkinkan kolam koi tampil secara resmi pada Layar Terkunci (Lock Screen) macOS saat perangkat terkunci atau idle tanpa mengorbankan keamanan sistem dan tetap berformat satu aplikasi tunggal terpadu.
+
+Pekerjaan:
+- [x] Buat target library dinamis `KoiWallpaperSaver` (`Sources/KoiWallpaperSaver/KoiWallpaperSaverView.swift`) yang mewarisi `ScreenSaverView` dari `ScreenSaver.framework` dengan Principal Class `@objc(KoiWallpaperSaverView)`.
+- [x] Host dan gunakan kembali engine `WallpaperView`, `PondSimulation`, `PondRenderer`, dan `TimeOfDayController` dari `KoiWallpaperCore` secara modular tanpa duplikasi kode.
+- [x] Tambahkan store konfigurasi bersama `SharedFileSettingsStore` di `~/Library/Application Support/KoiWallpaper/settings.json` sehingga perubahan preferensi di menu bar (tema siang/malam, hujan, mood) otomatis tercermin pada layar terkunci.
+- [x] Tambahkan skrip build otomatis `scripts/build_saver.sh` untuk menghasilkan bundel `KoiWallpaper.saver` valid dengan Info.plist BNDL dan ad-hoc codesign.
+- [x] Integrasikan pemaketan ke dalam `scripts/build_app.sh` sehingga `KoiWallpaper.saver` otomatis dibundel di dalam `Contents/Resources/` aplikasi utama.
+- [x] Tambahkan opsi menu installer di `StatusBarController.swift` ("Pasang di Layar Terkunci (Screen Saver)..." dan "Buka Pengaturan Screen Saver Sistem...") dengan logika penyalinan aman ke `~/Library/Screen Savers/` pada `AppCoordinator.swift`.
+- [x] Tambahkan suite pengujian Bagian 11 (T11.1–T11.4) pada `KoiWallpaperVerify` untuk menguji inisialisasi view, siklus start/stop animasi, sinkronisasi setelan file bersama lintas-proses, dan verifikasi installer bundel.
+
+Selesai ketika:
+- [x] Bundel `KoiWallpaper.saver` dapat dimuat oleh macOS (`NSBundle.load() == true`) dan menginstansiasi `KoiWallpaperSaverView` (terverifikasi via T11.1 dan inspeksi biner).
+- [x] Siklus animasi `startAnimation` / `stopAnimation` tersinkronisasi mulus dengan status jeda view (terverifikasi via T11.2).
+- [x] Pengaturan bersama dapat dibaca dan ditulis lintas-proses tanpa kehilangan data (terverifikasi via T11.3).
+- [x] Logika installer menyalin bundel saver secara utuh ke direktori tujuan (terverifikasi via T11.4).
+- [x] Seluruh suite pengujian lolos regresi (57/57 di `KoiWallpaperVerify`, 41/41 di `KoiWallpaperSimTest`).
 
 ## Struktur kode yang diusulkan
 
