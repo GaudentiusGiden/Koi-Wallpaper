@@ -15,6 +15,7 @@ public final class AppCoordinator: NSObject,
     public let screenManager: ScreenManager
     public let manualFullscreenController: ManualFullscreenController
     public var idleBehaviorPolicy: IdleBehaviorPolicy
+    public let launchAtLoginManager: LaunchAtLoginManaging
 
     public var desktopWindowController: DesktopWindowController? {
         screenManager.primaryController
@@ -33,9 +34,11 @@ public final class AppCoordinator: NSObject,
         timeOfDayController: TimeOfDayController? = nil,
         screenManager: ScreenManager? = nil,
         manualFullscreenController: ManualFullscreenController? = nil,
-        idleBehaviorPolicy: IdleBehaviorPolicy = IdleBehaviorPolicy()
+        idleBehaviorPolicy: IdleBehaviorPolicy = IdleBehaviorPolicy(),
+        launchAtLoginManager: LaunchAtLoginManaging = SystemLaunchAtLoginManager()
     ) {
         self.settingsManager = settingsManager
+        self.launchAtLoginManager = launchAtLoginManager
 
         let loadedSettings = settingsManager.settings
         let policy = lifecyclePolicy ?? LifecyclePolicy()
@@ -138,13 +141,25 @@ public final class AppCoordinator: NSObject,
         )
         statusController.updateSettingsState(
             pauseOnBattery: settingsManager.settings.pauseOnBattery,
-            showHUD: settingsManager.settings.showHUD
+            showHUD: settingsManager.settings.showHUD,
+            launchAtLogin: launchAtLoginManager.isEnabled
         )
         statusController.updateMoodState(mood: settingsManager.settings.pondMood)
         statusController.updateRainState(isRainActive: settingsManager.settings.isRainActive)
         statusController.updateFullscreenState(isFullscreen: manualFullscreenController.isFullscreen)
         statusController.updateVisitorsState(count: screenManager.totalVisitorsCount)
         self.statusBarController = statusController
+
+        // Synchronize launch at login state with saved preferences if needed
+        if settingsManager.settings.launchAtLogin && !launchAtLoginManager.isEnabled {
+            do {
+                try launchAtLoginManager.setEnabled(true)
+                logger.info("Synchronized launch at login on startup: enabled")
+            } catch {
+                logger.warning("Could not automatically enable launch at login on startup: \(error.localizedDescription)")
+            }
+        }
+        statusController.updateLaunchAtLoginState(isEnabled: launchAtLoginManager.isEnabled)
 
         logger.info("KoiWallpaper M5 started successfully across \(self.screenManager.screenCount) screen(s).")
     }
@@ -256,7 +271,8 @@ public final class AppCoordinator: NSObject,
         lifecyclePolicy.pauseOnBattery = newPauseOnBattery
         statusBarController?.updateSettingsState(
             pauseOnBattery: newPauseOnBattery,
-            showHUD: settingsManager.settings.showHUD
+            showHUD: settingsManager.settings.showHUD,
+            launchAtLogin: launchAtLoginManager.isEnabled
         )
     }
 
@@ -267,12 +283,73 @@ public final class AppCoordinator: NSObject,
         screenManager.applyHUDVisibility(newShowHUD)
         statusBarController?.updateSettingsState(
             pauseOnBattery: settingsManager.settings.pauseOnBattery,
-            showHUD: newShowHUD
+            showHUD: newShowHUD,
+            launchAtLogin: launchAtLoginManager.isEnabled
         )
+    }
+
+    public func statusBarDidToggleLaunchAtLogin(_ controller: StatusBarController) {
+        toggleLaunchAtLogin(showAlertOnError: true)
+    }
+
+    public func statusBarDidRequestOpenLoginItemsSettings(_ controller: StatusBarController) {
+        openLoginItemsSettings()
+    }
+
+    public func openLoginItemsSettings() {
+        logger.info("Opening macOS Login Items settings...")
+        launchAtLoginManager.openLoginItemsSettings()
+    }
+
+    @discardableResult
+    public func toggleLaunchAtLogin(showAlertOnError: Bool = false) -> Bool {
+        let newState = !launchAtLoginManager.isEnabled
+        return setLaunchAtLogin(newState, showAlertOnError: showAlertOnError)
+    }
+
+    @discardableResult
+    public func setLaunchAtLogin(_ enabled: Bool, showAlertOnError: Bool = false) -> Bool {
+        do {
+            try launchAtLoginManager.setEnabled(enabled)
+            settingsManager.updateSettings { $0.launchAtLogin = enabled }
+            statusBarController?.updateLaunchAtLoginState(isEnabled: launchAtLoginManager.isEnabled)
+            logger.info("Successfully set launch at login to \(enabled)")
+            return true
+        } catch {
+            logger.error("Failed to set launch at login to \(enabled): \(error.localizedDescription)")
+            statusBarController?.updateLaunchAtLoginState(isEnabled: launchAtLoginManager.isEnabled)
+
+            if showAlertOnError {
+                let alert = NSAlert()
+                if launchAtLoginManager.requiresApproval {
+                    alert.messageText = "Persetujuan Diperlukan di Pengaturan Sistem"
+                    alert.informativeText = "macOS memerlukan persetujuan manual untuk mengaktifkan Koi Wallpaper agar terbuka otomatis saat login.\n\nSilakan izinkan Koi Wallpaper di Pengaturan Sistem > Umum > Item Masuk (Login Items)."
+                    alert.addButton(withTitle: "Buka Pengaturan Sistem")
+                    alert.addButton(withTitle: "Batal")
+                    alert.alertStyle = .warning
+                    let response = alert.runModal()
+                    if response == .alertFirstButtonReturn {
+                        openLoginItemsSettings()
+                    }
+                } else {
+                    alert.messageText = "Gagal Mengubah Pengaturan Buka Otomatis"
+                    alert.informativeText = "Terjadi kesalahan saat mendaftarkan aplikasi: \(error.localizedDescription)\n\nPastikan Koi Wallpaper dijalankan sebagai aplikasi .app dari folder Aplikasi (/Applications)."
+                    alert.addButton(withTitle: "Buka Pengaturan Sistem")
+                    alert.addButton(withTitle: "Tutup")
+                    alert.alertStyle = .warning
+                    let response = alert.runModal()
+                    if response == .alertFirstButtonReturn {
+                        openLoginItemsSettings()
+                    }
+                }
+            }
+            return false
+        }
     }
 
     public func statusBarDidResetSettings(_ controller: StatusBarController) {
         logger.info("User reset settings to defaults.")
+        try? launchAtLoginManager.setEnabled(false)
         settingsManager.resetToDefaults()
         let defaults = settingsManager.settings
         let previousTheme = timeOfDayController.currentTheme
@@ -301,7 +378,8 @@ public final class AppCoordinator: NSObject,
         }
         statusBarController?.updateSettingsState(
             pauseOnBattery: defaults.pauseOnBattery,
-            showHUD: defaults.showHUD
+            showHUD: defaults.showHUD,
+            launchAtLogin: launchAtLoginManager.isEnabled
         )
     }
 

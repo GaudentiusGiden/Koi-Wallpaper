@@ -31,6 +31,7 @@ enum TestCategory: String {
     case m5Visitors = "M5 VISITORS"
     case m5Fullscreen = "M5 FULLSCREEN"
     case m6ScreenSaver = "M6 SCREEN SAVER"
+    case launchAtLogin = "LAUNCH AT LOGIN"
     case audit = "ARCH AUDIT"
 }
 
@@ -2695,6 +2696,200 @@ do {
 recordTest(.m6ScreenSaver, "T11.4 Screen Saver Bundle Installer & Destination Packaging",
            passed: installerPassed,
            details: installerDetails)
+
+// -------------------------------------------------------------
+// SECTION 12: Launch at Login (Start on Boot) Verification
+// -------------------------------------------------------------
+print("\n--- Section 12: Launch at Login / Start on Boot Verification ---")
+
+// T12.1 Settings Serialization, Persistence & Legacy Backward Compatibility
+var t12_1_passed = false
+var t12_1_details = ""
+do {
+    // 1. Explicit true serialization roundtrip
+    var customSettings = WallpaperSettings()
+    customSettings.launchAtLogin = true
+    let encoder = JSONEncoder()
+    let data = try encoder.encode(customSettings)
+    let decoded = try JSONDecoder().decode(WallpaperSettings.self, from: data)
+    let explicitRoundtripPassed = decoded.launchAtLogin == true
+
+    // 2. Legacy JSON without launchAtLogin key defaults safely to false
+    let legacyJSON = "{\"timeOfDayMode\":\"auto\",\"manualTimePhase\":\"day\",\"pauseOnBattery\":false}".data(using: .utf8)!
+    let legacyDecoded = try JSONDecoder().decode(WallpaperSettings.self, from: legacyJSON)
+    let legacyDefaultPassed = legacyDecoded.launchAtLogin == false
+
+    // 3. Isolated UserDefaults SettingsManager roundtrip
+    let testSuiteName = "com.koiwallpaper.verify.testsuite.launch"
+    purgeSuiteDomain(testSuiteName)
+    let testDefaults = UserDefaults(suiteName: testSuiteName)!
+    let testStore = UserDefaultsSettingsStore(userDefaults: testDefaults, key: "test_launch_settings")
+    let manager = SettingsManager(store: testStore)
+    manager.updateSettings { $0.launchAtLogin = true }
+
+    let manager2 = SettingsManager(store: testStore)
+    let managerRestored = manager2.settings.launchAtLogin == true
+
+    manager2.resetToDefaults()
+    let resetPassed = manager2.settings.launchAtLogin == false
+    purgeSuiteDomain(testSuiteName)
+
+    t12_1_passed = explicitRoundtripPassed && legacyDefaultPassed && managerRestored && resetPassed
+    t12_1_details = "explicitRoundtrip=\(explicitRoundtripPassed), legacyDefaultFalse=\(legacyDefaultPassed), managerRoundtrip=\(managerRestored), resetToDefaultFalse=\(resetPassed)"
+} catch {
+    t12_1_details = "Error: \(error.localizedDescription)"
+}
+recordTest(.launchAtLogin, "T12.1 Launch at Login Settings Serialization & Persistence",
+           passed: t12_1_passed, details: t12_1_details)
+
+// T12.2 LaunchAtLoginManaging Mock State Transitions & Error Resilience
+var t12_2_passed = false
+var t12_2_details = ""
+do {
+    let mock = MockLaunchAtLoginManager(isEnabled: false)
+    let initialOff = !mock.isEnabled
+    try mock.setEnabled(true)
+    let turnedOn = mock.isEnabled && mock.statusDescription == "Aktif"
+    try mock.setEnabled(false)
+    let turnedOff = !mock.isEnabled && mock.statusDescription == "Nonaktif"
+
+    // Test error resilience
+    mock.shouldThrowOnSetEnabled = true
+    var caughtError = false
+    do {
+        try mock.setEnabled(true)
+    } catch {
+        caughtError = true
+    }
+
+    mock.openLoginItemsSettings()
+    let settingsOpened = mock.openLoginItemsSettingsCalled
+
+    t12_2_passed = initialOff && turnedOn && turnedOff && caughtError && settingsOpened
+    t12_2_details = "initialOff=\(initialOff), turnedOn=\(turnedOn), turnedOff=\(turnedOff), errorHandled=\(caughtError), settingsOpened=\(settingsOpened)"
+} catch {
+    t12_2_details = "Error: \(error.localizedDescription)"
+}
+recordTest(.launchAtLogin, "T12.2 Mock State Transitions & Error Resilience",
+           passed: t12_2_passed, details: t12_2_details)
+
+// T12.3 AppCoordinator Launch at Login Synchronization & Menu State
+var t12_3_passed = false
+var t12_3_details = ""
+do {
+    let mockManager = MockLaunchAtLoginManager(isEnabled: false)
+    let inMemoryStore = InMemorySettingsStore(initialSettings: WallpaperSettings(launchAtLogin: false))
+    let settingsMgr = SettingsManager(store: inMemoryStore)
+
+    let coordinator = AppCoordinator(
+        settingsManager: settingsMgr,
+        launchAtLoginManager: mockManager
+    )
+    coordinator.start()
+
+    let initialMenuOff = coordinator.statusBarController?.isLaunchAtLoginMenuItemChecked == false
+
+    // 1. Toggle ON
+    let toggleOnSuccess = coordinator.toggleLaunchAtLogin(showAlertOnError: false)
+    let mockOn = mockManager.isEnabled == true
+    let settingsOn = coordinator.settingsManager.settings.launchAtLogin == true
+    let menuOn = coordinator.statusBarController?.isLaunchAtLoginMenuItemChecked == true
+
+    // 2. Toggle OFF
+    let toggleOffSuccess = coordinator.toggleLaunchAtLogin(showAlertOnError: false)
+    let mockOff = mockManager.isEnabled == false
+    let settingsOff = coordinator.settingsManager.settings.launchAtLogin == false
+    let menuOff = coordinator.statusBarController?.isLaunchAtLoginMenuItemChecked == false
+
+    // 3. Reset to defaults
+    _ = coordinator.setLaunchAtLogin(true, showAlertOnError: false)
+    coordinator.statusBarDidResetSettings(coordinator.statusBarController!)
+    let resetOff = mockManager.isEnabled == false &&
+                   coordinator.settingsManager.settings.launchAtLogin == false &&
+                   coordinator.statusBarController?.isLaunchAtLoginMenuItemChecked == false
+
+    // 4. Teardown
+    coordinator.teardown()
+
+    t12_3_passed = initialMenuOff && toggleOnSuccess && mockOn && settingsOn && menuOn &&
+                   toggleOffSuccess && mockOff && settingsOff && menuOff && resetOff
+    t12_3_details = "toggleOn=\(toggleOnSuccess), settingsOn=\(settingsOn), menuOn=\(menuOn), toggleOff=\(toggleOffSuccess), resetOff=\(resetOff)"
+}
+recordTest(.launchAtLogin, "T12.3 AppCoordinator Launch at Login Synchronization & Reset",
+           passed: t12_3_passed, details: t12_3_details)
+
+// T12.4 StatusBarController Menu Items, Tooltips & Delegate Wiring
+var t12_4_passed = false
+var t12_4_details = ""
+do {
+    final class MockStatusDelegate: StatusBarControllerDelegate {
+        var didToggleLaunchAtLogin = false
+        var didRequestOpenLoginItems = false
+        func statusBarDidToggleInteractionMode(_ controller: StatusBarController) {}
+        func statusBarDidToggleManualPause(_ controller: StatusBarController) {}
+        func statusBarDidSelectTimeOfDayMode(_ controller: StatusBarController, mode: TimeOfDayMode) {}
+        func statusBarDidSelectManualTimePhase(_ controller: StatusBarController, phase: TimeOfDayPhase) {}
+        func statusBarDidSelectManualTheme(_ controller: StatusBarController, theme: PondTheme) {}
+        func statusBarDidSelectMood(_ controller: StatusBarController, mood: PondMood) {}
+        func statusBarDidToggleRain(_ controller: StatusBarController) {}
+        func statusBarDidTogglePauseOnBattery(_ controller: StatusBarController) {}
+        func statusBarDidToggleHUD(_ controller: StatusBarController) {}
+        func statusBarDidResetSettings(_ controller: StatusBarController) {}
+        func statusBarDidRequestQuit(_ controller: StatusBarController) {}
+        func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType) {}
+        func statusBarDidRequestClearVisitors(_ controller: StatusBarController) {}
+        func statusBarDidToggleFullscreen(_ controller: StatusBarController) {}
+        func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController) {}
+        func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController) {}
+        func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {}
+        func statusBarDidToggleLaunchAtLogin(_ controller: StatusBarController) {
+            didToggleLaunchAtLogin = true
+        }
+        func statusBarDidRequestOpenLoginItemsSettings(_ controller: StatusBarController) {
+            didRequestOpenLoginItems = true
+        }
+    }
+
+    let statusController = StatusBarController()
+    let delegate = MockStatusDelegate()
+    statusController.delegate = delegate
+
+    // Verify initial state and update method
+    statusController.updateLaunchAtLoginState(isEnabled: true)
+    let checkedOn = statusController.isLaunchAtLoginMenuItemChecked == true
+    statusController.updateLaunchAtLoginState(isEnabled: false)
+    let checkedOff = statusController.isLaunchAtLoginMenuItemChecked == false
+
+    // Simulate clicks triggering delegate
+    statusController.simulateLaunchAtLoginClick()
+    let delegateReceivedToggle = delegate.didToggleLaunchAtLogin
+
+    // Verify removal of any menu item containing "buka pengaturan"
+    let settingsTitles = statusController.settingsMenuItemsTitles
+    let hasBukaPengaturan = settingsTitles.contains { $0.localizedCaseInsensitiveContains("buka pengaturan") }
+    let bukaPengaturanRemoved = !hasBukaPengaturan
+
+    t12_4_passed = checkedOn && checkedOff && delegateReceivedToggle && bukaPengaturanRemoved
+    t12_4_details = "checkedOn=\(checkedOn), checkedOff=\(checkedOff), delegateToggle=\(delegateReceivedToggle), bukaPengaturanRemoved=\(bukaPengaturanRemoved), titles=\(settingsTitles)"
+}
+recordTest(.launchAtLogin, "T12.4 StatusBarController Menu Items & Delegate Wiring",
+           passed: t12_4_passed, details: t12_4_details)
+
+// T12.5 SystemLaunchAtLoginManager Native API Safety Audit
+var t12_5_passed = false
+var t12_5_details = ""
+do {
+    let systemManager = SystemLaunchAtLoginManager()
+    let currentEnabled = systemManager.isEnabled
+    let reqApproval = systemManager.requiresApproval
+    let desc = systemManager.statusDescription
+    let descValid = !desc.isEmpty
+
+    t12_5_passed = descValid
+    t12_5_details = "systemEnabled=\(currentEnabled), requiresApproval=\(reqApproval), statusDesc=\(desc)"
+}
+recordTest(.launchAtLogin, "T12.5 SystemLaunchAtLoginManager Native API Safety Audit",
+           passed: t12_5_passed, details: t12_5_details)
 
 // Worker process termination: Save metrics and exit cleanly.
 // T9.11, final summary, and post-process filesystem isolation verification

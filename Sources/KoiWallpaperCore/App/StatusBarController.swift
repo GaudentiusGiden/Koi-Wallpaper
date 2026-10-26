@@ -15,6 +15,8 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType)
     func statusBarDidRequestClearVisitors(_ controller: StatusBarController)
     func statusBarDidToggleFullscreen(_ controller: StatusBarController)
+    func statusBarDidToggleLaunchAtLogin(_ controller: StatusBarController)
+    func statusBarDidRequestOpenLoginItemsSettings(_ controller: StatusBarController)
     func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController)
     func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController)
     func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController)
@@ -31,6 +33,8 @@ extension StatusBarControllerDelegate {
     public func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType) {}
     public func statusBarDidRequestClearVisitors(_ controller: StatusBarController) {}
     public func statusBarDidToggleFullscreen(_ controller: StatusBarController) {}
+    public func statusBarDidToggleLaunchAtLogin(_ controller: StatusBarController) {}
+    public func statusBarDidRequestOpenLoginItemsSettings(_ controller: StatusBarController) {}
     public func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController) {}
     public func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController) {}
     public func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {}
@@ -111,6 +115,11 @@ public final class StatusBarController {
     // Settings submenu
     private let settingsMenuItem = NSMenuItem(title: "Pengaturan (Settings)", action: nil, keyEquivalent: "")
     private let settingsMenu = NSMenu(title: "Settings")
+    private let launchAtLoginItem = NSMenuItem(
+        title: "Mulai Otomatis Saat MacBook Menyala (Launch at Login)",
+        action: #selector(launchAtLoginToggled),
+        keyEquivalent: ""
+    )
     private let pauseOnBatteryItem = NSMenuItem(
         title: "Jeda Saat Menggunakan Baterai",
         action: #selector(pauseOnBatteryToggled),
@@ -129,11 +138,6 @@ public final class StatusBarController {
     private let installScreenSaverItem = NSMenuItem(
         title: "Pasang di Layar Terkunci (Screen Saver)...",
         action: #selector(installScreenSaverClicked),
-        keyEquivalent: ""
-    )
-    private let openScreenSaverSettingsItem = NSMenuItem(
-        title: "Buka Pengaturan Screen Saver Sistem...",
-        action: #selector(openScreenSaverSettingsClicked),
         keyEquivalent: ""
     )
 
@@ -194,10 +198,11 @@ public final class StatusBarController {
         rainToggleItem.target = self
         spawnBallItem.target = self
         clearVisitorsItem.target = self
+        launchAtLoginItem.target = self
+        launchAtLoginItem.toolTip = "Buka Koi Wallpaper secara otomatis setiap kali MacBook dinyalakan atau setelah pengguna login"
         pauseOnBatteryItem.target = self
         showHUDItem.target = self
         installScreenSaverItem.target = self
-        openScreenSaverSettingsItem.target = self
         resetSettingsItem.target = self
         quitItem.target = self
 
@@ -241,11 +246,11 @@ public final class StatusBarController {
         visitorsMenuItem.submenu = visitorsMenu
 
         // Build Settings submenu
+        settingsMenu.addItem(launchAtLoginItem)
         settingsMenu.addItem(pauseOnBatteryItem)
         settingsMenu.addItem(showHUDItem)
         settingsMenu.addItem(NSMenuItem.separator())
         settingsMenu.addItem(installScreenSaverItem)
-        settingsMenu.addItem(openScreenSaverSettingsItem)
         settingsMenu.addItem(NSMenuItem.separator())
         settingsMenu.addItem(resetSettingsItem)
         settingsMenuItem.submenu = settingsMenu
@@ -324,6 +329,29 @@ public final class StatusBarController {
     public func updateSettingsState(pauseOnBattery: Bool, showHUD: Bool) {
         pauseOnBatteryItem.state = pauseOnBattery ? .on : .off
         showHUDItem.state = showHUD ? .on : .off
+    }
+
+    public func updateSettingsState(pauseOnBattery: Bool, showHUD: Bool, launchAtLogin: Bool) {
+        pauseOnBatteryItem.state = pauseOnBattery ? .on : .off
+        showHUDItem.state = showHUD ? .on : .off
+        launchAtLoginItem.state = launchAtLogin ? .on : .off
+    }
+
+    public func updateLaunchAtLoginState(isEnabled: Bool) {
+        launchAtLoginItem.state = isEnabled ? .on : .off
+    }
+
+    // Testing helpers
+    public var isLaunchAtLoginMenuItemChecked: Bool {
+        launchAtLoginItem.state == .on
+    }
+
+    public var settingsMenuItemsTitles: [String] {
+        settingsMenu.items.map(\.title)
+    }
+
+    public func simulateLaunchAtLoginClick() {
+        launchAtLoginToggled()
     }
 
     public func updateMoodState(mood: PondMood) {
@@ -537,6 +565,10 @@ public final class StatusBarController {
         delegate?.statusBarDidRequestClearVisitors(self)
     }
 
+    @objc private func launchAtLoginToggled() {
+        delegate?.statusBarDidToggleLaunchAtLogin(self)
+    }
+
     @objc private func pauseOnBatteryToggled() {
         delegate?.statusBarDidTogglePauseOnBattery(self)
     }
@@ -551,10 +583,6 @@ public final class StatusBarController {
 
     @objc private func installScreenSaverClicked() {
         delegate?.statusBarDidRequestInstallScreenSaver(self)
-    }
-
-    @objc private func openScreenSaverSettingsClicked() {
-        delegate?.statusBarDidRequestOpenScreenSaverSettings(self)
     }
 
     @objc private func quitClicked() {
