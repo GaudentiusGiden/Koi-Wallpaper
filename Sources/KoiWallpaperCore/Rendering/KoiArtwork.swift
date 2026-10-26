@@ -4,6 +4,25 @@ import Foundation
 /// Original, limited-palette koi artwork. Torso stations use the same spine and
 /// widths as collision capsules; fins and tail remain articulated decorations.
 public enum KoiArtwork {
+    private static let cream = CGColor(red: 0.96, green: 0.94, blue: 0.80, alpha: 1)
+    private static let ink = CGColor(red: 0.045, green: 0.12, blue: 0.105, alpha: 1)
+    private static let red = CGColor(red: 0.74, green: 0.20, blue: 0.105, alpha: 1)
+    private static let orange = CGColor(red: 0.91, green: 0.43, blue: 0.10, alpha: 1)
+    private static let ogonBase = CGColor(red: 0.91, green: 0.61, blue: 0.08, alpha: 1)
+    private static let ogonHighlight = CGColor(red: 1, green: 0.78, blue: 0.21, alpha: 1)
+    private static let asagiBase = CGColor(red: 0.38, green: 0.57, blue: 0.57, alpha: 1)
+    private static let asagiStroke = CGColor(red: 0.13, green: 0.33, blue: 0.35, alpha: 0.6)
+
+    private static let creamFin = cream.copy(alpha: 0.66)!
+    private static let inkFin = ink.copy(alpha: 0.66)!
+    private static let ogonFin = ogonBase.copy(alpha: 0.66)!
+    private static let asagiFin = asagiBase.copy(alpha: 0.66)!
+
+    private static let patchShapes: [[CGPoint]] = [
+        [CGPoint(x: -0.50, y: -0.25), CGPoint(x: -0.30, y: -0.49), CGPoint(x: 0.06, y: -0.43), CGPoint(x: 0.29, y: -0.50), CGPoint(x: 0.48, y: -0.16), CGPoint(x: 0.40, y: 0.17), CGPoint(x: 0.16, y: 0.48), CGPoint(x: -0.13, y: 0.38), CGPoint(x: -0.42, y: 0.47)],
+        [CGPoint(x: -0.47, y: -0.34), CGPoint(x: -0.07, y: -0.48), CGPoint(x: 0.31, y: -0.36), CGPoint(x: 0.45, y: -0.05), CGPoint(x: 0.35, y: 0.44), CGPoint(x: 0.02, y: 0.32), CGPoint(x: -0.22, y: 0.48), CGPoint(x: -0.48, y: 0.13)]
+    ]
+
     public static func draw(_ fish: KoiFish, in context: CGContext, drawShadowOnly: Bool = false, phase: TimeOfDayPhase) {
         draw(fish, in: context, drawShadowOnly: drawShadowOnly, theme: phase.theme)
     }
@@ -59,20 +78,25 @@ public enum KoiArtwork {
             return
         }
 
-        let cream = CGColor(red: 0.96, green: 0.94, blue: 0.80, alpha: 1)
-        let ink = CGColor(red: 0.045, green: 0.12, blue: 0.105, alpha: 1)
-        let red = CGColor(red: 0.74, green: 0.20, blue: 0.105, alpha: 1)
-        let orange = CGColor(red: 0.91, green: 0.43, blue: 0.10, alpha: 1)
         let base: CGColor
+        let finColor: CGColor
         switch fish.variety.type {
-        case .showa, .shiroUtsuri: base = ink
-        case .ogon: base = CGColor(red: 0.91, green: 0.61, blue: 0.08, alpha: 1)
-        case .asagi: base = CGColor(red: 0.38, green: 0.57, blue: 0.57, alpha: 1)
-        default: base = cream
+        case .showa, .shiroUtsuri:
+            base = Self.ink
+            finColor = Self.inkFin
+        case .ogon:
+            base = Self.ogonBase
+            finColor = Self.ogonFin
+        case .asagi:
+            base = Self.asagiBase
+            finColor = Self.asagiFin
+        default:
+            base = Self.cream
+            finColor = Self.creamFin
         }
 
         // Broad translucent fins with gentle swim stroke flutter and turn steering flare.
-        context.setFillColor(base.copy(alpha: 0.66)!)
+        context.setFillColor(finColor)
         for side: CGFloat in [-1, 1] {
             context.addPath(pectoralFin(at: spine[2], length: length, halfWidth: halfWidth,
                                         side: side, flutter: flutter, turnBias: turnFinBias))
@@ -91,12 +115,9 @@ public enum KoiArtwork {
         func patch(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat, _ color: CGColor, _ variant: Int) {
             let cy = spineY(at: x * length, spine: spine) + y * halfWidth
             let center = CGPoint(x: x * length, y: cy)
-            let shapes: [[CGPoint]] = [
-                [CGPoint(x: -0.50, y: -0.25), CGPoint(x: -0.30, y: -0.49), CGPoint(x: 0.06, y: -0.43), CGPoint(x: 0.29, y: -0.50), CGPoint(x: 0.48, y: -0.16), CGPoint(x: 0.40, y: 0.17), CGPoint(x: 0.16, y: 0.48), CGPoint(x: -0.13, y: 0.38), CGPoint(x: -0.42, y: 0.47)],
-                [CGPoint(x: -0.47, y: -0.34), CGPoint(x: -0.07, y: -0.48), CGPoint(x: 0.31, y: -0.36), CGPoint(x: 0.45, y: -0.05), CGPoint(x: 0.35, y: 0.44), CGPoint(x: 0.02, y: 0.32), CGPoint(x: -0.22, y: 0.48), CGPoint(x: -0.48, y: 0.13)]
-            ]
+            let shape = Self.patchShapes[variant % 2]
             let path = CGMutablePath()
-            for (i, p) in shapes[variant % 2].enumerated() {
+            for (i, p) in shape.enumerated() {
                 let point = CGPoint(x: center.x + p.x * width * length, y: center.y + p.y * height * halfWidth)
                 if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
             }
@@ -107,33 +128,33 @@ public enum KoiArtwork {
         }
         switch fish.variety.type {
         case .kohaku, .sanke:
-            patch(0.27, 0.06, 0.20, 1.35, red, 0)
-            patch(0.02, -0.16, 0.21, 1.65, red, 1)
-            patch(-0.25, 0.10, 0.16, 1.1, red, 0)
+            patch(0.27, 0.06, 0.20, 1.35, Self.red, 0)
+            patch(0.02, -0.16, 0.21, 1.65, Self.red, 1)
+            patch(-0.25, 0.10, 0.16, 1.1, Self.red, 0)
             if fish.variety.type == .sanke {
-                patch(0.15, -0.52, 0.09, 0.7, ink, 1)
-                patch(-0.08, 0.45, 0.10, 0.65, ink, 0)
-                patch(-0.32, -0.18, 0.08, 0.50, ink, 1)
+                patch(0.15, -0.52, 0.09, 0.7, Self.ink, 1)
+                patch(-0.08, 0.45, 0.10, 0.65, Self.ink, 0)
+                patch(-0.32, -0.18, 0.08, 0.50, Self.ink, 1)
             }
         case .showa:
-            patch(0.31, 0, 0.20, 1.6, cream, 1)
-            patch(0.02, 0.4, 0.28, 1.5, cream, 0)
-            patch(-0.28, -0.1, 0.20, 1.0, cream, 1)
-            patch(0.23, -0.05, 0.14, 0.85, red, 0)
-            patch(-0.08, 0.15, 0.20, 1.2, red, 1)
+            patch(0.31, 0, 0.20, 1.6, Self.cream, 1)
+            patch(0.02, 0.4, 0.28, 1.5, Self.cream, 0)
+            patch(-0.28, -0.1, 0.20, 1.0, Self.cream, 1)
+            patch(0.23, -0.05, 0.14, 0.85, Self.red, 0)
+            patch(-0.08, 0.15, 0.20, 1.2, Self.red, 1)
         case .shiroUtsuri:
-            patch(0.28, 0.1, 0.24, 1.5, cream, 0)
-            patch(-0.03, -0.25, 0.24, 1.6, cream, 1)
-            patch(-0.29, 0.05, 0.16, 0.9, cream, 0)
+            patch(0.28, 0.1, 0.24, 1.5, Self.cream, 0)
+            patch(-0.03, -0.25, 0.24, 1.6, Self.cream, 1)
+            patch(-0.29, 0.05, 0.16, 0.9, Self.cream, 0)
         case .tancho:
-            patch(0.31, 0, 0.16, 1.0, red, 1)
+            patch(0.31, 0, 0.16, 1.0, Self.red, 1)
         case .kikusui:
-            patch(0.12, 0.53, 0.47, 0.90, orange, 0)
-            patch(-0.04, -0.50, 0.42, 0.82, orange, 1)
+            patch(0.12, 0.53, 0.47, 0.90, Self.orange, 0)
+            patch(-0.04, -0.50, 0.42, 0.82, Self.orange, 1)
         case .asagi:
-            patch(0.04, 0.78, 0.55, 0.60, red, 1)
-            patch(-0.01, -0.82, 0.52, 0.60, red, 0)
-            context.setStrokeColor(red: 0.13, green: 0.33, blue: 0.35, alpha: 0.6)
+            patch(0.04, 0.78, 0.55, 0.60, Self.red, 1)
+            patch(-0.01, -0.82, 0.52, 0.60, Self.red, 0)
+            context.setStrokeColor(Self.asagiStroke)
             context.setLineWidth(length * 0.018)
             for i in 0..<7 {
                 let x = length * (0.24 - CGFloat(i) * 0.075)
@@ -144,7 +165,7 @@ public enum KoiArtwork {
             }
             context.strokePath()
         case .ogon:
-            patch(0.07, 0.15, 0.50, 1.15, CGColor(red: 1, green: 0.78, blue: 0.21, alpha: 1), 1)
+            patch(0.07, 0.15, 0.50, 1.15, Self.ogonHighlight, 1)
         }
         // Theme-colored reflections stay on the existing light and shade areas,
         // so the koi variety's base color and markings remain recognizable.

@@ -34,6 +34,7 @@ public final class ScreenManager {
     public private(set) var currentTheme: PondTheme = .day
     public private(set) var currentShowHUD: Bool = false
     public private(set) var isGloballyPaused: Bool = false
+    public private(set) var isBatteryEcoMode: Bool = false
     public private(set) var currentMood: PondMood = .calm
     public private(set) var currentIsRainActive: Bool = false
     public weak var inputCoordinator: InputCoordinator?
@@ -139,6 +140,7 @@ public final class ScreenManager {
         controller.wallpaperView.inputCoordinator = inputCoordinator
         controller.wallpaperView.theme = currentTheme
         controller.wallpaperView.showHUD = currentShowHUD
+        controller.wallpaperView.isBatteryEcoMode = isBatteryEcoMode
         controller.applyMood(currentMood)
         controller.applyRain(currentIsRainActive)
         controller.applyInteractionMode(currentMode)
@@ -214,6 +216,13 @@ public final class ScreenManager {
         self.currentIsRainActive = isRainActive
         for controller in controllers {
             controller.applyRain(isRainActive)
+        }
+    }
+
+    public func applyBatteryEcoMode(_ enabled: Bool) {
+        self.isBatteryEcoMode = enabled
+        for controller in controllers {
+            controller.wallpaperView.isBatteryEcoMode = enabled
         }
     }
 

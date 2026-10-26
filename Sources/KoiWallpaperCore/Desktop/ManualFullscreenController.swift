@@ -45,10 +45,14 @@ public final class ManualFullscreenController {
         logger.info("Entering manual fullscreen mode...")
 
         // 1. Capture previous desktop state
+        let wasPausedBeforeFullscreen = screenMgr.isGloballyPaused
         previousState = PreviousDesktopState(
             interactionMode: screenMgr.currentMode,
-            isGloballyPaused: screenMgr.isGloballyPaused
+            isGloballyPaused: wasPausedBeforeFullscreen
         )
+
+        // Pause underlying desktop wallpaper controllers so simulation is not advanced twice
+        screenMgr.applyGlobalPause(true)
 
         // 2. Identify screens to cover (target screen or all active screens)
         let screens = targetScreen.map { [$0] } ?? screenMgr.screenProvider()
@@ -73,7 +77,7 @@ public final class ManualFullscreenController {
             view.isFullscreenPresentation = true
             view.layer?.contentsScale = screen.backingScaleFactor
 
-            if !screenMgr.isGloballyPaused {
+            if !wasPausedBeforeFullscreen {
                 view.startAnimationTimer()
             }
 

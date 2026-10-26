@@ -125,11 +125,18 @@ public final class StatusBarController {
         setupStatusItem()
     }
 
+    private static let normalIcon: NSImage = makeStatusIcon(isInteractive: false, isPaused: false)
+    private static let interactiveIcon: NSImage = makeStatusIcon(isInteractive: true, isPaused: false)
+    private static let pausedIcon: NSImage = makeStatusIcon(isInteractive: false, isPaused: true)
+    private static let pausedInteractiveIcon: NSImage = makeStatusIcon(isInteractive: true, isPaused: true)
+
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.title = "🐟"
-            button.toolTip = "Koi Wallpaper (M5)"
+            button.image = Self.normalIcon
+            button.imagePosition = .imageOnly
+            button.title = ""
+            button.toolTip = "Koi Wallpaper"
         }
 
         setupMenu()
@@ -310,13 +317,119 @@ public final class StatusBarController {
 
     private func updateStatusIcon(isInteractive: Bool, isPaused: Bool) {
         guard let button = statusItem?.button else { return }
+        let icon: NSImage
         if isPaused {
-            button.title = "🐟⏸"
-        } else if isInteractive {
-            button.title = "🐟⚡"
+            icon = isInteractive ? Self.pausedInteractiveIcon : Self.pausedIcon
         } else {
-            button.title = "🐟"
+            icon = isInteractive ? Self.interactiveIcon : Self.normalIcon
         }
+        button.image = icon
+        button.imagePosition = .imageOnly
+        button.title = ""
+    }
+
+    public static func makeStatusIcon(isInteractive: Bool = false, isPaused: Bool = false) -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+
+            ctx.saveGState()
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let s = min(rect.width, rect.height)
+
+            ctx.translateBy(x: center.x, y: center.y)
+            ctx.rotate(by: -CGFloat.pi * 0.25) // Gracefully swimming upward-right
+
+            let length = s * 0.90
+            let halfWidth = length * 0.20
+
+            let flex: CGFloat = 0.18
+            let p0 = CGPoint(x: length * 0.45, y: 0)
+            let p1 = CGPoint(x: length * 0.25, y: -length * flex * 0.15)
+            let p2 = CGPoint(x: 0, y: -length * flex * 0.45)
+            let p3 = CGPoint(x: -length * 0.22, y: -length * flex * 0.40)
+            let p4 = CGPoint(x: -length * 0.38, y: -length * flex * 0.15)
+            let p5 = CGPoint(x: -length * 0.48, y: length * flex * 0.20)
+
+            let spine = [p0, p1, p2, p3, p4, p5]
+            let widths: [CGFloat] = [0.12, 0.72, 1.0, 0.82, 0.45, 0.18]
+
+            let baseAlpha: CGFloat = isPaused ? 0.45 : 1.0
+
+            // 1. Pectoral Fins (Left & Right)
+            func drawFin(at pt: CGPoint, side: CGFloat) {
+                ctx.saveGState()
+                let finPath = CGMutablePath()
+                let finLen = length * 0.32
+                let finW = halfWidth * 1.55
+                finPath.move(to: pt)
+                let tip = CGPoint(x: pt.x - finLen * 0.7, y: pt.y + side * finW)
+                let c1 = CGPoint(x: pt.x + finLen * 0.2, y: pt.y + side * finW * 0.9)
+                let c2 = CGPoint(x: pt.x - finLen * 0.9, y: pt.y + side * finW * 0.4)
+                finPath.addQuadCurve(to: tip, control: c1)
+                finPath.addQuadCurve(to: CGPoint(x: pt.x - finLen * 0.4, y: pt.y + side * halfWidth * 0.6), control: c2)
+                finPath.closeSubpath()
+
+                ctx.setFillColor(gray: 1.0, alpha: 0.68 * baseAlpha)
+                ctx.addPath(finPath)
+                ctx.fillPath()
+                ctx.restoreGState()
+            }
+            drawFin(at: CGPoint(x: p2.x, y: p2.y + halfWidth * 0.7), side: 1.0)
+            drawFin(at: CGPoint(x: p2.x, y: p2.y - halfWidth * 0.7), side: -1.0)
+
+            // 2. Caudal Tail Fin (Flowing fan shape)
+            let tailPath = CGMutablePath()
+            let tailLen = length * 0.35
+            let tailW = halfWidth * 1.8
+            tailPath.move(to: p5)
+            let tailTip1 = CGPoint(x: p5.x - tailLen, y: p5.y + tailW * 0.8)
+            let tailNotch = CGPoint(x: p5.x - tailLen * 0.7, y: p5.y)
+            let tailTip2 = CGPoint(x: p5.x - tailLen, y: p5.y - tailW * 0.8)
+            tailPath.addQuadCurve(to: tailTip1, control: CGPoint(x: p5.x - tailLen * 0.5, y: p5.y + tailW * 0.6))
+            tailPath.addLine(to: tailNotch)
+            tailPath.addLine(to: tailTip2)
+            tailPath.addQuadCurve(to: p5, control: CGPoint(x: p5.x - tailLen * 0.5, y: p5.y - tailW * 0.6))
+            tailPath.closeSubpath()
+
+            ctx.setFillColor(gray: 1.0, alpha: 0.72 * baseAlpha)
+            ctx.addPath(tailPath)
+            ctx.fillPath()
+
+            // 3. Torso Silhouette
+            let torsoPath = CGMutablePath()
+            for (i, p) in spine.enumerated() {
+                let pt = CGPoint(x: p.x, y: p.y + halfWidth * widths[i])
+                if i == 0 { torsoPath.move(to: pt) } else { torsoPath.addLine(to: pt) }
+            }
+            for i in (0..<spine.count).reversed() {
+                let pt = CGPoint(x: spine[i].x, y: spine[i].y - halfWidth * widths[i])
+                torsoPath.addLine(to: pt)
+            }
+            torsoPath.closeSubpath()
+
+            ctx.setFillColor(gray: 1.0, alpha: baseAlpha)
+            ctx.addPath(torsoPath)
+            ctx.fillPath()
+
+            ctx.restoreGState()
+
+            // 4. Subtle badges
+            if isPaused {
+                // Small crisp pause bars in bottom right corner
+                ctx.setFillColor(gray: 1.0, alpha: 0.90)
+                ctx.fill(CGRect(x: rect.maxX - 5.5, y: rect.minY + 1.5, width: 1.5, height: 4.5))
+                ctx.fill(CGRect(x: rect.maxX - 3.0, y: rect.minY + 1.5, width: 1.5, height: 4.5))
+            } else if isInteractive {
+                // Small subtle interactive dot badge in bottom right corner
+                ctx.setFillColor(gray: 1.0, alpha: 0.95)
+                ctx.fillEllipse(in: CGRect(x: rect.maxX - 4.5, y: rect.minY + 1.5, width: 3.5, height: 3.5))
+            }
+
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     // MARK: - Actions

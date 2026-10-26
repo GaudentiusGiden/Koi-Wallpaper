@@ -64,6 +64,9 @@ public final class PondRenderer {
     typealias GlimmerStyle = (color: (CGFloat, CGFloat, CGFloat), alpha: CGFloat)
 
     public private(set) var isSnapshotSource: Bool = false
+    public var isBatteryEcoMode: Bool = false
+    private var renderFrameIndex: UInt64 = 0
+    private var lastInsectPlacement: PondImagePlacement?
     private var customSourceShadow: PondLighting.ShadowStyle?
     private var customSourceFishAmbientStyle: PondLighting.FishAmbientStyle?
     private var customSourceTint: CGColor?
@@ -364,8 +367,33 @@ public final class PondRenderer {
         let clampedP = max(0, min(1, progress))
         let isTransitioning = (isSnapshotSource || fromTheme != toTheme) && clampedP < 1.0
 
-        if !isTransitioning && isSnapshotSource {
-            clearSnapshotSource()
+        if !isTransitioning {
+            if isSnapshotSource {
+                clearSnapshotSource()
+            }
+            // If a transition just concluded, promote the target water and flora caches
+            // to active caches in O(1) time without re-rendering, then free the transition memory.
+            if waterB.isPrepared(size: size, scale: scale, theme: toTheme) {
+                waterA.adopt(from: waterB)
+            } else if waterB.hasCompleteAssets {
+                waterB.clear()
+            }
+
+            if floraThemeB == toTheme, cachedFloraB.count == PondFloraArtwork.anchors.count {
+                cachedFloraA = cachedFloraB
+                floraSizeA = floraSizeB
+                floraPixelSizeA = floraPixelSizeB
+                floraThemeA = floraThemeB
+                cachedFloraB.removeAll(keepingCapacity: false)
+                floraSizeB = .zero
+                floraPixelSizeB = 0
+                floraThemeB = nil
+            } else if !cachedFloraB.isEmpty {
+                cachedFloraB.removeAll(keepingCapacity: false)
+                floraSizeB = .zero
+                floraPixelSizeB = 0
+                floraThemeB = nil
+            }
         }
 
         // Steady-state uses waterA directly; active transition prepares waterA (from) and waterB (to) once.
@@ -487,16 +515,20 @@ public final class PondRenderer {
             }
         }
 
+        renderFrameIndex &+= 1
+
         let animateFlora: ([PondImagePlacement]) -> [PondImagePlacement] = { sources in
             let t = simulation.elapsedTime
             return sources.enumerated().map { index, source in
                 let dx = (CGFloat(sin(t * 0.18 + Double(index))) * short * 0.0025 * scale).rounded() / scale
                 let dy = (CGFloat(cos(t * 0.15 + Double(index) * 1.3)) * short * 0.0018 * scale).rounded() / scale
+                let rawAngle = CGFloat(sin(t * 0.16 + Double(index))) * 0.005
+                let angle = (rawAngle * 1000).rounded() / 1000
                 return PondImagePlacement(
                     image: source.image,
                     rect: source.rect.offsetBy(dx: dx, dy: dy),
                     pixelated: true,
-                    angle: CGFloat(sin(t * 0.16 + Double(index))) * 0.005
+                    angle: angle
                 )
             }
         }
@@ -530,28 +562,40 @@ public final class PondRenderer {
 
         var insectPlacement: PondImagePlacement?
         if !simulation.insects.isEmpty || simulation.frog.isVisible {
-            if insectContext == nil || pixels != insectPixels {
-                insectPixels = pixels
-                insectContext = CGContext(data: nil, width: Int(pixels.width), height: Int(pixels.height),
-                                          bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-            }
-            if let bitmap = insectContext {
-                bitmap.clear(CGRect(origin: .zero, size: pixels))
-                bitmap.saveGState()
-                bitmap.scaleBy(x: 1 / pixelSize, y: 1 / pixelSize)
-                bitmap.setShouldAntialias(false)
-                PondFrogArtwork.draw(simulation.frog, in: bitmap, time: simulation.elapsedTime)
-                PondInsectArtwork.drawInsects(simulation.insects, in: bitmap, time: simulation.elapsedTime)
-                bitmap.restoreGState()
-
-                if let image = bitmap.makeImage() {
-                    insectPlacement = PondImagePlacement(
-                        image: image,
-                        rect: CGRect(x: 0, y: 0, width: pixels.width * pixelSize, height: pixels.height * pixelSize),
-                        pixelated: true
-                    )
+            if isBatteryEcoMode, (renderFrameIndex % 2 != 0), let cached = lastInsectPlacement {
+                insectPlacement = cached
+            } else {
+                if insectContext == nil || pixels != insectPixels {
+                    insectPixels = pixels
+                    insectContext = CGContext(data: nil, width: Int(pixels.width), height: Int(pixels.height),
+                                              bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
                 }
+                if let bitmap = insectContext {
+                    bitmap.clear(CGRect(origin: .zero, size: pixels))
+                    bitmap.saveGState()
+                    bitmap.scaleBy(x: 1 / pixelSize, y: 1 / pixelSize)
+                    bitmap.setShouldAntialias(false)
+                    PondFrogArtwork.draw(simulation.frog, in: bitmap, time: simulation.elapsedTime)
+                    PondInsectArtwork.drawInsects(simulation.insects, in: bitmap, time: simulation.elapsedTime)
+                    bitmap.restoreGState()
+
+                    if let image = bitmap.makeImage() {
+                        let placement = PondImagePlacement(
+                            image: image,
+                            rect: CGRect(x: 0, y: 0, width: pixels.width * pixelSize, height: pixels.height * pixelSize),
+                            pixelated: true
+                        )
+                        insectPlacement = placement
+                        lastInsectPlacement = placement
+                    }
+                }
+            }
+        } else {
+            if insectContext != nil {
+                insectContext = nil
+                insectPixels = .zero
+                lastInsectPlacement = nil
             }
         }
 

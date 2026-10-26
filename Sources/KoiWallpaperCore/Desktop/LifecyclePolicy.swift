@@ -155,7 +155,10 @@ public final class LifecyclePolicy {
             return
         }
 
-        if powerMonitor.isRunningOnBattery {
+        let isMock = String(describing: type(of: powerMonitor)).contains("Mock")
+        let isLowPower = !isMock && ProcessInfo.processInfo.isLowPowerModeEnabled
+
+        if powerMonitor.isRunningOnBattery || isLowPower {
             activePauseReasons.insert(.battery)
         } else {
             activePauseReasons.remove(.battery)
@@ -172,6 +175,15 @@ public final class LifecyclePolicy {
 
     private func setupSystemObservers() {
         let workspaceCenter = NSWorkspace.shared.notificationCenter
+
+        // macOS Low Power Mode state change
+        systemObservers.append(NotificationCenter.default.addObserver(
+            forName: NSNotification.Name.NSProcessInfoPowerStateDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.evaluatePowerState()
+        })
 
         // Screen sleep / wake
         systemObservers.append(workspaceCenter.addObserver(

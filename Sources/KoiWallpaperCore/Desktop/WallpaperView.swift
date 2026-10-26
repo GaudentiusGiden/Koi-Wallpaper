@@ -266,6 +266,11 @@ public final class WallpaperView: NSView {
 
     // MARK: - Animation Loop & Stasis Control
 
+    public var isBatteryEcoMode: Bool {
+        get { renderer.isBatteryEcoMode }
+        set { renderer.isBatteryEcoMode = newValue }
+    }
+
     public func startAnimationTimer() {
         guard animationTimer == nil, !isPaused else { return }
         lastFrameTime = CACurrentMediaTime()
@@ -313,11 +318,10 @@ public final class WallpaperView: NSView {
             self.simulation.advance(deltaTime: dt)
             self.needsDisplay = true
         }
+        timer.tolerance = (1.0 / Self.targetFramesPerSecond) * 0.15
         RunLoop.main.add(timer, forMode: .common)
-        RunLoop.main.add(timer, forMode: .default)
         if RunLoop.current != RunLoop.main {
             RunLoop.current.add(timer, forMode: .common)
-            RunLoop.current.add(timer, forMode: .default)
         }
         self.animationTimer = timer
     }
@@ -357,11 +361,13 @@ public final class WallpaperView: NSView {
     public override func draw(_ dirtyRect: NSRect) { updateLayer() }
 
     public override func updateLayer() {
-        simulation.updateThemeTransition(
-            from: activeTheme,
-            to: targetTheme,
-            progress: Double(transitionProgress)
-        )
+        if animationTimer == nil {
+            simulation.updateThemeTransition(
+                from: activeTheme,
+                to: targetTheme,
+                progress: Double(transitionProgress)
+            )
+        }
         let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 1
         sceneLayer.update(
             simulation: simulation,

@@ -175,14 +175,20 @@ public final class PondSceneLayer: CALayer {
             strokeLayers.append(shape)
         }
         for (index, layer) in strokeLayers.enumerated() {
-            layer.isHidden = index >= frame.surface.count
-            if index < frame.surface.count {
+            let shouldHide = index >= frame.surface.count
+            if layer.isHidden != shouldHide { layer.isHidden = shouldHide }
+            if !shouldHide {
                 let stroke = frame.surface[index]
-                layer.path = stroke.path
-                layer.strokeColor = stroke.color
-                layer.lineWidth = stroke.width
-                layer.contentsScale = backingScale
+                if layer.path !== stroke.path { layer.path = stroke.path }
+                if layer.strokeColor != stroke.color { layer.strokeColor = stroke.color }
+                if layer.lineWidth != stroke.width { layer.lineWidth = stroke.width }
+                if layer.contentsScale != backingScale { layer.contentsScale = backingScale }
             }
+        }
+        if strokeLayers.count > 64 && frame.surface.count <= 24 {
+            let excess = strokeLayers.suffix(from: 32)
+            for layer in excess { layer.removeFromSuperlayer() }
+            strokeLayers.removeSubrange(32..<strokeLayers.count)
         }
 
         // Flora layers: Layer A remains fully opaque (1.0) while Layer B fades in at progress.
@@ -228,13 +234,31 @@ public final class PondSceneLayer: CALayer {
     }
 
     private func apply(_ placement: PondImagePlacement, to layer: CALayer) {
-        // Set untransformed geometry first; CALayer.frame is undefined under rotation.
-        layer.setAffineTransform(.identity)
-        layer.frame = placement.rect
-        layer.contents = placement.image
-        layer.contentsGravity = .resize
-        layer.magnificationFilter = placement.pixelated ? .nearest : .linear
-        layer.minificationFilter = placement.pixelated ? .nearest : .linear
-        if placement.angle != 0 { layer.setAffineTransform(CGAffineTransform(rotationAngle: placement.angle)) }
+        let filter: CALayerContentsFilter = placement.pixelated ? .nearest : .linear
+        if layer.magnificationFilter != filter {
+            layer.magnificationFilter = filter
+            layer.minificationFilter = filter
+        }
+        if layer.contentsGravity != .resize {
+            layer.contentsGravity = .resize
+        }
+        if (layer.contents as AnyObject) !== (placement.image as AnyObject) {
+            layer.contents = placement.image
+        }
+        if placement.angle == 0 {
+            if !layer.affineTransform().isIdentity {
+                layer.setAffineTransform(.identity)
+            }
+            if layer.frame != placement.rect {
+                layer.frame = placement.rect
+            }
+        } else {
+            let desiredTransform = CGAffineTransform(rotationAngle: placement.angle)
+            if layer.affineTransform() != desiredTransform || layer.frame != placement.rect {
+                layer.setAffineTransform(.identity)
+                layer.frame = placement.rect
+                layer.setAffineTransform(desiredTransform)
+            }
+        }
     }
 }

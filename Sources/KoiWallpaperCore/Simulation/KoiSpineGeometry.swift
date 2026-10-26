@@ -205,9 +205,20 @@ public enum KoiSpineGeometry {
         var worstPt1 = c1.start
         var worstPt2 = c2.start
 
-        // 1. Test Disk endpoints and intermediate samples of C1 against C2
-        let samples1 = [0.0, 0.25, 0.50, 0.75, 1.0]
-        for s in samples1 {
+        // Fast-path bounding check for the capsule pair
+        let mid1 = (c1.start + c1.end) * 0.5
+        let halfLen1 = (c1.start - c1.end).length * 0.5 + c1.maxRadius + safetyMargin
+        let mid2 = (c2.start + c2.end) * 0.5
+        let halfLen2 = (c2.start - c2.end).length * 0.5 + c2.maxRadius
+        let diff = mid1 - mid2
+        let maxReach = halfLen1 + halfLen2
+        if diff.lengthSquared > maxReach * maxReach {
+            return (-Double.infinity, worstNormal, worstPt1, worstPt2)
+        }
+
+        // 1. Test Disk endpoints and intermediate samples of C1 against C2 without heap allocations
+        for step in 0...4 {
+            let s = Double(step) * 0.25
             let pt1 = c1.point(at: s)
             let rad1 = c1.radius(at: s)
             let (distToC2, pt2OnC2, normFromC2) = pointToCapsuleDistance(point: pt1, capsule: c2)
@@ -220,9 +231,9 @@ public enum KoiSpineGeometry {
             }
         }
 
-        // 2. Test Disk endpoints and intermediate samples of C2 against C1
-        let samples2 = [0.0, 0.25, 0.50, 0.75, 1.0]
-        for t in samples2 {
+        // 2. Test Disk endpoints and intermediate samples of C2 against C1 without heap allocations
+        for step in 0...4 {
+            let t = Double(step) * 0.25
             let pt2 = c2.point(at: t)
             let rad2 = c2.radius(at: t)
             let (distToC1, pt1OnC1, normFromC1) = pointToCapsuleDistance(point: pt2, capsule: c1)
@@ -253,20 +264,18 @@ public enum KoiSpineGeometry {
         return (worstOverlap, worstNormal, worstPt1, worstPt2)
     }
 
-    /// Evaluates multi-capsule collision between two koi fish.
-    /// Tests all 5x5 capsule pairs using the exact point-to-capsule surface distance algorithm.
+    /// Evaluates multi-capsule collision between pre-computed capsules.
     public static func testBodyCollision(
-        fish1: KoiFish,
-        fish2: KoiFish,
+        capsules1: [KoiBodyCapsule],
+        capsules2: [KoiBodyCapsule],
+        fish1Position: PondVector,
+        fish2Position: PondVector,
         safetyMargin: Double = 0.0
     ) -> FishBodyCollision {
-        let capsules1 = fish1.bodyCapsules
-        let capsules2 = fish2.bodyCapsules
-
         var worstOverlap = -Double.infinity
         var worstNormal = PondVector(x: 1.0, y: 0.0)
-        var worstPt1 = fish1.position
-        var worstPt2 = fish2.position
+        var worstPt1 = fish1Position
+        var worstPt2 = fish2Position
 
         for cap1 in capsules1 {
             for cap2 in capsules2 {
@@ -289,6 +298,22 @@ public enum KoiSpineGeometry {
             normal: worstNormal,
             contactPoint1: worstPt1,
             contactPoint2: worstPt2
+        )
+    }
+
+    /// Evaluates multi-capsule collision between two koi fish.
+    /// Tests all 5x5 capsule pairs using the exact point-to-capsule surface distance algorithm.
+    public static func testBodyCollision(
+        fish1: KoiFish,
+        fish2: KoiFish,
+        safetyMargin: Double = 0.0
+    ) -> FishBodyCollision {
+        testBodyCollision(
+            capsules1: fish1.bodyCapsules,
+            capsules2: fish2.bodyCapsules,
+            fish1Position: fish1.position,
+            fish2Position: fish2.position,
+            safetyMargin: safetyMargin
         )
     }
 

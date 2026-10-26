@@ -10,6 +10,8 @@ public enum DecorativeFishArtwork {
     private struct FishPalette {
         let body: CGColor
         let belly: CGColor
+        let bellyHighlight: CGColor
+        let bellySheen: CGColor
         let pattern: CGColor
         let fin: CGColor
         let finAccent: CGColor
@@ -161,7 +163,21 @@ public enum DecorativeFishArtwork {
 
     // MARK: - School Color Palettes
 
+    private static let cachedPalettes: [[FishPalette]] = {
+        (0..<schoolCount).map { group in
+            (0..<fishPerSchool).map { index in
+                buildPalette(for: group, index: index)
+            }
+        }
+    }()
+
     private static func palette(for group: Int, index: Int) -> FishPalette {
+        let g = max(0, min(group, cachedPalettes.count - 1))
+        let list = cachedPalettes[g]
+        return list[index % list.count]
+    }
+
+    private static func buildPalette(for group: Int, index: Int) -> FishPalette {
         switch group {
         case 0:
             // Golden Amber / Medaka School: warm sunlight tones with scarlet & champagne accents
@@ -186,9 +202,12 @@ public enum DecorativeFishArtwork {
                 CGColor(red: 0.90, green: 0.38, blue: 0.16, alpha: 0.92), // 6: flame caudal dip
                 CGColor(red: 1.00, green: 0.96, blue: 0.82, alpha: 0.90)  // 7: champagne pearl
             ]
+            let belly = CGColor(red: 0.99, green: 0.94, blue: 0.82, alpha: 0.90)
             return FishPalette(
                 body: CGColor(red: tone.0, green: tone.1, blue: tone.2, alpha: 0.94),
-                belly: CGColor(red: 0.99, green: 0.94, blue: 0.82, alpha: 0.90),
+                belly: belly,
+                bellyHighlight: belly.copy(alpha: 0.32)!,
+                bellySheen: belly.copy(alpha: 0.65)!,
                 pattern: patternTones[index % patternTones.count],
                 fin: CGColor(red: tone.0, green: tone.1, blue: tone.2, alpha: 0.58),
                 finAccent: CGColor(red: 1.00, green: 0.92, blue: 0.65, alpha: 0.85)
@@ -217,9 +236,12 @@ public enum DecorativeFishArtwork {
                 CGColor(red: 0.78, green: 0.18, blue: 0.22, alpha: 0.92), // 6: ruby caudal dip
                 CGColor(red: 1.00, green: 0.94, blue: 0.90, alpha: 0.90)  // 7: rose-pearl sheen
             ]
+            let belly = CGColor(red: 0.99, green: 0.92, blue: 0.86, alpha: 0.90)
             return FishPalette(
                 body: CGColor(red: tone.0, green: tone.1, blue: tone.2, alpha: 0.92),
-                belly: CGColor(red: 0.99, green: 0.92, blue: 0.86, alpha: 0.90),
+                belly: belly,
+                bellyHighlight: belly.copy(alpha: 0.32)!,
+                bellySheen: belly.copy(alpha: 0.65)!,
                 pattern: patternTones[index % patternTones.count],
                 fin: CGColor(red: tone.0, green: tone.1 * 1.1, blue: tone.2 * 1.1, alpha: 0.55),
                 finAccent: CGColor(red: 1.00, green: 0.88, blue: 0.82, alpha: 0.85)
@@ -248,9 +270,12 @@ public enum DecorativeFishArtwork {
                 CGColor(red: 0.18, green: 0.58, blue: 0.70, alpha: 0.92), // 6: deep aqua dip
                 CGColor(red: 0.88, green: 0.98, blue: 0.98, alpha: 0.90)  // 7: opal pearl sheen
             ]
+            let belly = CGColor(red: 0.88, green: 0.96, blue: 0.96, alpha: 0.88)
             return FishPalette(
                 body: CGColor(red: tone.0, green: tone.1, blue: tone.2, alpha: 0.90),
-                belly: CGColor(red: 0.88, green: 0.96, blue: 0.96, alpha: 0.88),
+                belly: belly,
+                bellyHighlight: belly.copy(alpha: 0.32)!,
+                bellySheen: belly.copy(alpha: 0.65)!,
                 pattern: patternTones[index % patternTones.count],
                 fin: CGColor(red: tone.0, green: tone.1, blue: tone.2, alpha: 0.52),
                 finAccent: CGColor(red: 0.82, green: 0.97, blue: 1.00, alpha: 0.85)
@@ -382,7 +407,7 @@ public enum DecorativeFishArtwork {
         context.fill(CGRect(x: -length * 0.40, y: -halfWidth * 1.10, width: length * 0.95, height: halfWidth * 0.75))
 
         // 2. Subtle dorsal midline highlight catching overhead pond light
-        context.setStrokeColor(palette.belly.copy(alpha: 0.32)!)
+        context.setStrokeColor(palette.bellyHighlight)
         context.setLineWidth(max(0.6, length * 0.04))
         context.move(to: CGPoint(x: length * 0.32, y: halfWidth * 0.10))
         context.addLine(to: CGPoint(x: -length * 0.20, y: halfWidth * 0.05))
@@ -482,7 +507,7 @@ public enum DecorativeFishArtwork {
 
         default:
             // Pearl Minimalist with Soft Dorsal Sheen
-            context.setFillColor(palette.belly.copy(alpha: 0.65)!)
+            context.setFillColor(palette.bellySheen)
             context.fillEllipse(in: CGRect(
                 x: -length * 0.10, y: -halfWidth * 0.55,
                 width: length * 0.34, height: halfWidth * 1.10

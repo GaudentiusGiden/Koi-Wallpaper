@@ -29,6 +29,11 @@ public final class PondSimulation: @unchecked Sendable {
     private var rainTimer: Double = 0.0
     public let maxRainRipples: Int = 16
 
+    // Cached habitual feeding evaluation (interval 10s instead of 60 Hz)
+    private var timeSinceHabitCheck: Double = 10.0
+    private var cachedHabitualTime: Bool = false
+    private var cachedHabitTarget: PondVector? = nil
+
     // Insect dynamics & periodic koi curiosity targeting
     private var insectTargetTimer: Double = 0.0
     private var nextInsectTargetInterval: Double = 14.0
@@ -616,6 +621,10 @@ public final class PondSimulation: @unchecked Sendable {
     public func updateThemeTransition(from fromTheme: PondTheme, to toTheme: PondTheme, progress: Double) {
         let p = max(0.0, min(1.0, progress))
 
+        if fromTheme == toTheme && currentTheme == toTheme && p >= 1.0 {
+            return
+        }
+
         if fromTheme.isNight == toTheme.isNight {
             currentTheme = toTheme
             let targetType: PondInsectType = toTheme.isNight ? .firefly : .dragonfly
@@ -887,9 +896,16 @@ public final class PondSimulation: @unchecked Sendable {
             }
         }
 
-        // Habitual feeding location bias: if no food is present and currently a confident feeding time
-        if pellets.isEmpty && feedingRoutineManager.isHabitualTime() {
-            if let habitTarget = feedingRoutineManager.habitualWorldTarget(for: bounds) {
+        // Habitual feeding location bias: periodically re-evaluated every 10 seconds of simulation time
+        timeSinceHabitCheck += dt
+        if timeSinceHabitCheck >= 10.0 {
+            timeSinceHabitCheck = 0.0
+            cachedHabitualTime = feedingRoutineManager.isHabitualTime()
+            cachedHabitTarget = cachedHabitualTime ? feedingRoutineManager.habitualWorldTarget(for: bounds) : nil
+        }
+
+        if pellets.isEmpty && cachedHabitualTime {
+            if let habitTarget = cachedHabitTarget {
                 for i in 0..<fish.count {
                     if fish[i].state == .wandering && fish[i].currentTarget == nil && fish[i].traits.feedingEagerness > 0.65 {
                         let chance = Double.random(in: 0...1, using: &rng)
@@ -1015,6 +1031,12 @@ public final class PondSimulation: @unchecked Sendable {
 
         // Perform 2 relaxation passes per sub-step for multi-body stability
         for _ in 0..<2 {
+            var allCapsules: [[KoiBodyCapsule]] = []
+            allCapsules.reserveCapacity(fish.count)
+            for f in fish {
+                allCapsules.append(f.bodyCapsules)
+            }
+
             for i in 0..<fish.count {
                 for j in (i + 1)..<fish.count {
                     // 1. Broadphase: check if centers are within combined physical radii
@@ -1024,10 +1046,12 @@ public final class PondSimulation: @unchecked Sendable {
                         continue
                     }
 
-                    // 2. Narrowphase: test articulated spine capsules
+                    // 2. Narrowphase: test articulated spine capsules using precomputed capsules
                     let collision = KoiSpineGeometry.testBodyCollision(
-                        fish1: fish[i],
-                        fish2: fish[j],
+                        capsules1: allCapsules[i],
+                        capsules2: allCapsules[j],
+                        fish1Position: fish[i].position,
+                        fish2Position: fish[j].position,
                         safetyMargin: safetyMargin
                     )
 

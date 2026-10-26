@@ -92,6 +92,7 @@ public final class TimeOfDayController {
         let timer = Timer(timeInterval: 60.0, repeats: true) { [weak self] _ in
             self?.evaluateAndNotify()
         }
+        timer.tolerance = 5.0
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
 

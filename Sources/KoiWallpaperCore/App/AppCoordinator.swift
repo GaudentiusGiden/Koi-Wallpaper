@@ -91,6 +91,13 @@ public final class AppCoordinator: NSObject,
         screenManager.applyMood(settingsManager.settings.pondMood)
         screenManager.applyRain(settingsManager.settings.isRainActive)
         screenManager.applyGlobalPause(lifecyclePolicy.isPaused)
+        screenManager.applyBatteryEcoMode(lifecyclePolicy.powerMonitor.isRunningOnBattery)
+
+        lifecyclePolicy.powerMonitor.onPowerSourceChanged = { [weak self] in
+            guard let self = self else { return }
+            self.lifecyclePolicy.evaluatePowerState()
+            self.screenManager.applyBatteryEcoMode(self.lifecyclePolicy.powerMonitor.isRunningOnBattery)
+        }
 
         // Bind all active host windows to lifecycle policy for occlusion tracking
         for controller in screenManager.controllers {

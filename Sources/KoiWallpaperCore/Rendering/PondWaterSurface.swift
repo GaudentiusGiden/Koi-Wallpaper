@@ -6,10 +6,28 @@ import Foundation
 final class PondWaterSurface {
     private var keySize: CGSize = .zero
     private var keyScale: CGFloat = 0
-    private var keyTheme: PondTheme?
+    private(set) var keyTheme: PondTheme?
     private(set) var bed: CGImage?
     private(set) var networks: [CGImage] = []
     private var overscan: CGFloat = 48
+
+    func clear() {
+        bed = nil
+        networks.removeAll(keepingCapacity: false)
+        keyTheme = nil
+        keySize = .zero
+        keyScale = 0
+    }
+
+    func adopt(from other: PondWaterSurface) {
+        self.keySize = other.keySize
+        self.keyScale = other.keyScale
+        self.keyTheme = other.keyTheme
+        self.bed = other.bed
+        self.networks = other.networks
+        self.overscan = other.overscan
+        other.clear()
+    }
 
     func copyForSnapshot() -> PondWaterSurface {
         let copy = PondWaterSurface()

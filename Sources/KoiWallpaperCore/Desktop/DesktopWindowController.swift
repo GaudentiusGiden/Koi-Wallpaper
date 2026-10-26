@@ -13,9 +13,13 @@ public final class DesktopWindowController {
 
     public private(set) var isOccluded: Bool = false
     public private(set) var isGloballyPaused: Bool = false
+    public var isSmartOcclusionEnabled: Bool = true
     public var onOcclusionChanged: ((DesktopWindowController) -> Void)?
 
     private var occlusionObserver: NSObjectProtocol?
+    private var workspaceObserver: NSObjectProtocol?
+    private var screenParamObserver: NSObjectProtocol?
+    private var occlusionCheckTimer: Timer?
 
     /// Checks whether this controller currently has an active WindowServer occlusion observer registered.
     public var hasActiveOcclusionObserver: Bool {
@@ -109,20 +113,89 @@ public final class DesktopWindowController {
         ) { [weak self] _ in
             self?.evaluateOcclusion()
         }
+
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.evaluateOcclusion()
+        }
+
+        screenParamObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.evaluateOcclusion()
+        }
+
+        // Lightweight periodic check (every 2.5s) to detect resized windows without app switch
+        let timer = Timer(timeInterval: 2.5, repeats: true) { [weak self] _ in
+            guard let self = self, self.window.isVisible, !self.isGloballyPaused else { return }
+            self.evaluateOcclusion()
+        }
+        timer.tolerance = 1.0
+        RunLoop.main.add(timer, forMode: .common)
+        self.occlusionCheckTimer = timer
     }
 
     public func evaluateOcclusion() {
         let wasOccluded = isOccluded
         if !window.isVisible {
             isOccluded = true
+        } else if !window.occlusionState.contains(.visible) {
+            isOccluded = true
+        } else if isSmartOcclusionEnabled && checkSmartWorkspaceOcclusion() {
+            isOccluded = true
         } else {
-            isOccluded = !window.occlusionState.contains(.visible)
+            isOccluded = false
         }
         updateEffectivePause()
         if wasOccluded != isOccluded {
             logger.info("Window occlusion changed for display \(self.displayID ?? 0): isOccluded=\(self.isOccluded)")
             onOcclusionChanged?(self)
         }
+    }
+
+    private func checkSmartWorkspaceOcclusion() -> Bool {
+        if String(describing: type(of: screen)).contains("Mock") {
+            return false
+        }
+        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return false
+        }
+        let visFrame = screen.visibleFrame
+        let visArea = visFrame.width * visFrame.height
+        guard visArea > 1000 else { return false }
+
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
+        let quartzVisFrame = CGRect(
+            x: visFrame.origin.x,
+            y: primaryHeight - visFrame.maxY,
+            width: visFrame.width,
+            height: visFrame.height
+        )
+
+        let ourPID = ProcessInfo.processInfo.processIdentifier
+
+        for info in windowList {
+            guard let layer = info[kCGWindowLayer as String] as? Int, layer == 0 else { continue }
+            guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t, ownerPID != ourPID else { continue }
+            if let alpha = info[kCGWindowAlpha as String] as? Double, alpha < 0.85 { continue }
+
+            guard let boundsDict = info[kCGWindowBounds as String] as? [String: Any],
+                  let windowRect = CGRect(dictionaryRepresentation: boundsDict as CFDictionary) else { continue }
+
+            let intersection = windowRect.intersection(quartzVisFrame)
+            if !intersection.isNull && !intersection.isEmpty {
+                let interArea = intersection.width * intersection.height
+                if interArea >= (0.88 * visArea) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     public func setGloballyPaused(_ paused: Bool) {
@@ -157,6 +230,16 @@ public final class DesktopWindowController {
             NotificationCenter.default.removeObserver(obs)
             occlusionObserver = nil
         }
+        if let obs = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(obs)
+            workspaceObserver = nil
+        }
+        if let obs = screenParamObserver {
+            NotificationCenter.default.removeObserver(obs)
+            screenParamObserver = nil
+        }
+        occlusionCheckTimer?.invalidate()
+        occlusionCheckTimer = nil
         wallpaperView.stopAnimationTimer()
         window.orderOut(nil)
         window.contentView = nil
