@@ -18,10 +18,15 @@ manual tidak memasukkan angsa otomatis. Preview interaktif yang menampilkan
 perilaku ini dijalankan dengan `swift run KoiWallpaperPreview --preview-swan`.
 Implementasi utamanya ada di [`PondSimulation`](../../Sources/KoiWallpaperCore/Simulation/PondSimulation.swift), [`PondVisitor`](../../Sources/KoiWallpaperCore/Simulation/PondVisitor.swift), [`PondArtwork`](../../Sources/KoiWallpaperCore/Rendering/PondArtwork.swift), [`ScreenManager`](../../Sources/KoiWallpaperCore/Desktop/ScreenManager.swift), dan [`KoiWallpaperPreview`](../../Sources/KoiWallpaperPreview/main.swift).
 
-> Catatan validasi: `swift build` dan `git diff --check` lulus untuk follow-up
-> ini. Suite 23/23 dan 53/53 pada status di atas adalah hasil verifikasi M5
-> sebelumnya; suite tersebut belum dijalankan ulang untuk siklus hidup angsa
-> otomatis.
+> Validasi terbaru menemukan dan memperbaiki kasus angsa yang keluar sebelum
+> durasi tinggal minimal: gaya penghindaran tepi sebelumnya tidak cukup kuat
+> untuk menahan arah jelajah cepat. Pada fase jelajah, visitor kini memantul di
+> batas aman; setelah timer tinggal tercapai, lintasan keluar tetap berjalan.
+> T12.5 menguji kemunculan awal, perubahan haluan, kecepatan 34–44 pt/s,
+> keberadaan minimal 18 detik, keluar penuh, tidak ada angsa ganda, dan jeda
+> respawn 5–9 detik. Hasilnya PASS pada seed 8128 (umur saat dihapus 40,4 detik,
+> jeda respawn 6,75 detik). `KoiWallpaperSimTest` kini 41/41 dan
+> `KoiWallpaperVerify` 53/53 lulus setelah perbaikan.
 
 ---
 

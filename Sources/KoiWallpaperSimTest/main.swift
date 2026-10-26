@@ -817,6 +817,72 @@ recordSimTest(
     details: "ballNudged=\(ballNudged), rippleSpawned=\(rippleSpawned)"
 )
 
+// T12.5 Automatic Swan Spawn, Departure & Recurring Arrival Lifecycle
+let automaticSwanBounds = PondBounds(width: 1000.0, height: 700.0)
+let automaticSwanSim = PondSimulation(bounds: automaticSwanBounds, seed: 8128)
+automaticSwanSim.setAutomaticSwanEnabled(true)
+let firstAutomaticSwan = automaticSwanSim.visitors.first
+let initialAutomaticSwanValid = firstAutomaticSwan.map {
+    $0.type == .swan && $0.isAutonomous && automaticSwanBounds.contains($0.position)
+} ?? false
+let firstAutomaticSwanID = firstAutomaticSwan?.id
+let firstSwanHeading = firstAutomaticSwan?.heading ?? 0.0
+var automaticSwanHeadingChanged = false
+var automaticSwanSpeedInRange = true
+var automaticSwanExitedBounds = false
+var automaticSwanExitedTooEarly = false
+var automaticSwanDuplicateSeen = false
+var firstAutomaticSwanLastAge = 0.0
+var firstAutomaticSwanWorldTimeAtLastObservation = 0.0
+var automaticSwanDepartureTime: Double?
+var automaticSwanRearrivalTime: Double?
+let automaticSwanMaxDuration = 100.0
+let automaticSwanFrameCount = Int(automaticSwanMaxDuration * 60.0)
+
+for frame in 0..<automaticSwanFrameCount {
+    automaticSwanSim.advance(deltaTime: 1.0 / 60.0)
+    let elapsed = Double(frame + 1) / 60.0
+    let swans = automaticSwanSim.visitors.filter { $0.type == .swan }
+    if swans.count > 1 { automaticSwanDuplicateSeen = true }
+
+    if let swan = swans.first {
+        if automaticSwanDepartureTime != nil && automaticSwanRearrivalTime == nil {
+            automaticSwanRearrivalTime = elapsed
+        }
+        if automaticSwanDepartureTime == nil && swan.id == firstAutomaticSwanID {
+            firstAutomaticSwanLastAge = swan.age
+            firstAutomaticSwanWorldTimeAtLastObservation = automaticSwanSim.elapsedTime
+            var headingDelta = abs(swan.heading - firstSwanHeading)
+            while headingDelta > .pi { headingDelta = 2.0 * .pi - headingDelta }
+            if headingDelta > 0.01 { automaticSwanHeadingChanged = true }
+            if !(34.0...44.0).contains(swan.speed) { automaticSwanSpeedInRange = false }
+            if swan.position.x < 0.0 || swan.position.x > automaticSwanBounds.width ||
+                swan.position.y < 0.0 || swan.position.y > automaticSwanBounds.height {
+                automaticSwanExitedBounds = true
+                if swan.age < 18.0 { automaticSwanExitedTooEarly = true }
+            }
+        }
+    } else if automaticSwanDepartureTime == nil {
+        automaticSwanDepartureTime = elapsed
+    }
+}
+
+let automaticSwanRearrivalDelay: Double? = {
+    guard let departure = automaticSwanDepartureTime, let rearival = automaticSwanRearrivalTime else { return nil }
+    return rearival - departure
+}()
+let automaticSwanLifecyclePassed = initialAutomaticSwanValid &&
+    automaticSwanHeadingChanged && automaticSwanSpeedInRange && automaticSwanExitedBounds &&
+    !automaticSwanExitedTooEarly && !automaticSwanDuplicateSeen && firstAutomaticSwanLastAge >= 18.0 &&
+    abs(firstAutomaticSwanLastAge - firstAutomaticSwanWorldTimeAtLastObservation) < 0.05 &&
+    automaticSwanDepartureTime != nil &&
+    automaticSwanRearrivalDelay.map { (4.9...9.1).contains($0) } == true
+recordSimTest(
+    "T12.5 Automatic Swan Spawn, Exit & Recurring Arrival Lifecycle",
+    passed: automaticSwanLifecyclePassed,
+    details: "initialAutonomousSwan=\(initialAutomaticSwanValid), smoothCourseChanged=\(automaticSwanHeadingChanged), speedIn34to44=\(automaticSwanSpeedInRange), leftPondBeforeRemoval=\(automaticSwanExitedBounds), leftBefore18s=\(automaticSwanExitedTooEarly), ageMatchesWorldTime=\(abs(firstAutomaticSwanLastAge - firstAutomaticSwanWorldTimeAtLastObservation) < 0.05), noDuplicateSwan=\(!automaticSwanDuplicateSeen), firstSwanAgeAtRemoval=\(String(format: "%.1f", firstAutomaticSwanLastAge))s, respawnDelay=\(automaticSwanRearrivalDelay.map { String(format: "%.2f", $0) + "s" } ?? "missing"), elapsedTest=\(Int(automaticSwanMaxDuration))s"
+)
+
 // -------------------------------------------------------------
 // TEST 13: Pond Insects & Koi Curiosity Reaction
 // -------------------------------------------------------------
@@ -1262,6 +1328,61 @@ recordSimTest(
     "T15.5 Decorative Fish Pause Stasis & Zero Drift Guarantee",
     passed: t15_5Passed,
     details: "centersFrozen=\(centersIdentical), positionsFrozen=\(positionsIdentical), phasesFrozen=\(phasesIdentical)"
+)
+
+// -------------------------------------------------------------
+// TEST 16: Long-Duration Multi-Seed Koi Wandering Stability
+// -------------------------------------------------------------
+print("\n--- 16. Long-Duration Multi-Seed Koi Wandering Stability ---")
+
+let longRunBounds = PondBounds(width: 1000.0, height: 700.0)
+let longRunSeedCount = 8
+let longRunSecondsPerSeed = 120
+let longRunFramesPerSeed = longRunSecondsPerSeed * 60
+var longRunOutOfBounds = false
+var longRunPenetrationCount = 0
+var longRunMinimumClearance = Double.infinity
+var longRunMinimumCenterDistance = Double.infinity
+
+for seedIndex in 1...longRunSeedCount {
+    let longRunSim = PondSimulation(bounds: longRunBounds, seed: UInt64(seedIndex) * 101)
+
+    for _ in 0..<longRunFramesPerSeed {
+        longRunSim.advance(deltaTime: 1.0 / 60.0)
+
+        for fish in longRunSim.fish where !longRunBounds.contains(fish.position, inset: 10.0) {
+            longRunOutOfBounds = true
+        }
+
+        for firstIndex in 0..<longRunSim.fish.count {
+            for secondIndex in (firstIndex + 1)..<longRunSim.fish.count {
+                let firstFish = longRunSim.fish[firstIndex]
+                let secondFish = longRunSim.fish[secondIndex]
+                let collision = KoiSpineGeometry.testBodyCollision(
+                    fish1: firstFish,
+                    fish2: secondFish,
+                    safetyMargin: 0.0
+                )
+                let clearance = -collision.maxOverlap
+                longRunMinimumClearance = min(longRunMinimumClearance, clearance)
+                longRunMinimumCenterDistance = min(
+                    longRunMinimumCenterDistance,
+                    firstFish.position.distance(to: secondFish.position)
+                )
+                if collision.hasOverlap {
+                    longRunPenetrationCount += 1
+                }
+            }
+        }
+    }
+}
+
+let longRunTotalMinutes = Double(longRunSeedCount * longRunSecondsPerSeed) / 60.0
+let longRunPassed = !longRunOutOfBounds && longRunPenetrationCount == 0
+recordSimTest(
+    "T16.1 Multi-Seed Long-Duration Wandering & Geometric Separation",
+    passed: longRunPassed,
+    details: "seeds=\(longRunSeedCount), simulatedMinutes=\(String(format: "%.0f", longRunTotalMinutes)), frames=\(longRunSeedCount * longRunFramesPerSeed), penetrationObservations=\(longRunPenetrationCount), minCapsuleClearance=\(String(format: "%.2f", longRunMinimumClearance))pt, minCenterDistance=\(String(format: "%.2f", longRunMinimumCenterDistance))pt, stayedInBounds=\(!longRunOutOfBounds)"
 )
 
 // -------------------------------------------------------------

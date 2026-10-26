@@ -153,6 +153,38 @@ public struct PondVisitor: Identifiable, Sendable {
                 let speedVariation = 0.88 + 0.12 * (0.5 + 0.5 * sin(age * 0.43 + bobbingPhase))
                 velocity = PondVector.fromAngle(heading, length: speed * speedVariation)
                 position += velocity * dt
+
+                // Keep the swan inside the pond throughout its roaming phase. The soft
+                // steering above can be too weak to turn a fast outward course before it
+                // crosses an edge, which would remove the visitor before its stay timer.
+                if departureTarget == nil {
+                    let inset = min(radius + 8.0, min(bounds.width, bounds.height) * 0.45)
+                    var reflectedAtEdge = false
+
+                    if position.x < inset {
+                        position.x = inset
+                        heading = normalizeAngle(.pi - heading)
+                        reflectedAtEdge = true
+                    } else if position.x > bounds.width - inset {
+                        position.x = bounds.width - inset
+                        heading = normalizeAngle(.pi - heading)
+                        reflectedAtEdge = true
+                    }
+
+                    if position.y < inset {
+                        position.y = inset
+                        heading = normalizeAngle(-heading)
+                        reflectedAtEdge = true
+                    } else if position.y > bounds.height - inset {
+                        position.y = bounds.height - inset
+                        heading = normalizeAngle(-heading)
+                        reflectedAtEdge = true
+                    }
+
+                    if reflectedAtEdge {
+                        velocity = PondVector.fromAngle(heading, length: velocity.length)
+                    }
+                }
                 break
             }
 

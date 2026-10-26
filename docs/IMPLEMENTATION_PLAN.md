@@ -10,7 +10,8 @@ Implementasi lanjutan setelah baseline M5 ada di commit `dc0168c`:
 - Angsa mengubah haluan secara bertahap dan kecepatannya sedikit bervariasi. Setelah 18–30 detik, angsa mengarah ke tepi terdekat dan dihapus setelah seluruh siluet keluar layar. Siklus berikutnya dimulai setelah jeda 5–9 detik.
 - Artwork angsa memakai skala `1.512` (8% di atas skala desain sebelumnya `1.4`).
 - Preview interaktif: `swift run KoiWallpaperPreview --preview-swan`. Preview gambar statis: `swift run KoiWallpaperPreview --render-swan-design build/swan-design-preview.png`.
-- Pemeriksaan untuk follow-up ini: `swift build` dan `git diff --check` lulus. Suite otomatis M5 yang dirinci di bawah adalah hasil baseline; suite tersebut belum dijalankan ulang untuk siklus hidup dan lintasan angsa otomatis.
+- Uji siklus angsa T12.5 menemukan bahwa angsa dapat hanyut keluar sebelum durasi tinggal 18–30 detik karena gaya penghindaran tepi terlalu lemah. Fase jelajah kini membatasi angsa pada tepi aman dan memantulkan haluan; fase keluar terjadwal tetap dapat melintasi tepi.
+- Pemeriksaan terbaru: `KoiWallpaperSimTest` 41/41 lulus, termasuk T12.5 untuk umur, keluar penuh, dan jeda respawn angsa serta T16.1 untuk wandering multi-seed selama total 16 menit simulasi. `KoiWallpaperVerify` 53/53 lulus setelah perbaikan.
 
 Rincian keputusan ada di [catatan pengunjung M5](decisions/2026-10-22-m5-visitors-and-fullscreen.md), sedangkan bukti dan batas validasi ada di [audit M5](M5_AUDIT_REPORT.md).
 
@@ -46,7 +47,7 @@ Selesai ketika:
 
 ### M1 — Simulasi kolam mandiri
 
-Status: **IMPLEMENTASI INTI & PENGUJIAN LULUS, VALIDASI VISUAL TEMPORAL PARSIAL** (Simulasi inti dan artwork CoreGraphics mandiri selesai, unit test in-process 17/17 assertion lulus termasuk uji regresi geometri kapsul tirus T0.1–T0.4 dan pemisahan fisik multi-langkah T3.1 deterministik dengan oracle independen, jendela preview `KoiWallpaperPreview` tervalidasi via 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis pada jarak minimum aktual; status visual live wandering diklasifikasikan parsial karena satu rekaman simulasi acak tidak membuktikan ketiadaan kerumunan sepanjang masa simulasi tanpa batas).
+Status: **IMPLEMENTASI INTI & PENGUJIAN LULUS, VALIDASI VISUAL TEMPORAL PARSIAL** (Simulasi inti dan artwork CoreGraphics mandiri selesai; suite `KoiWallpaperSimTest` terbaru lulus 41/41, termasuk T0.1–T0.4, T3.1, dan T16.1 yang memeriksa 8 seed × 120 detik simulasi pada 57.600 frame tanpa penetrasi kapsul koi dan tanpa keluar batas. Preview `KoiWallpaperPreview` juga memiliki bukti 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis. Validasi visual jangka panjang tetap parsial: pengujian finite dan metrik geometri tidak membuktikan ketiadaan kesan berkerumun pada seluruh durasi tanpa batas atau menggantikan penilaian mata manusia).
 
 Tujuan: membuat perilaku inti yang dapat dilihat terlebih dahulu dalam jendela preview biasa.
 
@@ -59,11 +60,11 @@ Pekerjaan:
 - [x] Tambahkan animasi renang sinus/ekor/sirip, target sementara klik air sirkumferensial, pemberian pelet makanan via Option+klik, dan konsumsi pelet atomik sekali makan.
 - [x] Pisahkan dunia simulasi, penanganan input, update fisika timestep tetap (catch-up clamping), dan visual renderer; batasi kuota pelet (48) dan riak (64).
 - [x] Buat preview GUI mandiri (`KoiWallpaperPreview`) dengan jendela biasa, HUD diagnostik, mode validasi otomatis (--validate-visual), dan mode validasi benturan dinamis (--validate-collision) dengan deteksi titik belok jarak minimum.
-- [x] Buat suite pengujian unit simulasi in-process (`KoiWallpaperSimTest`) dengan 17 assertion lulus 100% (termasuk 4 regresi geometri kapsul tirus dan oracle independen disk chain).
+- [x] Buat suite simulasi in-process (`KoiWallpaperSimTest`); status terbaru 41/41 lulus, termasuk 4 regresi geometri kapsul tirus, oracle independen disk chain, dan T16.1 multi-seed 16 menit simulasi.
 
 Selesai ketika:
 
-- [~] Tampilan dan kontrol interaksi di jendela preview GUI diverifikasi secara visual melalui event GUI sintetis `NSEvent` via `window.sendEvent` (inspeksi 14 tangkapan layar alur kerja Retina aktual sekuensial 2048×1336 / 1440×976 dan 3 tangkapan layar benturan berhadapan dinamis `m1_collision_*.png`; 8 varietas koi, sirip hidrodinamis, bayangan, teratai, riak, pelet, atraksi klik biasa terpisah sirkumferensial, Option+klik makanan, konsumsi atomik dengan HUD akurat, pemisahan teramati, penyebaran keluar sekuensial, pembekuan pause 0.8s, resume bebas lonjakan, penyesuaian batas proporsional tanpa clipping pada resize jendela, dan reset elips acak terbukti bekerja). Ditandai **Parsial** karena inspeksi frame tunggal/sekuensial membuktikan lintasan yang diuji, namun bukan pembuktian ketiadaan kerumunan sepanjang masa simulasi tanpa batas (*infinite wandering*).
+- [~] Tampilan dan kontrol interaksi diverifikasi melalui event GUI sintetis `NSEvent`, 14 tangkapan layar alur kerja Retina, dan 3 tangkapan layar benturan dinamis. T16.1 menambah uji finite 16 menit simulasi (8 seed × 120 detik, 57.600 frame): tidak ada penetrasi kapsul, clearance minimum 0,50 pt, dan semua koi tetap dalam batas. Status masih **Parsial** karena sampel ini tidak membuktikan ketiadaan kesan berkerumun sepanjang masa simulasi tanpa batas (*infinite wandering*) dan bukan pengganti penilaian visual manusia.
 - [x] Pemisahan fisik dan ketiadaan penetrasi geometri tubuh antarikan terbukti secara deterministik pada model 5 kapsul tulang belakang berartikulasi dan diverifikasi silang dengan oracle independen (terverifikasi via `KoiWallpaperSimTest` T3.1 pada 5 skenario benturan: head-on clearance 35.5pt, crossing 90° clearance 11.8pt, click convergence 3 koi clearance 33.3pt, food convergence 3 koi clearance 0.5pt, near-wall clearance 46.5pt dan stayedInBounds=true; seluruhnya overlap $\le 0.0$ pt).
 - [x] Delapan koi berenang dan berbelok secara halus tanpa keluar dari kolam (terverifikasi via `KoiWallpaperSimTest` T1.1–T1.3, T2.1, T2.2).
 - [x] Klik mengundang ikan dan Option + klik menaruh makanan pada lokasi yang sesuai (terverifikasi via `KoiWallpaperSimTest` T4.1, T5.1).
@@ -228,7 +229,7 @@ Validasi Desktop Nyata macOS (`scripts/test_live_fullscreen.swift` pada layar Re
 Pekerjaan:
 
 - [x] Tambahkan bola atau angsa dengan perilaku sederhana yang memengaruhi target ikan (`PondVisitor` swan glides & boundary avoidance; ball drifts & bounces; koi escort & nudge impulse).
-- [x] Angsa wallpaper muncul otomatis di dalam kolam, berkelok dengan perubahan haluan dan kecepatan yang halus, lalu keluar melalui tepi; menu spawn angsa diganti keterangan status. Build lulus pada follow-up 24 Oktober 2026; suite gerak otomatis belum dijalankan.
+- [x] Angsa wallpaper muncul otomatis di dalam kolam, berkelok dengan perubahan haluan dan kecepatan yang halus, lalu keluar melalui tepi; menu spawn angsa diganti keterangan status. T12.5 menguji spawn, kecepatan 34–44 pt/s, umur minimal 18 detik, keluar penuh, ketiadaan duplikasi, dan respawn 5–9 detik.
 - [x] Tambahkan mode kolam fullscreen manual dan jalur keluar yang jelas (`ManualFullscreenController`, `FullscreenPondWindow` di level floating, penanganan Escape keycode 53, `cancelOperation`, dan menu bar; verifikasi otomatis via pemanggilan langsung `cancelOperation(nil)` dan validasi live desktop via `scripts/test_live_fullscreen.swift`).
 - [x] Tentukan kebutuhan idle otomatis secara terpisah dari fullscreen manual (`IdleBehaviorPolicy`, independen dari fullscreen manual dan dinonaktifkan bawaan).
 - [x] Dokumentasikan keputusan arsitektur di [decisions/2026-10-22-m5-visitors-and-fullscreen.md](decisions/2026-10-22-m5-visitors-and-fullscreen.md).
