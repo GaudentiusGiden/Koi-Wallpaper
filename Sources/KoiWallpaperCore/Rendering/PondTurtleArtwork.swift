@@ -28,27 +28,27 @@ public enum PondTurtleArtwork {
     }
 
     public static let nagomiPalette = TurtlePalette(
-        shellDark: CGColor(red: 0.10, green: 0.22, blue: 0.12, alpha: 1.0),     // Deep sumi jade rim
-        shellMid: CGColor(red: 0.22, green: 0.40, blue: 0.20, alpha: 1.0),      // Forest moss jade
-        shellLight: CGColor(red: 0.38, green: 0.58, blue: 0.28, alpha: 1.0),    // Warm olive highlight
-        scuteLine: CGColor(red: 0.06, green: 0.14, blue: 0.08, alpha: 0.90),    // Dark scute grooves
-        skinDark: CGColor(red: 0.14, green: 0.24, blue: 0.12, alpha: 1.0),     // Skin contour
-        skinBase: CGColor(red: 0.32, green: 0.48, blue: 0.24, alpha: 1.0),     // Mossy green skin
-        skinHighlight: CGColor(red: 0.48, green: 0.68, blue: 0.36, alpha: 1.0),// Snout/flipper highlight
+        shellDark: CGColor(red: 0.14, green: 0.30, blue: 0.16, alpha: 1.0),     // Defined jade rim
+        shellMid: CGColor(red: 0.32, green: 0.58, blue: 0.28, alpha: 1.0),      // Radiant forest moss jade (#529447)
+        shellLight: CGColor(red: 0.52, green: 0.80, blue: 0.40, alpha: 1.0),    // Bright lime-olive highlight (#85CC66)
+        scuteLine: CGColor(red: 0.09, green: 0.20, blue: 0.10, alpha: 0.95),    // Crisp contrasting scute grooves
+        skinDark: CGColor(red: 0.18, green: 0.34, blue: 0.14, alpha: 1.0),     // Clear contour
+        skinBase: CGColor(red: 0.42, green: 0.68, blue: 0.28, alpha: 1.0),     // Fresh vibrant spring moss green (#6BAD47)
+        skinHighlight: CGColor(red: 0.64, green: 0.88, blue: 0.46, alpha: 1.0),// Sunlit snout & flipper highlight (#A3E075)
         eyeDark: CGColor(red: 0.04, green: 0.06, blue: 0.04, alpha: 1.0),      // Glossy black eye
-        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.95)   // Catchlight glint
+        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.98)   // Catchlight glint
     )
 
     public static let ishigamePalette = TurtlePalette(
-        shellDark: CGColor(red: 0.20, green: 0.15, blue: 0.08, alpha: 1.0),     // Dark bronze rim
-        shellMid: CGColor(red: 0.42, green: 0.32, blue: 0.16, alpha: 1.0),      // Warm golden amber shell
-        shellLight: CGColor(red: 0.60, green: 0.48, blue: 0.22, alpha: 1.0),    // Amber ridge highlight
-        scuteLine: CGColor(red: 0.12, green: 0.09, blue: 0.05, alpha: 0.90),
-        skinDark: CGColor(red: 0.16, green: 0.20, blue: 0.12, alpha: 1.0),
-        skinBase: CGColor(red: 0.34, green: 0.42, blue: 0.24, alpha: 1.0),
-        skinHighlight: CGColor(red: 0.50, green: 0.60, blue: 0.34, alpha: 1.0),
+        shellDark: CGColor(red: 0.26, green: 0.18, blue: 0.10, alpha: 1.0),     // Dark bronze rim
+        shellMid: CGColor(red: 0.58, green: 0.44, blue: 0.20, alpha: 1.0),      // Radiant warm golden amber (#947033)
+        shellLight: CGColor(red: 0.78, green: 0.65, blue: 0.30, alpha: 1.0),    // Bright amber ridge (#C7A64D)
+        scuteLine: CGColor(red: 0.16, green: 0.11, blue: 0.06, alpha: 0.95),
+        skinDark: CGColor(red: 0.20, green: 0.26, blue: 0.14, alpha: 1.0),
+        skinBase: CGColor(red: 0.45, green: 0.56, blue: 0.28, alpha: 1.0),
+        skinHighlight: CGColor(red: 0.66, green: 0.78, blue: 0.42, alpha: 1.0),
         eyeDark: CGColor(red: 0.04, green: 0.05, blue: 0.04, alpha: 1.0),
-        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.95)
+        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.98)
     )
 
     public static func palette(for variant: PaletteVariant) -> TurtlePalette {
@@ -69,7 +69,7 @@ public enum PondTurtleArtwork {
         guard turtle.isVisible else { return }
 
         context.saveGState()
-        let offset = PondLighting.shadowOffset(distance: 14.0)
+        let offset = PondLighting.shadowOffset(distance: 16.0)
         context.translateBy(x: turtle.position.x + offset.x, y: turtle.position.y + offset.y)
         context.rotate(by: CGFloat(turtle.heading))
 
@@ -121,15 +121,15 @@ public enum PondTurtleArtwork {
 
         // 1. Tiny Cute Tail
         let tailPath = CGMutablePath()
-        tailPath.move(to: CGPoint(x: -length * 0.42, y: -length * 0.04))
-        tailPath.addLine(to: CGPoint(x: -length * 0.62 + CGFloat(strokeCycle * 2.0), y: 0.0))
-        tailPath.addLine(to: CGPoint(x: -length * 0.42, y: length * 0.04))
+        tailPath.move(to: CGPoint(x: -length * 0.42, y: -length * 0.045))
+        tailPath.addLine(to: CGPoint(x: -length * 0.64 + CGFloat(strokeCycle * 2.5), y: 0.0))
+        tailPath.addLine(to: CGPoint(x: -length * 0.42, y: length * 0.045))
         tailPath.closeSubpath()
         context.setFillColor(pal.skinBase)
         context.addPath(tailPath)
         context.fillPath()
         context.setStrokeColor(pal.skinDark)
-        context.setLineWidth(1.2)
+        context.setLineWidth(1.4)
         context.addPath(tailPath)
         context.strokePath()
 
@@ -152,7 +152,7 @@ public enum PondTurtleArtwork {
             context.fillPath()
 
             context.setStrokeColor(pal.skinDark)
-            context.setLineWidth(1.0)
+            context.setLineWidth(1.2)
             context.addPath(footPath)
             context.strokePath()
             context.restoreGState()
@@ -185,14 +185,14 @@ public enum PondTurtleArtwork {
 
             // Leading edge highlight
             context.setStrokeColor(pal.skinHighlight)
-            context.setLineWidth(1.2)
+            context.setLineWidth(1.5)
             context.move(to: .zero)
             context.addQuadCurve(to: CGPoint(x: pLen * 0.7, y: CGFloat(side) * pWid * 0.8),
                                  control: CGPoint(x: pLen * 0.3, y: CGFloat(side) * pWid * 1.1))
             context.strokePath()
 
             context.setStrokeColor(pal.skinDark)
-            context.setLineWidth(1.0)
+            context.setLineWidth(1.2)
             context.addPath(paddlePath)
             context.strokePath()
             context.restoreGState()
@@ -200,11 +200,11 @@ public enum PondTurtleArtwork {
 
         // 4. Head and Rounded Snout (Kepala Kura-kura)
         context.saveGState()
-        let headBob = CGFloat(strokeCycle * 1.5)
+        let headBob = CGFloat(strokeCycle * 2.0)
         let headOriginX = length * 0.38 + headBob
         let headPath = CGMutablePath()
         let headLen = length * 0.28
-        let headWid = length * 0.20
+        let headWid = length * 0.21
 
         headPath.addEllipse(in: CGRect(x: headOriginX, y: -headWid * 0.5, width: headLen, height: headWid))
         context.setFillColor(pal.skinBase)
@@ -213,24 +213,24 @@ public enum PondTurtleArtwork {
 
         // Snout highlight
         context.setFillColor(pal.skinHighlight)
-        context.fillEllipse(in: CGRect(x: headOriginX + headLen * 0.35, y: -headWid * 0.25, width: headLen * 0.45, height: headWid * 0.5))
+        context.fillEllipse(in: CGRect(x: headOriginX + headLen * 0.32, y: -headWid * 0.25, width: headLen * 0.48, height: headWid * 0.5))
 
         // Eyes (Two glossy beads with catchlight glints)
         for eyeSide in [-1.0, 1.0] {
             let eyeX = headOriginX + headLen * 0.55
-            let eyeY = CGFloat(eyeSide) * headWid * 0.35
-            let eyeR = length * 0.038
+            let eyeY = CGFloat(eyeSide) * headWid * 0.36
+            let eyeR = length * 0.040
 
             context.setFillColor(pal.eyeDark)
             context.fillEllipse(in: CGRect(x: eyeX - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
 
-            let clR = eyeR * 0.45
+            let clR = eyeR * 0.50
             context.setFillColor(pal.eyeCatchlight)
             context.fillEllipse(in: CGRect(x: eyeX - eyeR * 0.3, y: eyeY - eyeR * 0.3, width: clR * 2, height: clR * 2))
         }
 
         context.setStrokeColor(pal.skinDark)
-        context.setLineWidth(1.0)
+        context.setLineWidth(1.2)
         context.addPath(headPath)
         context.strokePath()
         context.restoreGState()
@@ -250,7 +250,7 @@ public enum PondTurtleArtwork {
         // Hexagonal Scutes (Lempeng Tempurung Khas Kura-kura)
         context.saveGState()
         context.setStrokeColor(pal.scuteLine)
-        context.setLineWidth(1.4)
+        context.setLineWidth(1.6)
 
         let cx0 = -length * 0.22
         let cx1 = 0.0
@@ -268,7 +268,7 @@ public enum PondTurtleArtwork {
             hexPath.addLine(to: CGPoint(x: cx - scuteW * 0.25, y: -scuteH * 0.5))
             hexPath.closeSubpath()
 
-            context.setFillColor(pal.shellLight.copy(alpha: 0.35)!)
+            context.setFillColor(pal.shellLight.copy(alpha: 0.40)!)
             context.addPath(hexPath)
             context.fillPath()
 
@@ -291,15 +291,15 @@ public enum PondTurtleArtwork {
         // Dorsal Ridge Highlight (Kilau garis punggung)
         context.saveGState()
         let ridgePath = CGMutablePath()
-        ridgePath.addEllipse(in: CGRect(x: -length * 0.26, y: -width * 0.06, width: length * 0.52, height: width * 0.12))
-        context.setFillColor(pal.shellLight.copy(alpha: 0.28)!)
+        ridgePath.addEllipse(in: CGRect(x: -length * 0.26, y: -width * 0.07, width: length * 0.52, height: width * 0.14))
+        context.setFillColor(pal.shellLight.copy(alpha: 0.35)!)
         context.addPath(ridgePath)
         context.fillPath()
         context.restoreGState()
 
         // Shell Outline
         context.setStrokeColor(pal.shellDark)
-        context.setLineWidth(1.5)
+        context.setLineWidth(1.8)
         context.strokeEllipse(in: shellRect)
 
         context.restoreGState()

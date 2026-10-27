@@ -293,7 +293,7 @@ public final class PondSimulation: @unchecked Sendable {
 
         // Startle swimming turtle if click is nearby (speed burst panic)
         let turtleDist = hypot(point.x - Double(turtle.position.x), point.y - Double(turtle.position.y))
-        if turtleDist < 55.0 {
+        if turtleDist < 72.0 {
             turtle.triggerStartle(awayFrom: CGPoint(x: point.x, y: point.y))
         }
 
