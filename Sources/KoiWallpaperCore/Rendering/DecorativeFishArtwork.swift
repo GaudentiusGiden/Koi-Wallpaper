@@ -27,7 +27,7 @@ public enum DecorativeFishArtwork {
         let index: Int
     }
 
-    public static func draw(in context: CGContext, size: CGSize, time: Double, theme: PondTheme = .day, customShadowStyle: PondLighting.ShadowStyle? = nil) {
+    public static func draw(in context: CGContext, size: CGSize, time: Double, theme: PondTheme = .day, customShadowStyle: PondLighting.ShadowStyle? = nil, isEcoMode: Bool = false) {
         let short = min(size.width, size.height)
         let centers = [CGPoint(x: 0.29, y: 0.34), CGPoint(x: 0.75, y: 0.30), CGPoint(x: 0.65, y: 0.73)]
 
@@ -53,12 +53,14 @@ public enum DecorativeFishArtwork {
             }
 
             // 1. Soft aquatic drop shadow grounded on pond bed (all fish shadows under all fish)
-            for fish in instances {
-                context.saveGState()
-                context.translateBy(x: fish.x, y: fish.y)
-                context.rotate(by: CGFloat(fish.turn))
-                drawShadow(in: context, length: fish.length, halfWidth: fish.halfWidth, heading: CGFloat(fish.turn), theme: theme, customShadowStyle: customShadowStyle)
-                context.restoreGState()
+            if !isEcoMode {
+                for fish in instances {
+                    context.saveGState()
+                    context.translateBy(x: fish.x, y: fish.y)
+                    context.rotate(by: CGFloat(fish.turn))
+                    drawShadow(in: context, length: fish.length, halfWidth: fish.halfWidth, heading: CGFloat(fish.turn), theme: theme, customShadowStyle: customShadowStyle)
+                    context.restoreGState()
+                }
             }
 
             // 2. Fish anatomy, fins, motifs, and eyes
@@ -68,7 +70,7 @@ public enum DecorativeFishArtwork {
                 context.rotate(by: CGFloat(fish.turn))
                 drawPectoralFins(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, time: time, index: fish.index)
                 drawTailFin(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, time: time, index: fish.index)
-                drawTorso(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, index: fish.index)
+                drawTorso(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, index: fish.index, isEcoMode: isEcoMode)
                 drawEyes(in: context, length: fish.length, halfWidth: fish.halfWidth)
                 context.restoreGState()
             }
@@ -82,10 +84,11 @@ public enum DecorativeFishArtwork {
         size: CGSize,
         time: Double,
         theme: PondTheme = .day,
-        customShadowStyle: PondLighting.ShadowStyle? = nil
+        customShadowStyle: PondLighting.ShadowStyle? = nil,
+        isEcoMode: Bool = false
     ) {
         guard !schools.isEmpty else {
-            draw(in: context, size: size, time: time, theme: theme, customShadowStyle: customShadowStyle)
+            draw(in: context, size: size, time: time, theme: theme, customShadowStyle: customShadowStyle, isEcoMode: isEcoMode)
             return
         }
 
@@ -100,20 +103,22 @@ public enum DecorativeFishArtwork {
             }
 
             // 1. Soft aquatic drop shadow grounded on pond bed (all fish shadows under all fish)
-            for item in instances {
-                let fish = item.fish
-                context.saveGState()
-                context.translateBy(x: CGFloat(fish.position.x), y: CGFloat(fish.position.y))
-                context.rotate(by: CGFloat(fish.turn))
-                drawShadow(
-                    in: context,
-                    length: CGFloat(fish.length),
-                    halfWidth: CGFloat(fish.halfWidth),
-                    heading: CGFloat(fish.turn),
-                    theme: theme,
-                    customShadowStyle: customShadowStyle
-                )
-                context.restoreGState()
+            if !isEcoMode {
+                for item in instances {
+                    let fish = item.fish
+                    context.saveGState()
+                    context.translateBy(x: CGFloat(fish.position.x), y: CGFloat(fish.position.y))
+                    context.rotate(by: CGFloat(fish.turn))
+                    drawShadow(
+                        in: context,
+                        length: CGFloat(fish.length),
+                        halfWidth: CGFloat(fish.halfWidth),
+                        heading: CGFloat(fish.turn),
+                        theme: theme,
+                        customShadowStyle: customShadowStyle
+                    )
+                    context.restoreGState()
+                }
             }
 
             // 2. Fish anatomy, fins, motifs, and eyes
@@ -145,7 +150,8 @@ public enum DecorativeFishArtwork {
                     length: CGFloat(fish.length),
                     halfWidth: CGFloat(fish.halfWidth),
                     palette: item.palette,
-                    index: fish.index
+                    index: fish.index,
+                    isEcoMode: isEcoMode
                 )
                 drawEyes(
                     in: context,
@@ -377,7 +383,8 @@ public enum DecorativeFishArtwork {
         length: CGFloat,
         halfWidth: CGFloat,
         palette: FishPalette,
-        index: Int
+        index: Int,
+        isEcoMode: Bool = false
     ) {
         let body = CGMutablePath()
         body.move(to: CGPoint(x: length * 0.50, y: 0))
@@ -396,6 +403,18 @@ public enum DecorativeFishArtwork {
         context.setFillColor(palette.body)
         context.addPath(body)
         context.fillPath()
+
+        if isEcoMode {
+            // Eco mode: draw dorsal highlight and motif directly without software clipping mask allocation
+            context.setStrokeColor(palette.bellyHighlight)
+            context.setLineWidth(max(0.6, length * 0.04))
+            context.move(to: CGPoint(x: length * 0.32, y: halfWidth * 0.10))
+            context.addLine(to: CGPoint(x: -length * 0.20, y: halfWidth * 0.05))
+            context.strokePath()
+
+            drawMotif(in: context, length: length, halfWidth: halfWidth, palette: palette, motif: index % 8)
+            return
+        }
 
         // Clip markings and depth layers to the body outline
         context.saveGState()

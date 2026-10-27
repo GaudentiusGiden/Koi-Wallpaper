@@ -18,16 +18,22 @@ public final class PondSimulation: @unchecked Sendable {
     public private(set) var visitors: [PondVisitor] = []
     public private(set) var insects: [PondInsect] = []
     public private(set) var decorativeSchools: [DecorativeSchool] = []
+    public private(set) var floatingDebris: [FloatingDebris] = []
     public var frog: PondFrog
 
     public var isPaused: Bool = false
     public var mood: PondMood = .calm
     public var isRainActive: Bool = false
+    public var isFloatingDebrisEnabled: Bool = true
+    public var season: PondSeason = .spring
+    public var seasonMode: SeasonMode = .autoCalendar
     public private(set) var currentTheme: PondTheme = .day
     public let feedingRoutineManager: FeedingRoutineManager
     public let dailyGreetingManager: DailyGreetingManager
     private var rainTimer: Double = 0.0
     public let maxRainRipples: Int = 16
+    private var debrisSpawnTimer: Double = 0.0
+    private var nextDebrisSpawnInterval: Double = 3.5
 
     // Cached habitual feeding evaluation (interval 10s instead of 60 Hz)
     private var timeSinceHabitCheck: Double = 10.0
@@ -62,6 +68,7 @@ public final class PondSimulation: @unchecked Sendable {
     public let maxFeedingFish: Int = 3
     public let maxVisitors: Int = 6
     public let maxInsects: Int = 4
+    public let maxFloatingDebris: Int = 24
 
     public init(
         bounds: PondBounds = PondBounds(width: 1280.0, height: 800.0),
@@ -70,10 +77,14 @@ public final class PondSimulation: @unchecked Sendable {
         initialFish: [KoiFish]? = nil,
         initialPellets: [FoodPellet]? = nil,
         initialInsects: [PondInsect]? = nil,
+        initialDebris: [FloatingDebris]? = nil,
         seed: UInt64? = nil,
         mood: PondMood = .calm,
         isRainActive: Bool = false,
         theme: PondTheme = .day,
+        season: PondSeason? = nil,
+        seasonMode: SeasonMode = .autoCalendar,
+        isFloatingDebrisEnabled: Bool = true,
         feedingRoutineManager: FeedingRoutineManager? = nil,
         dailyGreetingManager: DailyGreetingManager? = nil,
         feedingStore: FeedingStore? = nil,
@@ -86,7 +97,11 @@ public final class PondSimulation: @unchecked Sendable {
         self.mood = mood
         self.isRainActive = isRainActive
         self.currentTheme = theme
+        self.seasonMode = seasonMode
+        self.season = season ?? (seasonMode == .autoCalendar ? PondSeason.currentCalendarSeason() : .spring)
+        self.isFloatingDebrisEnabled = isFloatingDebrisEnabled
         self.nextInsectTargetInterval = Double.random(in: 12.0...20.0, using: &self.rng)
+        self.nextDebrisSpawnInterval = 4.0
 
         if let routineMgr = feedingRoutineManager {
             self.feedingRoutineManager = routineMgr
@@ -120,6 +135,9 @@ public final class PondSimulation: @unchecked Sendable {
             self.insects = customInsects
         } else {
             initializeInsects(for: theme)
+        }
+        if let customDebris = initialDebris {
+            self.floatingDebris = customDebris
         }
         initializeDecorativeSchools()
     }
@@ -181,6 +199,8 @@ public final class PondSimulation: @unchecked Sendable {
         ripples.removeAll()
         clickTargets.removeAll()
         visitors.removeAll()
+        floatingDebris.removeAll()
+        debrisSpawnTimer = 0.0
         timeAccumulator = 0.0
         elapsedTime = 0.0
         insectTargetTimer = 0.0
@@ -201,6 +221,7 @@ public final class PondSimulation: @unchecked Sendable {
         let pelletPositions = pellets.map(\.position)
         let visitorPositions = visitors.map(\.position)
         let insectPositions = insects.map(\.position)
+        let debrisPositions = floatingDebris.map(\.position)
         bounds = PondBounds(width: width, height: height, margin: bounds.margin)
 
         let scaleX = width / oldBounds.width
@@ -218,6 +239,9 @@ public final class PondSimulation: @unchecked Sendable {
         }
         for i in 0..<insects.count {
             insects[i].position = PondVector(x: insectPositions[i].x * scaleX, y: insectPositions[i].y * scaleY)
+        }
+        for i in 0..<floatingDebris.count {
+            floatingDebris[i].position = PondVector(x: debrisPositions[i].x * scaleX, y: debrisPositions[i].y * scaleY)
         }
         for i in 0..<decorativeSchools.count {
             decorativeSchools[i].resize(oldBounds: oldBounds, newBounds: bounds)
@@ -243,6 +267,9 @@ public final class PondSimulation: @unchecked Sendable {
         }
         for i in 0..<insects.count {
             insects[i].position = bounds.clamped(insects[i].position, inset: 16.0)
+        }
+        for i in 0..<floatingDebris.count {
+            floatingDebris[i].position = bounds.clamped(floatingDebris[i].position, inset: 10.0)
         }
     }
 
@@ -1020,6 +1047,167 @@ public final class PondSimulation: @unchecked Sendable {
                 ripples: ripples,
                 externalRepulsion: schoolRepulsions[i]
             )
+        }
+
+        // 10. Update Seasonal Floating Debris & Ripple Physical Impulses
+        if isFloatingDebrisEnabled {
+            debrisSpawnTimer += dt
+            if debrisSpawnTimer >= nextDebrisSpawnInterval {
+                debrisSpawnTimer = 0.0
+                nextDebrisSpawnInterval = Double.random(in: 3.5...6.5, using: &rng)
+                if floatingDebris.count < maxFloatingDebris {
+                    spawnSeasonalDebris()
+                }
+            }
+        }
+
+        // Apply physical outward ripple impulses to floating debris
+        if !ripples.isEmpty && !floatingDebris.isEmpty {
+            for r in ripples {
+                for dIdx in 0..<floatingDebris.count {
+                    floatingDebris[dIdx].receiveRippleImpulse(
+                        rippleCenter: r.center,
+                        rippleRadius: r.radius,
+                        maxRadius: r.maxRadius
+                    )
+                }
+            }
+        }
+
+        // Update debris kinematics and drag
+        for i in 0..<floatingDebris.count {
+            floatingDebris[i].update(dt: dt, bounds: bounds)
+        }
+
+        // Remove expired debris or debris that drifted beyond margin
+        let debrisMargin = 50.0
+        floatingDebris.removeAll { debris in
+            debris.isExpired || !bounds.contains(debris.position, inset: -debrisMargin)
+        }
+    }
+
+    // MARK: - Seasonal Debris Management
+
+    public func setSeason(_ newSeason: PondSeason) {
+        self.season = newSeason
+        self.seasonMode = .manual
+    }
+
+    public func setSeasonMode(_ mode: SeasonMode) {
+        self.seasonMode = mode
+        if mode == .autoCalendar {
+            self.season = PondSeason.currentCalendarSeason()
+        }
+    }
+
+    public func setFloatingDebrisEnabled(_ enabled: Bool) {
+        self.isFloatingDebrisEnabled = enabled
+        if !enabled {
+            floatingDebris.removeAll()
+        }
+    }
+
+    public func spawnSeasonalDebris(at customPosition: PondVector? = nil, type: FloatingDebrisType? = nil) {
+        guard floatingDebris.count < maxFloatingDebris else { return }
+        let debrisType = type ?? season.primaryDebrisType
+
+        let pos: PondVector
+        if let custom = customPosition {
+            pos = bounds.clamped(custom, inset: 10.0)
+        } else {
+            // Spawn around edges or open water
+            let edge = Int.random(in: 0...3, using: &rng)
+            let x: Double
+            let y: Double
+            switch edge {
+            case 0: // Top edge
+                x = Double.random(in: bounds.minX...bounds.maxX, using: &rng)
+                y = bounds.minY + Double.random(in: 10.0...40.0, using: &rng)
+            case 1: // Right edge
+                x = bounds.maxX - Double.random(in: 10.0...40.0, using: &rng)
+                y = Double.random(in: bounds.minY...bounds.maxY, using: &rng)
+            case 2: // Bottom edge
+                x = Double.random(in: bounds.minX...bounds.maxX, using: &rng)
+                y = bounds.maxY - Double.random(in: 10.0...40.0, using: &rng)
+            default: // Left edge
+                x = bounds.minX + Double.random(in: 10.0...40.0, using: &rng)
+                y = Double.random(in: bounds.minY...bounds.maxY, using: &rng)
+            }
+            pos = PondVector(x: x, y: y)
+        }
+
+        let variant = Int.random(in: 0...1, using: &rng)
+        let scale = Double.random(in: 0.85...1.15, using: &rng)
+        let angle = Double.random(in: 0...(2 * .pi), using: &rng)
+        let spin = Double.random(in: -0.3...0.3, using: &rng)
+        let driftSpeed = Double.random(in: 2.0...6.0, using: &rng)
+        let driftAngle = Double.random(in: 0...(2 * .pi), using: &rng)
+        let vel = PondVector.fromAngle(driftAngle, length: driftSpeed)
+        let lifespan = Double.random(in: 35.0...60.0, using: &rng)
+
+        let debris = FloatingDebris(
+            type: debrisType,
+            position: pos,
+            velocity: vel,
+            angle: angle,
+            spin: spin,
+            scale: scale,
+            variant: variant,
+            lifespan: lifespan,
+            seed: rng.next()
+        )
+        floatingDebris.append(debris)
+    }
+
+    public func clearFloatingDebris() {
+        floatingDebris.removeAll()
+    }
+
+    public func populateSeasonalCluster(count: Int = 8, clearExisting: Bool = true) {
+        guard isFloatingDebrisEnabled else { return }
+        if clearExisting {
+            floatingDebris.removeAll()
+        }
+        let targetCount = min(count, maxFloatingDebris)
+        let debrisType = season.primaryDebrisType
+
+        // Spread across open pond water (avoiding extreme edges)
+        let marginX = min(120.0, bounds.width * 0.15)
+        let marginY = min(120.0, bounds.height * 0.15)
+        let minX = bounds.minX + marginX
+        let maxX = max(minX + 10.0, bounds.maxX - marginX)
+        let minY = bounds.minY + marginY
+        let maxY = max(minY + 10.0, bounds.maxY - marginY)
+
+        for _ in 0..<targetCount {
+            let x = Double.random(in: minX...maxX, using: &rng)
+            let y = Double.random(in: minY...maxY, using: &rng)
+            let pos = PondVector(x: x, y: y)
+
+            let variant = Int.random(in: 0...1, using: &rng)
+            let scale = Double.random(in: 0.95...1.30, using: &rng)
+            let angle = Double.random(in: 0...(2 * .pi), using: &rng)
+            let spin = Double.random(in: -0.25...0.25, using: &rng)
+            let driftSpeed = Double.random(in: 2.0...5.0, using: &rng)
+            let driftAngle = Double.random(in: 0...(2 * .pi), using: &rng)
+            let vel = PondVector.fromAngle(driftAngle, length: driftSpeed)
+            let lifespan = Double.random(in: 45.0...80.0, using: &rng)
+
+            var debris = FloatingDebris(
+                type: debrisType,
+                position: pos,
+                velocity: vel,
+                angle: angle,
+                spin: spin,
+                scale: scale,
+                variant: variant,
+                lifespan: lifespan,
+                seed: rng.next()
+            )
+            // Pre-warm age and make fully visible immediately
+            debris.age = Double.random(in: 2.5...12.0, using: &rng)
+            debris.opacity = 1.0
+            floatingDebris.append(debris)
         }
     }
 

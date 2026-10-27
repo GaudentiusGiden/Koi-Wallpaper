@@ -1386,6 +1386,164 @@ recordSimTest(
 )
 
 // -------------------------------------------------------------
+// 17. Seasonal Cycles & Floating Debris Dynamics (Milestone M7)
+// -------------------------------------------------------------
+print("\n--- 17. Seasonal Cycles & Floating Debris Dynamics (Milestone M7) ---")
+
+do {
+    // T17.1 Seasonal Calendar Mapping & Primary Debris Type
+    var calendarPassed = true
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(secondsFromGMT: 0)!
+
+    let monthToSeason: [(Int, PondSeason, FloatingDebrisType)] = [
+        (1, .winter, .snowShard),
+        (2, .winter, .snowShard),
+        (3, .spring, .sakuraPetal),
+        (4, .spring, .sakuraPetal),
+        (5, .spring, .sakuraPetal),
+        (6, .summer, .waterLilyPetal),
+        (7, .summer, .waterLilyPetal),
+        (8, .summer, .waterLilyPetal),
+        (9, .autumn, .momijiLeaf),
+        (10, .autumn, .momijiLeaf),
+        (11, .autumn, .momijiLeaf),
+        (12, .winter, .snowShard)
+    ]
+
+    for (m, expectedSeason, expectedDebris) in monthToSeason {
+        var comps = DateComponents()
+        comps.year = 2026
+        comps.month = m
+        comps.day = 15
+        let date = cal.date(from: comps)!
+        let season = PondSeason.currentCalendarSeason(date: date, calendar: cal)
+        if season != expectedSeason || season.primaryDebrisType != expectedDebris {
+            calendarPassed = false
+        }
+    }
+
+    recordSimTest(
+        "T17.1 Seasonal Calendar Mapping & Primary Debris Type",
+        passed: calendarPassed,
+        details: "12MonthsMapped=\(calendarPassed), spring=sakura, summer=waterLily, autumn=momiji, winter=snow"
+    )
+
+    // T17.2 Floating Debris Kinematics, Water Drag & Spin Dampening
+    var testDebris = FloatingDebris(
+        type: .sakuraPetal,
+        position: PondVector(x: 200.0, y: 200.0),
+        velocity: PondVector(x: 20.0, y: 0.0),
+        angle: 0.0,
+        spin: 1.5,
+        lifespan: 30.0
+    )
+    let initialSpeed = testDebris.velocity.length
+    let initialSpin = testDebris.spin
+    let debrisBounds = PondBounds(width: 800.0, height: 600.0)
+
+    for _ in 0..<60 { // 1 second of simulation
+        testDebris.update(dt: 1.0 / 60.0, bounds: debrisBounds)
+    }
+    let speedAfter1s = testDebris.velocity.length
+    let spinAfter1s = testDebris.spin
+    let movedForward = testDebris.position.x > 200.0
+    let dragDampened = speedAfter1s < initialSpeed * 0.5
+    let spinDampened = spinAfter1s < initialSpin * 0.4
+    let t17_2Passed = movedForward && dragDampened && spinDampened
+
+    recordSimTest(
+        "T17.2 Floating Debris Kinematics, Water Drag & Spin Dampening",
+        passed: t17_2Passed,
+        details: "movedForward=\(movedForward), v0=\(String(format: "%.1f", initialSpeed)) -> v1=\(String(format: "%.1f", speedAfter1s)), spin0=\(String(format: "%.2f", initialSpin)) -> spin1=\(String(format: "%.2f", spinAfter1s))"
+    )
+
+    // T17.3 Ripple Impulse Radial Push & Spin Wobble
+    var impulseDebris = FloatingDebris(
+        type: .momijiLeaf,
+        position: PondVector(x: 350.0, y: 300.0), // 50pt to the right of (300, 300)
+        velocity: .zero,
+        angle: 0.0,
+        spin: 0.0,
+        lifespan: 40.0
+    )
+    let rippleCenter = PondVector(x: 300.0, y: 300.0)
+    // Expanding ripple currently at radius 50pt (exact contact with debris)
+    impulseDebris.receiveRippleImpulse(rippleCenter: rippleCenter, rippleRadius: 50.0, maxRadius: 100.0, strength: 1.0)
+
+    let receivedOutwardPush = impulseDebris.velocity.x > 5.0 && abs(impulseDebris.velocity.y) < 0.001
+    let receivedSpinWobble = abs(impulseDebris.spin) > 0.05
+    let t17_3Passed = receivedOutwardPush && receivedSpinWobble
+
+    recordSimTest(
+        "T17.3 Ripple Impulse Radial Push & Spin Wobble",
+        passed: t17_3Passed,
+        details: "radialPushX=\(String(format: "%.1f", impulseDebris.velocity.x))pt/s, spinWobble=\(String(format: "%.3f", impulseDebris.spin))rad/s"
+    )
+
+    // T17.4 Capacity Cap & Natural Lifespan Expiration
+    let capSim = PondSimulation(bounds: debrisBounds, seed: 123)
+    capSim.setSeason(.autumn)
+    for _ in 0..<50 {
+        capSim.spawnSeasonalDebris()
+    }
+    let capRespected = capSim.floatingDebris.count <= capSim.maxFloatingDebris
+    let countAtCap = capSim.floatingDebris.count
+
+    // Lifespan expiration test: create debris with short 0.5s lifespan
+    let shortLivedDebris = FloatingDebris(type: .snowShard, position: PondVector(x: 400.0, y: 300.0), lifespan: 0.5)
+    let expireSim = PondSimulation(bounds: debrisBounds, initialDebris: [shortLivedDebris], seed: 456)
+    let presentBefore = expireSim.floatingDebris.count == 1
+    for _ in 0..<45 { // 0.75 seconds
+        expireSim.stepSimulation(dt: 1.0 / 60.0)
+    }
+    let expiredCleanly = expireSim.floatingDebris.isEmpty
+    let t17_4Passed = capRespected && (countAtCap == capSim.maxFloatingDebris) && presentBefore && expiredCleanly
+
+    recordSimTest(
+        "T17.4 Capacity Cap & Natural Lifespan Expiration",
+        passed: t17_4Passed,
+        details: "cap=\(capSim.maxFloatingDebris), countAtCap=\(countAtCap), expiredAfter0.5s=\(expiredCleanly)"
+    )
+
+    // T17.5 Boundary Margin & Out-of-Bounds Disposal
+    let outsideDebris = FloatingDebris(type: .sakuraPetal, position: PondVector(x: -80.0, y: 300.0), lifespan: 60.0)
+    let marginSimTest = PondSimulation(bounds: debrisBounds, initialDebris: [outsideDebris], seed: 999)
+    marginSimTest.stepSimulation(dt: 1.0 / 60.0)
+    let outsideRemoved = marginSimTest.floatingDebris.isEmpty
+    recordSimTest(
+        "T17.5 Boundary Margin & Out-of-Bounds Disposal",
+        passed: outsideRemoved,
+        details: "outsideRemoved=\(outsideRemoved)"
+    )
+
+    // T17.6 Pause Stasis & Zero Drift Guarantee
+    let pauseSim = PondSimulation(bounds: debrisBounds, seed: 101)
+    pauseSim.spawnSeasonalDebris()
+    pauseSim.spawnSeasonalDebris()
+    pauseSim.isPaused = true
+
+    let pausePositions = pauseSim.floatingDebris.map(\.position)
+    let pauseSpins = pauseSim.floatingDebris.map(\.spin)
+    let pauseAges = pauseSim.floatingDebris.map(\.age)
+
+    for _ in 0..<60 {
+        pauseSim.advance(deltaTime: 1.0 / 60.0)
+    }
+
+    let afterPausePositions = pauseSim.floatingDebris.map(\.position)
+    let afterPauseSpins = pauseSim.floatingDebris.map(\.spin)
+    let afterPauseAges = pauseSim.floatingDebris.map(\.age)
+
+    let pauseSuccess = (pausePositions == afterPausePositions) && (pauseSpins == afterPauseSpins) && (pauseAges == afterPauseAges)
+    recordSimTest(
+        "T17.6 Seasonal Debris Pause Stasis & Zero Drift Guarantee",
+        passed: pauseSuccess,
+        details: "positionsFrozen=\(pausePositions == afterPausePositions), spinsFrozen=\(pauseSpins == afterPauseSpins), agesFrozen=\(pauseAges == afterPauseAges)"
+    )
+}
+
+// -------------------------------------------------------------
 // SUMMARY & RESULTS
 // -------------------------------------------------------------
 print("\n=======================================================")

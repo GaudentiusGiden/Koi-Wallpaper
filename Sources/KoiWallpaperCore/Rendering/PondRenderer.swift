@@ -444,7 +444,8 @@ public final class PondRenderer {
                 size: size,
                 time: simulation.elapsedTime,
                 theme: toTheme,
-                customShadowStyle: shadowStyle
+                customShadowStyle: shadowStyle,
+                isEcoMode: isBatteryEcoMode
             )
             for fish in simulation.fish {
                 KoiArtwork.draw(
@@ -458,12 +459,27 @@ public final class PondRenderer {
             for visitor in simulation.visitors {
                 PondArtwork.drawVisitorShadow(visitor, in: bitmap, shadowStyle: shadowStyle)
             }
+            if !simulation.floatingDebris.isEmpty {
+                FloatingDebrisArtwork.draw(
+                    simulation.floatingDebris,
+                    in: bitmap,
+                    shadowStyle: shadowStyle,
+                    drawShadowOnly: true
+                )
+            }
             for fish in simulation.fish {
                 KoiArtwork.draw(fish, in: bitmap, theme: toTheme, customFishAmbientStyle: fishAmbientStyle)
             }
             PondArtwork.drawPellets(simulation.pellets, in: bitmap)
             for visitor in simulation.visitors {
                 PondArtwork.drawVisitor(visitor, in: bitmap, theme: toTheme)
+            }
+            if !simulation.floatingDebris.isEmpty {
+                FloatingDebrisArtwork.draw(
+                    simulation.floatingDebris,
+                    in: bitmap,
+                    drawShadowOnly: false
+                )
             }
             bitmap.restoreGState()
 
@@ -551,13 +567,16 @@ public final class PondRenderer {
             customSourceGlimmer: isTransitioning ? customSourceGlimmer : nil
         )
 
+        let seasonTint = simulation.season.atmosphericTintColor
         let tintColor: CGColor?
         if isTransitioning {
             let tintA = customSourceTint ?? Self.themeTint(fromTheme)
             let tintB = Self.themeTint(toTheme)
-            tintColor = Self.lerpColor(from: tintA, to: tintB, t: clampedP)
+            let baseTint = Self.lerpColor(from: tintA, to: tintB, t: clampedP)
+            tintColor = Self.blendTints(baseTint, seasonTint)
         } else {
-            tintColor = Self.themeTint(toTheme)
+            let baseTint = Self.themeTint(toTheme)
+            tintColor = Self.blendTints(baseTint, seasonTint)
         }
 
         var insectPlacement: PondImagePlacement?
@@ -653,6 +672,27 @@ public final class PondRenderer {
         let g = g1 + (g2 - g1) * p
         let b = b1 + (b2 - b1) * p
         return CGColor(red: r, green: g, blue: b, alpha: a)
+    }
+
+    public static func blendTints(_ base: CGColor?, _ overlay: CGColor?) -> CGColor? {
+        guard let overlay = overlay else { return base }
+        guard let base = base else { return overlay }
+        let a1 = base.alpha
+        let a2 = overlay.alpha
+        let outA = min(1.0, a1 + a2 * (1.0 - a1))
+        guard outA > 0.001 else { return nil }
+        let c1 = base.components ?? [0, 0, 0, 0]
+        let c2 = overlay.components ?? [0, 0, 0, 0]
+        let r1 = c1.count > 0 ? c1[0] : 0
+        let g1 = c1.count > 1 ? c1[1] : 0
+        let b1 = c1.count > 2 ? c1[2] : 0
+        let r2 = c2.count > 0 ? c2[0] : 0
+        let g2 = c2.count > 1 ? c2[1] : 0
+        let b2 = c2.count > 2 ? c2[2] : 0
+        let r = (r1 * a1 + r2 * a2 * (1.0 - a1)) / outA
+        let g = (g1 * a1 + g2 * a2 * (1.0 - a1)) / outA
+        let b = (b1 * a1 + b2 * a2 * (1.0 - a1)) / outA
+        return CGColor(red: r, green: g, blue: b, alpha: outA)
     }
 
     private static func glimmerStyle(for theme: PondTheme) -> (color: (CGFloat, CGFloat, CGFloat), alpha: CGFloat) {

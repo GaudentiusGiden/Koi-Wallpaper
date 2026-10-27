@@ -37,6 +37,9 @@ public final class ScreenManager {
     public private(set) var isBatteryEcoMode: Bool = false
     public private(set) var currentMood: PondMood = .calm
     public private(set) var currentIsRainActive: Bool = false
+    public private(set) var currentSeasonMode: SeasonMode = .autoCalendar
+    public private(set) var currentManualSeason: PondSeason = .spring
+    public private(set) var currentIsFloatingDebrisEnabled: Bool = true
     public weak var inputCoordinator: InputCoordinator?
 
     public var onControllersChanged: (([DesktopWindowController]) -> Void)?
@@ -143,6 +146,9 @@ public final class ScreenManager {
         controller.wallpaperView.isBatteryEcoMode = isBatteryEcoMode
         controller.applyMood(currentMood)
         controller.applyRain(currentIsRainActive)
+        controller.applySeason(currentManualSeason)
+        controller.applySeasonMode(currentSeasonMode)
+        controller.applyFloatingDebris(currentIsFloatingDebrisEnabled)
         controller.applyInteractionMode(currentMode)
         controller.setGloballyPaused(isGloballyPaused)
         if !isGloballyPaused {
@@ -223,6 +229,27 @@ public final class ScreenManager {
         self.isBatteryEcoMode = enabled
         for controller in controllers {
             controller.wallpaperView.isBatteryEcoMode = enabled
+        }
+    }
+
+    public func applySeason(_ season: PondSeason, showBanner: Bool = false) {
+        self.currentManualSeason = season
+        for controller in controllers {
+            controller.applySeason(season, showBanner: showBanner)
+        }
+    }
+
+    public func applySeasonMode(_ mode: SeasonMode) {
+        self.currentSeasonMode = mode
+        for controller in controllers {
+            controller.applySeasonMode(mode)
+        }
+    }
+
+    public func applyFloatingDebrisVisibility(_ enabled: Bool) {
+        self.currentIsFloatingDebrisEnabled = enabled
+        for controller in controllers {
+            controller.applyFloatingDebris(enabled)
         }
     }
 

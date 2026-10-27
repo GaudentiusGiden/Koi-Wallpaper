@@ -321,17 +321,17 @@ public final class KoiPondPreviewView: NSView {
         statusText.draw(at: NSPoint(x: hudRect.minX + 185, y: hudRect.maxY - 22), withAttributes: statusAttrs)
 
         let stats = String(
-            format: "Timer: %.0f Hz  ·  Koi: %d  ·  Pellets: %d/%d  ·  Ripples: %d/%d",
+            format: "Timer: %.0f Hz  ·  Koi: %d  ·  Pellets: %d/%d  ·  Debris: %d/%d",
             currentFPS,
             simulation.fish.count,
             simulation.pellets.count,
             simulation.maxPellets,
-            simulation.ripples.count,
-            simulation.maxRipples
+            simulation.floatingDebris.count,
+            simulation.maxFloatingDebris
         )
         stats.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 42), withAttributes: bodyAttrs)
 
-        let hints = "Click: Splash  ·  Opt+Click: Feed  ·  V: Swan  ·  B: Ball  ·  X: Clear"
+        let hints = "Click: Splash  ·  Opt+Click: Feed  ·  E: Season (\(simulation.season.rawValue))  ·  D: Debris"
         hints.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 62), withAttributes: hintAttrs)
 
         let hints2 = "T: Theme  ·  M: Mood (\(simulation.mood.displayName))  ·  W: Rain  ·  Space: Pause"
@@ -397,6 +397,17 @@ public final class KoiPondPreviewView: NSView {
                 setTheme(nextTheme, animated: true)
                 print("[KoiPondPreviewView] Transitioning to theme: \(nextTheme.displayName) (\(nextTheme.rawValue))")
             }
+        case "e":
+            let all = PondSeason.allCases
+            if let idx = all.firstIndex(of: simulation.season) {
+                let nextSeason = all[(idx + 1) % all.count]
+                simulation.setSeason(nextSeason)
+                simulation.populateSeasonalCluster(count: 10)
+                print("[KoiPondPreviewView] Season switched to: \(nextSeason.displayName)")
+            }
+        case "d":
+            simulation.spawnSeasonalDebris()
+            print("[KoiPondPreviewView] Spawned debris: \(simulation.floatingDebris.count) active")
         default:
             super.keyDown(with: event)
         }

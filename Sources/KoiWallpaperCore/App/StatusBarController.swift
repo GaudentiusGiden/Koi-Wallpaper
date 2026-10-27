@@ -20,6 +20,9 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController)
     func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController)
     func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController)
+    func statusBarDidSelectSeasonMode(_ controller: StatusBarController, mode: SeasonMode)
+    func statusBarDidSelectManualSeason(_ controller: StatusBarController, season: PondSeason)
+    func statusBarDidToggleFloatingDebris(_ controller: StatusBarController)
 }
 
 extension StatusBarControllerDelegate {
@@ -38,6 +41,9 @@ extension StatusBarControllerDelegate {
     public func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController) {}
     public func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController) {}
     public func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {}
+    public func statusBarDidSelectSeasonMode(_ controller: StatusBarController, mode: SeasonMode) {}
+    public func statusBarDidSelectManualSeason(_ controller: StatusBarController, season: PondSeason) {}
+    public func statusBarDidToggleFloatingDebris(_ controller: StatusBarController) {}
 }
 
 public final class StatusBarController {
@@ -101,6 +107,21 @@ public final class StatusBarController {
     private let rainToggleItem = NSMenuItem(
         title: "Efek Hujan Aktif",
         action: #selector(rainToggled),
+        keyEquivalent: ""
+    )
+
+    // Season submenu
+    private let seasonMenuItem = NSMenuItem(title: "Musim Kolam (Season)", action: nil, keyEquivalent: "")
+    private let seasonMenu = NSMenu(title: "Musim")
+    private let autoSeasonItem = NSMenuItem(title: "Otomatis Sesuai Kalender (Auto)", action: #selector(autoSeasonSelected), keyEquivalent: "")
+    private let springItem = NSMenuItem(title: "Musim Semi (Sakura)", action: #selector(springSelected), keyEquivalent: "")
+    private let summerItem = NSMenuItem(title: "Musim Panas (Teratai)", action: #selector(summerSelected), keyEquivalent: "")
+    private let autumnItem = NSMenuItem(title: "Musim Gugur (Momiji)", action: #selector(autumnSelected), keyEquivalent: "")
+    private let winterItem = NSMenuItem(title: "Musim Dingin (Salju)", action: #selector(winterSelected), keyEquivalent: "")
+    private let currentSeasonInfoItem = NSMenuItem(title: "Musim Aktif: Musim Semi", action: nil, keyEquivalent: "")
+    private let floatingDebrisToggleItem = NSMenuItem(
+        title: "Tampilkan Objek Mengapung",
+        action: #selector(floatingDebrisToggled),
         keyEquivalent: ""
     )
 
@@ -176,6 +197,7 @@ public final class StatusBarController {
         pauseStatusItem.isEnabled = false
         interactionDescItem.isEnabled = false
         currentPhaseInfoItem.isEnabled = false
+        currentSeasonInfoItem.isEnabled = false
         automaticSwanInfoItem.isEnabled = false
         visitorsStatusItem.isEnabled = false
 
@@ -193,6 +215,12 @@ public final class StatusBarController {
         nightItem.target = self
         deepClearItem.target = self
         rainItem.target = self
+        autoSeasonItem.target = self
+        springItem.target = self
+        summerItem.target = self
+        autumnItem.target = self
+        winterItem.target = self
+        floatingDebrisToggleItem.target = self
         calmMoodItem.target = self
         playfulMoodItem.target = self
         rainToggleItem.target = self
@@ -231,6 +259,19 @@ public final class StatusBarController {
         timeOfDayMenu.addItem(currentPhaseInfoItem)
         timeOfDayMenuItem.submenu = timeOfDayMenu
 
+        // Build Season submenu
+        seasonMenu.addItem(autoSeasonItem)
+        seasonMenu.addItem(NSMenuItem.separator())
+        seasonMenu.addItem(springItem)
+        seasonMenu.addItem(summerItem)
+        seasonMenu.addItem(autumnItem)
+        seasonMenu.addItem(winterItem)
+        seasonMenu.addItem(NSMenuItem.separator())
+        seasonMenu.addItem(currentSeasonInfoItem)
+        seasonMenu.addItem(NSMenuItem.separator())
+        seasonMenu.addItem(floatingDebrisToggleItem)
+        seasonMenuItem.submenu = seasonMenu
+
         // Build Mood submenu
         moodMenu.addItem(calmMoodItem)
         moodMenu.addItem(playfulMoodItem)
@@ -268,6 +309,7 @@ public final class StatusBarController {
         menu.addItem(interactionDescItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(timeOfDayMenuItem)
+        menu.addItem(seasonMenuItem)
         menu.addItem(moodMenuItem)
         menu.addItem(rainToggleItem)
         menu.addItem(visitorsMenuItem)
@@ -354,6 +396,15 @@ public final class StatusBarController {
         launchAtLoginToggled()
     }
 
+    public var seasonMenuItemsTitles: [String] {
+        seasonMenu.items.map(\.title)
+    }
+
+    public var seasonMenuActionTargetsValid: Bool {
+        let actionItems = [autoSeasonItem, springItem, summerItem, autumnItem, winterItem, floatingDebrisToggleItem]
+        return actionItems.allSatisfy { $0.target === self && $0.action != nil }
+    }
+
     public func updateMoodState(mood: PondMood) {
         calmMoodItem.state = (mood == .calm) ? .on : .off
         playfulMoodItem.state = (mood == .playful) ? .on : .off
@@ -361,6 +412,17 @@ public final class StatusBarController {
 
     public func updateRainState(isRainActive: Bool) {
         rainToggleItem.state = isRainActive ? .on : .off
+    }
+
+    public func updateSeasonState(mode: SeasonMode, manualSeason: PondSeason, currentSeason: PondSeason, isDebrisEnabled: Bool) {
+        autoSeasonItem.state = (mode == .autoCalendar) ? .on : .off
+        springItem.state = (mode == .manual && manualSeason == .spring) ? .on : .off
+        summerItem.state = (mode == .manual && manualSeason == .summer) ? .on : .off
+        autumnItem.state = (mode == .manual && manualSeason == .autumn) ? .on : .off
+        winterItem.state = (mode == .manual && manualSeason == .winter) ? .on : .off
+
+        currentSeasonInfoItem.title = "Musim Aktif: \(currentSeason.displayName)"
+        floatingDebrisToggleItem.state = isDebrisEnabled ? .on : .off
     }
 
     public func updateFullscreenState(isFullscreen: Bool) {
@@ -547,6 +609,30 @@ public final class StatusBarController {
 
     @objc private func rainToggled() {
         delegate?.statusBarDidToggleRain(self)
+    }
+
+    @objc private func autoSeasonSelected() {
+        delegate?.statusBarDidSelectSeasonMode(self, mode: .autoCalendar)
+    }
+
+    @objc private func springSelected() {
+        delegate?.statusBarDidSelectManualSeason(self, season: .spring)
+    }
+
+    @objc private func summerSelected() {
+        delegate?.statusBarDidSelectManualSeason(self, season: .summer)
+    }
+
+    @objc private func autumnSelected() {
+        delegate?.statusBarDidSelectManualSeason(self, season: .autumn)
+    }
+
+    @objc private func winterSelected() {
+        delegate?.statusBarDidSelectManualSeason(self, season: .winter)
+    }
+
+    @objc private func floatingDebrisToggled() {
+        delegate?.statusBarDidToggleFloatingDebris(self)
     }
 
     @objc private func fullscreenToggled() {

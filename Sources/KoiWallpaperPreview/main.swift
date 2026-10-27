@@ -37,6 +37,206 @@ private func renderSwanDesignPreview(to outputURL: URL) throws {
     try png.write(to: outputURL)
 }
 
+private func drawBadge(title: String, subtitle: String, at point: CGPoint, in context: CGContext) {
+    let width: CGFloat = 280
+    let height: CGFloat = 46
+    let rect = CGRect(x: point.x, y: point.y, width: width, height: height)
+
+    context.saveGState()
+    context.setFillColor(red: 0.04, green: 0.12, blue: 0.10, alpha: 0.88)
+    let path = NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7)
+    path.fill()
+    context.setStrokeColor(red: 0.40, green: 0.90, blue: 0.65, alpha: 0.85)
+    context.setLineWidth(1.2)
+    context.stroke(rect)
+    context.restoreGState()
+
+    let tAttrs: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: 12, weight: .bold),
+        .foregroundColor: NSColor(red: 0.98, green: 0.90, blue: 0.50, alpha: 1.0)
+    ]
+    let sAttrs: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+        .foregroundColor: NSColor(red: 0.85, green: 0.92, blue: 0.88, alpha: 1.0)
+    ]
+    title.draw(at: NSPoint(x: point.x + 10, y: point.y + 24), withAttributes: tAttrs)
+    subtitle.draw(at: NSPoint(x: point.x + 10, y: point.y + 8), withAttributes: sAttrs)
+}
+
+private func drawReferenceSummaryCard(in context: CGContext) {
+    let rect = CGRect(x: 35, y: 35, width: 490, height: 185)
+    context.saveGState()
+    context.setFillColor(red: 0.04, green: 0.12, blue: 0.10, alpha: 0.94)
+    let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+    path.fill()
+    context.setStrokeColor(red: 0.45, green: 0.92, blue: 0.68, alpha: 0.90)
+    context.setLineWidth(1.6)
+    context.stroke(rect)
+    context.restoreGState()
+
+    let titleAttrs: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: 13, weight: .bold),
+        .foregroundColor: NSColor(red: 0.98, green: 0.90, blue: 0.50, alpha: 1.0)
+    ]
+    let bodyAttrs: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+        .foregroundColor: NSColor.white
+    ]
+
+    "Kura-kura Pixel Art Murni - Selaras Tema Koi Wallpaper".draw(at: NSPoint(x: 48, y: 192), withAttributes: titleAttrs)
+
+    let compURL = URL(fileURLWithPath: "build/pixel_turtle_palette_comparison.png")
+    if let compImg = NSImage(contentsOf: compURL) {
+        let rRect = NSRect(x: 48, y: 46, width: 140, height: 135)
+        compImg.draw(in: rRect)
+        context.setStrokeColor(red: 0.35, green: 0.65, blue: 0.50, alpha: 0.6)
+        context.setLineWidth(1.0)
+        context.stroke(rRect)
+    }
+
+    let infoText = """
+    Penyelarasan Pixel-Art Asli & Tema Kolam:
+    • 100% Pixel Art Murni: Menggunakan raster pixel
+      diskrit tanpa kurva vektor halus (anti-aliasing).
+    • Palet Nagomi (Batu & Kanan): Warna moss jade
+      & terracotta peach menyatu dengan koi & teratai.
+    • Palet Vibrant (Tengah): Warna asli cerah sesuai
+      pack referensi dengan raster pixel tajam.
+    • Batu & Riak Air Pixel: Batu kali & gelombang air
+      dibuat dengan blok pixel serasi.
+    """
+    infoText.draw(at: NSPoint(x: 200, y: 44), withAttributes: bodyAttrs)
+}
+
+private func renderTurtlePondPreview(to outputURL: URL) throws {
+    let size = CGSize(width: 1440, height: 900)
+    let bounds = PondBounds(width: Double(size.width), height: Double(size.height))
+    let simulation = PondSimulation(bounds: bounds, seed: 101)
+    simulation.setSeason(.spring)
+
+    // Advance simulation 120 steps so koi are actively dispersed and swimming
+    for _ in 0..<120 {
+        simulation.stepSimulation(dt: 1.0 / 60.0)
+    }
+
+    guard let context = CGContext(
+        data: nil,
+        width: Int(size.width),
+        height: Int(size.height),
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not create preview bitmap context."])
+    }
+
+    let nsContext = NSGraphicsContext(cgContext: context, flipped: false)
+    NSGraphicsContext.current = nsContext
+
+    context.setShouldAntialias(true)
+    PondRenderer().render(simulation: simulation, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
+
+    let shadowStyle = PondLighting.shadowStyle(for: .day)
+
+    // Spot 1: Basking on Pixel-Art River Stone (Top Left, near Lily Pads)
+    let stoneCenter = CGPoint(x: 280, y: 650)
+    PondTurtleArtwork.drawPixelRiverRock(at: stoneCenter, scale: 2.1, in: context, theme: .day)
+    PondTurtleArtwork.drawPixelTurtle(pose: .topDown, variant: .nagomi, at: CGPoint(x: stoneCenter.x + 2, y: stoneCenter.y + 6), heading: 0.18, scale: 1.65, in: context)
+
+    drawBadge(title: "Pose 1: Berjemur di Batu (Pixel-Art Nagomi)",
+              subtitle: "Bertengger santai di batu kali pixel dengan warna lumut giok",
+              at: CGPoint(x: stoneCenter.x - 120, y: stoneCenter.y - 125), in: context)
+
+    // Spot 2: Swimming in Open Water (Right Center, among Koi - Nagomi Palette)
+    let swimCenter = CGPoint(x: 940, y: 460)
+    PondTurtleArtwork.drawPixelShadow(pose: .swimming3D, at: swimCenter, scale: 1.65, heading: 0.28, in: context, shadowStyle: shadowStyle)
+    PondTurtleArtwork.drawPixelRipples(at: swimCenter, radius: 46.0, in: context)
+    PondTurtleArtwork.drawPixelTurtle(pose: .swimming3D, variant: .nagomi, at: swimCenter, heading: 0.28, scale: 1.65, in: context)
+
+    drawBadge(title: "Pose 2: Berenang Bersama Koi (Pixel-Art Nagomi)",
+              subtitle: "Mendayung lembut dengan warna koi kolam & perut terracotta",
+              at: CGPoint(x: swimCenter.x - 130, y: swimCenter.y - 125), in: context)
+
+    // Spot 3: Swimming in Open Water (Bottom Center-Right - Original Vibrant Palette)
+    let swim2Center = CGPoint(x: 690, y: 350)
+    PondTurtleArtwork.drawPixelShadow(pose: .swimming3D, at: swim2Center, scale: 1.65, heading: -0.22, in: context, shadowStyle: shadowStyle)
+    PondTurtleArtwork.drawPixelRipples(at: swim2Center, radius: 46.0, in: context)
+    PondTurtleArtwork.drawPixelTurtle(pose: .swimming3D, variant: .vibrant, at: swim2Center, heading: -0.22, scale: 1.65, in: context)
+
+    drawBadge(title: "Pose 3: Berenang Palet Asli Referensi (Vibrant Pixel-Art)",
+              subtitle: "Warna cerah asli sesuai pack referensi dengan pixel tajam",
+              at: CGPoint(x: 550, y: 235), in: context)
+
+    // Inset Reference Card (Bottom Left)
+    drawReferenceSummaryCard(in: context)
+
+    guard let cgImage = context.makeImage(),
+          let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not encode turtle pond preview as PNG."])
+    }
+
+    try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try png.write(to: outputURL)
+}
+
+private func renderSeasonsDesignPreview(to outputURL: URL) throws {
+    let size = CGSize(width: 1432, height: 1080)
+    let bounds = PondBounds(width: Double(size.width), height: Double(size.height))
+    let simulation = PondSimulation(bounds: bounds, initialInsects: [], seed: 42)
+    simulation.setSeason(.spring)
+
+    // Spawn an assortment of sakura petals and momiji leaves across the pond
+    let samplePositions: [(PondVector, FloatingDebrisType, Double, Int)] = [
+        (PondVector(x: 350.0, y: 380.0), .sakuraPetal, 0.4, 0),
+        (PondVector(x: 420.0, y: 340.0), .sakuraPetal, 1.2, 1),
+        (PondVector(x: 500.0, y: 460.0), .sakuraPetal, 2.1, 0),
+        (PondVector(x: 620.0, y: 320.0), .sakuraPetal, 0.8, 1),
+        (PondVector(x: 800.0, y: 420.0), .momijiLeaf, 0.5, 0),
+        (PondVector(x: 880.0, y: 510.0), .momijiLeaf, 1.9, 1),
+        (PondVector(x: 960.0, y: 360.0), .momijiLeaf, 2.7, 0),
+        (PondVector(x: 720.0, y: 650.0), .waterLilyPetal, 0.3, 0),
+        (PondVector(x: 610.0, y: 720.0), .waterLilyPetal, 1.4, 0)
+    ]
+
+    for (pos, type, angle, variant) in samplePositions {
+        var debris = FloatingDebris(
+            type: type,
+            position: pos,
+            angle: angle,
+            scale: 1.15,
+            variant: variant,
+            lifespan: 60.0,
+            seed: 100
+        )
+        debris.opacity = 0.95
+        simulation.spawnSeasonalDebris(at: pos, type: type)
+    }
+
+    guard let context = CGContext(
+        data: nil,
+        width: Int(size.width),
+        height: Int(size.height),
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not create preview bitmap context."])
+    }
+
+    context.setShouldAntialias(true)
+    PondRenderer().render(simulation: simulation, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
+
+    guard let cgImage = context.makeImage(),
+          let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not encode seasons preview as PNG."])
+    }
+
+    try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try png.write(to: outputURL)
+}
+
 final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var previewView: KoiPondPreviewView?
@@ -478,6 +678,24 @@ if let renderIndex = CommandLine.arguments.firstIndex(of: "--render-swan-design"
         print("[KoiWallpaperPreview] Swan design rendered with the app renderer: \(outputURL.path)")
     } catch {
         fatalError("Could not render swan design preview: \(error)")
+    }
+} else if let renderIndex = CommandLine.arguments.firstIndex(of: "--render-seasons-design") {
+    let outputPath = CommandLine.arguments.dropFirst(renderIndex + 1).first ?? "build/seasons-design-preview.png"
+    do {
+        let outputURL = URL(fileURLWithPath: outputPath, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        try renderSeasonsDesignPreview(to: outputURL)
+        print("[KoiWallpaperPreview] Seasons design rendered with the app renderer: \(outputURL.path)")
+    } catch {
+        fatalError("Could not render seasons design preview: \(error)")
+    }
+} else if let renderIndex = CommandLine.arguments.firstIndex(of: "--render-turtle-pond") {
+    let outputPath = CommandLine.arguments.dropFirst(renderIndex + 1).first ?? "build/turtle-pond-integration-preview.png"
+    do {
+        let outputURL = URL(fileURLWithPath: outputPath, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        try renderTurtlePondPreview(to: outputURL)
+        print("[KoiWallpaperPreview] Turtle pond design rendered with the app renderer: \(outputURL.path)")
+    } catch {
+        fatalError("Could not render turtle pond preview: \(error)")
     }
 } else {
     let app = NSApplication.shared

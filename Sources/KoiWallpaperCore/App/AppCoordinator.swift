@@ -93,6 +93,12 @@ public final class AppCoordinator: NSObject,
         screenManager.applyHUDVisibility(settingsManager.settings.showHUD)
         screenManager.applyMood(settingsManager.settings.pondMood)
         screenManager.applyRain(settingsManager.settings.isRainActive)
+        let initialSeason = (settingsManager.settings.seasonMode == .autoCalendar)
+            ? PondSeason.currentCalendarSeason()
+            : settingsManager.settings.manualSeason
+        screenManager.applySeason(initialSeason)
+        screenManager.applySeasonMode(settingsManager.settings.seasonMode)
+        screenManager.applyFloatingDebrisVisibility(settingsManager.settings.isFloatingDebrisEnabled)
         screenManager.applyGlobalPause(lifecyclePolicy.isPaused)
         screenManager.applyBatteryEcoMode(lifecyclePolicy.powerMonitor.isRunningOnBattery)
 
@@ -146,6 +152,12 @@ public final class AppCoordinator: NSObject,
         )
         statusController.updateMoodState(mood: settingsManager.settings.pondMood)
         statusController.updateRainState(isRainActive: settingsManager.settings.isRainActive)
+        statusController.updateSeasonState(
+            mode: settingsManager.settings.seasonMode,
+            manualSeason: settingsManager.settings.manualSeason,
+            currentSeason: initialSeason,
+            isDebrisEnabled: settingsManager.settings.isFloatingDebrisEnabled
+        )
         statusController.updateFullscreenState(isFullscreen: manualFullscreenController.isFullscreen)
         statusController.updateVisitorsState(count: screenManager.totalVisitorsCount)
         self.statusBarController = statusController
@@ -365,10 +377,22 @@ public final class AppCoordinator: NSObject,
         screenManager.applyInteractionMode(defaults.initialInteractionMode)
         screenManager.applyMood(defaults.pondMood)
         screenManager.applyRain(defaults.isRainActive)
+        let defaultSeason = (defaults.seasonMode == .autoCalendar)
+            ? PondSeason.currentCalendarSeason()
+            : defaults.manualSeason
+        screenManager.applySeason(defaultSeason)
+        screenManager.applySeasonMode(defaults.seasonMode)
+        screenManager.applyFloatingDebrisVisibility(defaults.isFloatingDebrisEnabled)
 
         statusBarController?.updateInteractionMode(defaults.initialInteractionMode)
         statusBarController?.updateMoodState(mood: defaults.pondMood)
         statusBarController?.updateRainState(isRainActive: defaults.isRainActive)
+        statusBarController?.updateSeasonState(
+            mode: defaults.seasonMode,
+            manualSeason: defaults.manualSeason,
+            currentSeason: defaultSeason,
+            isDebrisEnabled: defaults.isFloatingDebrisEnabled
+        )
         if previousTheme == resolvedTheme {
             statusBarController?.updateThemeState(
                 mode: defaults.timeOfDayMode,
@@ -398,6 +422,54 @@ public final class AppCoordinator: NSObject,
     public func statusBarDidToggleFullscreen(_ controller: StatusBarController) {
         logger.info("User requested toggle fullscreen mode.")
         manualFullscreenController.toggleFullscreen()
+    }
+
+    public func statusBarDidSelectSeasonMode(_ controller: StatusBarController, mode: SeasonMode) {
+        logger.info("User selected season mode: \(mode.rawValue)")
+        settingsManager.updateSettings { $0.seasonMode = mode }
+        let currentSeason = (mode == .autoCalendar)
+            ? PondSeason.currentCalendarSeason()
+            : settingsManager.settings.manualSeason
+        screenManager.applySeason(currentSeason, showBanner: true)
+        screenManager.applySeasonMode(mode)
+        statusBarController?.updateSeasonState(
+            mode: mode,
+            manualSeason: settingsManager.settings.manualSeason,
+            currentSeason: currentSeason,
+            isDebrisEnabled: settingsManager.settings.isFloatingDebrisEnabled
+        )
+    }
+
+    public func statusBarDidSelectManualSeason(_ controller: StatusBarController, season: PondSeason) {
+        logger.info("User selected manual season: \(season.rawValue)")
+        settingsManager.updateSettings {
+            $0.seasonMode = .manual
+            $0.manualSeason = season
+        }
+        screenManager.applySeason(season, showBanner: true)
+        screenManager.applySeasonMode(.manual)
+        statusBarController?.updateSeasonState(
+            mode: .manual,
+            manualSeason: season,
+            currentSeason: season,
+            isDebrisEnabled: settingsManager.settings.isFloatingDebrisEnabled
+        )
+    }
+
+    public func statusBarDidToggleFloatingDebris(_ controller: StatusBarController) {
+        let newEnabled = !settingsManager.settings.isFloatingDebrisEnabled
+        logger.info("User toggled floating debris: \(newEnabled)")
+        settingsManager.updateSettings { $0.isFloatingDebrisEnabled = newEnabled }
+        screenManager.applyFloatingDebrisVisibility(newEnabled)
+        let currentSeason = (settingsManager.settings.seasonMode == .autoCalendar)
+            ? PondSeason.currentCalendarSeason()
+            : settingsManager.settings.manualSeason
+        statusBarController?.updateSeasonState(
+            mode: settingsManager.settings.seasonMode,
+            manualSeason: settingsManager.settings.manualSeason,
+            currentSeason: currentSeason,
+            isDebrisEnabled: newEnabled
+        )
     }
 
     public func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {

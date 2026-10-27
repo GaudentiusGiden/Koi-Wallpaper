@@ -156,6 +156,12 @@ public final class WallpaperView: NSView {
     public private(set) var currentGreetingMessage: String?
     public private(set) var greetingRemainingDuration: Double = 0.0
 
+    public func showBannerMessage(_ message: String, duration: Double = 3.5) {
+        currentGreetingMessage = message
+        greetingRemainingDuration = duration
+        needsDisplay = true
+    }
+
     public func triggerGreetingIfDue(at date: Date = Date()) {
         let (shouldGreet, message) = simulation.dailyGreetingManager.checkAndTriggerGreeting(at: date)
         if shouldGreet, let msg = message {
@@ -453,7 +459,7 @@ public final class WallpaperView: NSView {
     }
 
     private func drawHUD(in context: CGContext) {
-        let hudRect = NSRect(x: 16, y: bounds.height - 110, width: 380, height: 94)
+        let hudRect = NSRect(x: 16, y: bounds.height - 128, width: 380, height: 112)
         let hudPath = NSBezierPath(roundedRect: hudRect, xRadius: 8, yRadius: 8)
 
         NSColor.black.withAlphaComponent(0.72).setFill()
@@ -495,9 +501,12 @@ public final class WallpaperView: NSView {
         let phaseStr = "Theme: \(targetTheme.displayName)\(transitionInfo)  ·  Mood: \(simulation.mood.displayName)"
         phaseStr.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 62), withAttributes: bodyAttrs)
 
+        let seasonStr = "Season: \(simulation.season.displayName)  ·  Debris: \(simulation.floatingDebris.count)/\(simulation.maxFloatingDebris)"
+        seasonStr.draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 80), withAttributes: bodyAttrs)
+
         let rainStr = simulation.isRainActive ? "Rain: ON" : "Rain: OFF"
         let modeStr = isInteractionMode ? "Mode: Interactive" : "Mode: Passthrough"
-        "\(modeStr)  ·  \(rainStr)".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 80), withAttributes: bodyAttrs)
+        "\(modeStr)  ·  \(rainStr)".draw(at: NSPoint(x: hudRect.minX + 12, y: hudRect.maxY - 98), withAttributes: bodyAttrs)
     }
 
     // MARK: - Mouse Event Handling

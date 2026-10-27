@@ -117,6 +117,9 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
     public var isRainActive: Bool
     public var idleBehaviorPolicy: IdleBehaviorPolicy
     public var launchAtLogin: Bool
+    public var seasonMode: SeasonMode
+    public var manualSeason: PondSeason
+    public var isFloatingDebrisEnabled: Bool
 
     public init(
         timeOfDayMode: TimeOfDayMode = .auto,
@@ -129,7 +132,10 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         pondMood: PondMood = .calm,
         isRainActive: Bool = false,
         idleBehaviorPolicy: IdleBehaviorPolicy = IdleBehaviorPolicy(),
-        launchAtLogin: Bool = false
+        launchAtLogin: Bool = false,
+        seasonMode: SeasonMode = .autoCalendar,
+        manualSeason: PondSeason = .spring,
+        isFloatingDebrisEnabled: Bool = true
     ) {
         self.timeOfDayMode = timeOfDayMode
         let resolvedTheme = manualTheme ?? manualTimePhase.theme
@@ -143,6 +149,9 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         self.isRainActive = isRainActive
         self.idleBehaviorPolicy = idleBehaviorPolicy
         self.launchAtLogin = launchAtLogin
+        self.seasonMode = seasonMode
+        self.manualSeason = manualSeason
+        self.isFloatingDebrisEnabled = isFloatingDebrisEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -157,6 +166,9 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         case isRainActive
         case idleBehaviorPolicy
         case launchAtLogin
+        case seasonMode
+        case manualSeason
+        case isFloatingDebrisEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -174,6 +186,9 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         isRainActive = try container.decodeIfPresent(Bool.self, forKey: .isRainActive) ?? false
         idleBehaviorPolicy = try container.decodeIfPresent(IdleBehaviorPolicy.self, forKey: .idleBehaviorPolicy) ?? IdleBehaviorPolicy()
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        seasonMode = try container.decodeIfPresent(SeasonMode.self, forKey: .seasonMode) ?? .autoCalendar
+        manualSeason = try container.decodeIfPresent(PondSeason.self, forKey: .manualSeason) ?? .spring
+        isFloatingDebrisEnabled = try container.decodeIfPresent(Bool.self, forKey: .isFloatingDebrisEnabled) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -189,5 +204,8 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         try container.encode(isRainActive, forKey: .isRainActive)
         try container.encode(idleBehaviorPolicy, forKey: .idleBehaviorPolicy)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
+        try container.encode(seasonMode, forKey: .seasonMode)
+        try container.encode(manualSeason, forKey: .manualSeason)
+        try container.encode(isFloatingDebrisEnabled, forKey: .isFloatingDebrisEnabled)
     }
 }

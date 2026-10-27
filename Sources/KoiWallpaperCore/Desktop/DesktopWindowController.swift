@@ -66,6 +66,40 @@ public final class DesktopWindowController {
         wallpaperView.needsDisplay = true
     }
 
+    public func applySeason(_ season: PondSeason, showBanner: Bool = false) {
+        wallpaperView.simulation.setSeason(season)
+        if wallpaperView.simulation.isFloatingDebrisEnabled {
+            wallpaperView.simulation.populateSeasonalCluster(count: 10)
+        }
+        if showBanner {
+            wallpaperView.showBannerMessage(season.bannerMessage, duration: 3.5)
+        }
+        wallpaperView.needsDisplay = true
+    }
+
+    public func applySeasonMode(_ mode: SeasonMode) {
+        wallpaperView.simulation.setSeasonMode(mode)
+        if mode == .autoCalendar {
+            let current = PondSeason.currentCalendarSeason()
+            if wallpaperView.simulation.isFloatingDebrisEnabled {
+                wallpaperView.simulation.populateSeasonalCluster(count: 10)
+            }
+            wallpaperView.showBannerMessage("Mode Musim: Kalender Otomatis (\(current.displayName))", duration: 3.5)
+        }
+        wallpaperView.needsDisplay = true
+    }
+
+    public func applyFloatingDebris(_ enabled: Bool) {
+        wallpaperView.simulation.setFloatingDebrisEnabled(enabled)
+        if enabled {
+            wallpaperView.simulation.populateSeasonalCluster(count: 10)
+            wallpaperView.showBannerMessage("Objek Mengapung Musim: Aktif", duration: 3.0)
+        } else {
+            wallpaperView.showBannerMessage("Objek Mengapung Musim: Nonaktif", duration: 3.0)
+        }
+        wallpaperView.needsDisplay = true
+    }
+
     // MARK: - Display & Geometry Updates
 
     /// Updates this host to match a reconfigured screen geometry or display scale factor.

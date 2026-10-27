@@ -12,6 +12,8 @@ open class KoiWallpaperSaverView: ScreenSaverView {
     public private(set) var wallpaperView: WallpaperView?
     public let settingsManager: SettingsManager
     public private(set) var timeOfDayController: TimeOfDayController?
+    private var occlusionObserver: Any?
+    private var wasAttachedToWindow = false
 
     public override init?(frame: NSRect, isPreview: Bool) {
         self.settingsManager = SettingsManager(store: SharedFileSettingsStore())
@@ -27,6 +29,13 @@ open class KoiWallpaperSaverView: ScreenSaverView {
         setupPondView(frame: self.bounds)
     }
 
+    deinit {
+        if let observer = occlusionObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        wallpaperView?.stopAnimationTimer()
+    }
+
     private func setupPondView(frame: NSRect) {
         wantsLayer = true
         let view = WallpaperView(frame: NSRect(origin: .zero, size: frame.size))
@@ -34,7 +43,15 @@ open class KoiWallpaperSaverView: ScreenSaverView {
         view.isInteractionMode = false
         view.showHUD = false
 
+        if isPreview {
+            view.isBatteryEcoMode = true
+        }
+
         applySettings(to: view)
+        // Ensure the internal timer does not run until startAnimation() is called by the system
+        view.isPaused = true
+        view.stopAnimationTimer()
+
         addSubview(view)
         self.wallpaperView = view
     }
@@ -63,8 +80,68 @@ open class KoiWallpaperSaverView: ScreenSaverView {
         wallpaperView?.setFrameSize(newSize)
     }
 
+    open override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            wasAttachedToWindow = true
+            setupOcclusionObservation()
+            evaluateActiveState()
+        } else if wasAttachedToWindow {
+            // View was detached from its window hierarchy: immediately freeze animation
+            wallpaperView?.isPaused = true
+            wallpaperView?.stopAnimationTimer()
+        }
+    }
+
+    open override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if let observer = occlusionObserver {
+            NotificationCenter.default.removeObserver(observer)
+            occlusionObserver = nil
+        }
+    }
+
+    private func setupOcclusionObservation() {
+        if let observer = occlusionObserver {
+            NotificationCenter.default.removeObserver(observer)
+            occlusionObserver = nil
+        }
+        guard let window = self.window else { return }
+        occlusionObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.evaluateActiveState()
+        }
+    }
+
+    private func evaluateActiveState() {
+        guard isAnimating else { return }
+        if let window = self.window {
+            let isVisible = window.occlusionState.contains(.visible) && !isHiddenOrHasHiddenAncestor
+            if isVisible {
+                if wallpaperView?.isPaused == true {
+                    wallpaperView?.isPaused = false
+                    wallpaperView?.startAnimationTimer()
+                }
+            } else {
+                if wallpaperView?.isPaused == false {
+                    wallpaperView?.isPaused = true
+                    wallpaperView?.stopAnimationTimer()
+                }
+            }
+        }
+    }
+
     open override func startAnimation() {
         super.startAnimation()
+        if let window = self.window, !window.occlusionState.contains(.visible) {
+            // Attached to a window but currently occluded (e.g. background tab or closed preview)
+            wallpaperView?.isPaused = true
+            wallpaperView?.stopAnimationTimer()
+            return
+        }
         if let view = wallpaperView {
             applySettings(to: view)
             view.isPaused = false
@@ -79,8 +156,14 @@ open class KoiWallpaperSaverView: ScreenSaverView {
     }
 
     open override func animateOneFrame() {
-        // Notifies WindowServer layer dirty rects in synchronization with ScreenSaverEngine
-        wallpaperView?.needsDisplay = true
+        guard isAnimating else { return }
+        if let window = self.window, !window.occlusionState.contains(.visible) {
+            return
+        }
+        // If internal timer is already ticking, animateOneFrame does not need to duplicate needsDisplay
+        if wallpaperView?.isAnimating != true {
+            wallpaperView?.needsDisplay = true
+        }
     }
 
     open override var hasConfigureSheet: Bool {
