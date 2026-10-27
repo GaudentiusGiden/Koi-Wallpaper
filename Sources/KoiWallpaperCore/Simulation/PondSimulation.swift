@@ -249,10 +249,8 @@ public final class PondSimulation: @unchecked Sendable {
             decorativeSchools[i].resize(oldBounds: oldBounds, newBounds: bounds)
         }
         frog.updateLocations(bounds: bounds)
-        if turtle.state == .swimming {
-            turtle.position = CGPoint(x: turtle.position.x * scaleX, y: turtle.position.y * scaleY)
-        }
-        turtle.updateLocations(bounds: bounds)
+        turtle.position = CGPoint(x: turtle.position.x * scaleX, y: turtle.position.y * scaleY)
+        turtle.clampToBounds(bounds: bounds)
 
         clampAllEntitiesToBounds()
         resolveFishSeparation()
@@ -277,10 +275,7 @@ public final class PondSimulation: @unchecked Sendable {
         for i in 0..<floatingDebris.count {
             floatingDebris[i].position = bounds.clamped(floatingDebris[i].position, inset: 10.0)
         }
-        if turtle.state == .swimming {
-            let p = bounds.clamped(PondVector(x: Double(turtle.position.x), y: Double(turtle.position.y)), inset: 32.0)
-            turtle.position = CGPoint(x: p.x, y: p.y)
-        }
+        turtle.clampToBounds(bounds: bounds)
     }
 
     // MARK: - Input Handling
@@ -296,10 +291,10 @@ public final class PondSimulation: @unchecked Sendable {
             frog.triggerJumpIfPerched()
         }
 
-        // Startle basking turtle if click is nearby
+        // Startle swimming turtle if click is nearby (speed burst panic)
         let turtleDist = hypot(point.x - Double(turtle.position.x), point.y - Double(turtle.position.y))
-        if turtleDist < 54.0 {
-            turtle.triggerStartleIfBasking()
+        if turtleDist < 55.0 {
+            turtle.triggerStartle(awayFrom: CGPoint(x: point.x, y: point.y))
         }
 
         // Spawn ripple (cyan)

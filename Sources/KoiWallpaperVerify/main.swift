@@ -3026,26 +3026,23 @@ recordTest(.m7Seasons, "T13.4 StatusBarController Season Submenu Items & Action 
 // --- Section 14: Pond Turtle (Kame) Visual Compositor & Palette Verification ---
 print("\n--- Section 14: Pond Turtle (Kame) Visual Compositor & Palette Verification ---")
 
-// T14.1 Turtle Pure Pixel-Art Sprite Caches & Palettes
+// T14.1 Turtle Procedural Palettes & Scute Color Harmony
 var t14_1_passed = false
 var t14_1_details = ""
 do {
-    let topNagomi = PondTurtleArtwork.spriteImage(pose: .topDown, variant: .nagomi)
-    let swimNagomi = PondTurtleArtwork.spriteImage(pose: .swimming3D, variant: .nagomi)
-    let topVibrant = PondTurtleArtwork.spriteImage(pose: .topDown, variant: .vibrant)
-    let swimVibrant = PondTurtleArtwork.spriteImage(pose: .swimming3D, variant: .vibrant)
+    let nagomiPal = PondTurtleArtwork.palette(for: .nagomi)
+    let ishigamePal = PondTurtleArtwork.palette(for: .ishigame)
 
-    let allLoaded = (topNagomi != nil) && (swimNagomi != nil) && (topVibrant != nil) && (swimVibrant != nil)
-    let dimsValid = (topNagomi?.width == 48) && (topNagomi?.height == 54) &&
-                    (swimNagomi?.width == 50) && (swimNagomi?.height == 54)
+    let nagomiValid = nagomiPal.shellMid.alpha > 0.9 && nagomiPal.skinBase.alpha > 0.9
+    let ishigameValid = ishigamePal.shellMid.alpha > 0.9 && ishigamePal.skinBase.alpha > 0.9
 
-    t14_1_passed = allLoaded && dimsValid
-    t14_1_details = "allLoaded=\(allLoaded), dimsValid=\(dimsValid)"
+    t14_1_passed = nagomiValid && ishigameValid
+    t14_1_details = "nagomiValid=\(nagomiValid), ishigameValid=\(ishigameValid)"
 }
-recordTest(.viewState, "T14.1 Turtle Pure Pixel-Art Sprite Caches & Palettes",
+recordTest(.viewState, "T14.1 Turtle Procedural Palettes & Scute Color Harmony",
            passed: t14_1_passed, details: t14_1_details)
 
-// T14.2 Native Compositor Turtle Rendering Stability in Basking & Swimming States
+// T14.2 Native Compositor Turtle Rendering Stability in Swimming & Startled States
 var t14_2_passed = false
 var t14_2_details = ""
 do {
@@ -3066,22 +3063,25 @@ do {
 
     let renderer = PondRenderer()
 
-    // 1. Render basking state
-    renderer.render(simulation: sim, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
-    let baskingRenderOk = (context.makeImage() != nil)
-
-    // 2. Render swimming state
+    // 1. Render calm swimming state
     sim.turtle.state = .swimming
     sim.turtle.position = CGPoint(x: 400.0, y: 300.0)
     renderer.render(simulation: sim, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
     let swimmingRenderOk = (context.makeImage() != nil)
 
-    t14_2_passed = baskingRenderOk && swimmingRenderOk
-    t14_2_details = "baskingRenderOk=\(baskingRenderOk), swimmingRenderOk=\(swimmingRenderOk)"
+    // 2. Render startled speed burst state
+    sim.turtle.state = .startled
+    sim.turtle.speed = 46.0
+    sim.turtle.paddlePhase = 1.8
+    renderer.render(simulation: sim, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
+    let startledRenderOk = (context.makeImage() != nil)
+
+    t14_2_passed = swimmingRenderOk && startledRenderOk
+    t14_2_details = "swimmingRenderOk=\(swimmingRenderOk), startledRenderOk=\(startledRenderOk)"
 } catch {
     t14_2_details = "Render failure: \(error)"
 }
-recordTest(.viewState, "T14.2 Native Compositor Turtle Rendering Stability in Basking & Swimming States",
+recordTest(.viewState, "T14.2 Native Compositor Turtle Rendering Stability in Swimming & Startled States",
            passed: t14_2_passed, details: t14_2_details)
 
 // Worker process termination: Save metrics and exit cleanly.

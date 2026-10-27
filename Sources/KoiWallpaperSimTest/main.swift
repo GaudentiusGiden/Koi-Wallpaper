@@ -1551,98 +1551,74 @@ do {
     let pondBounds = PondBounds(width: 1280.0, height: 800.0)
     let turtleSim = PondSimulation(bounds: pondBounds, seed: 42)
 
-    // T18.1 Pond Turtle Initial State & Shoreline Stone Location
+    // T18.1 Pond Turtle Placement & Open Water Swimming State
     let initialTurtle = turtleSim.turtle
-    let expectedRockX = 0.194 * 1280.0
-    let expectedRockY = 0.722 * 800.0
-    let rockMatches = abs(initialTurtle.rockPosition.x - CGFloat(expectedRockX)) < 1.0 &&
-                      abs(initialTurtle.rockPosition.y - CGFloat(expectedRockY)) < 1.0
-    let t18_1Passed = initialTurtle.state == .basking &&
+    let t18_1Passed = initialTurtle.state == .swimming &&
                       initialTurtle.isVisible &&
-                      initialTurtle.position == initialTurtle.rockPosition &&
-                      rockMatches
+                      initialTurtle.speed == 20.0 &&
+                      initialTurtle.position.x >= 40.0 && initialTurtle.position.x <= 1240.0 &&
+                      initialTurtle.position.y >= 40.0 && initialTurtle.position.y <= 760.0
     recordSimTest(
-        "T18.1 Pond Turtle Initial State & Shoreline Stone Location",
+        "T18.1 Pond Turtle Placement & Open Water Swimming State",
         passed: t18_1Passed,
-        details: "state=\(initialTurtle.state), isVisible=\(initialTurtle.isVisible), rockPos=(\(initialTurtle.rockPosition.x), \(initialTurtle.rockPosition.y)), rockMatches=\(rockMatches)"
+        details: "state=\(initialTurtle.state), isVisible=\(initialTurtle.isVisible), pos=(\(initialTurtle.position.x), \(initialTurtle.position.y)), speed=\(initialTurtle.speed)"
     )
 
-    // T18.2 Autonomous Basking to Swimming Lifecycle Progression
+    // T18.2 Autonomous Wandering, Flipper Paddle Progression & Boundary Confinement
     var testTurtle = PondTurtle(bounds: pondBounds)
-    testTurtle.stateDuration = 0.10 // shorten for deterministic test progression
+    let initialPaddle = testTurtle.paddlePhase
+    let initialPos = testTurtle.position
 
     var ripplesSpawned: [RippleType] = []
     let rippleCollector: (CGPoint, RippleType) -> Void = { _, rType in
         ripplesSpawned.append(rType)
     }
 
-    // Step 1: Basking expires -> enters slidingIn
-    testTurtle.update(dt: 0.12, bounds: pondBounds, spawnRipple: rippleCollector)
-    let reachedSlidingIn = testTurtle.state == .slidingIn
-
-    // Step 2: Slide into water -> enters swimming
-    testTurtle.stateDuration = 0.10
-    testTurtle.update(dt: 0.12, bounds: pondBounds, spawnRipple: rippleCollector)
-    let reachedSwimming = testTurtle.state == .swimming
-
-    // Step 3: Swimming cycle advances paddle stroke & wanders within bounds
-    let initialPaddle = testTurtle.paddlePhase
-    for _ in 0..<30 {
+    var stayedInBounds = true
+    for _ in 0..<300 {
         testTurtle.update(dt: 1.0 / 60.0, bounds: pondBounds, spawnRipple: rippleCollector)
+        if testTurtle.position.x < 40.0 || testTurtle.position.x > 1240.0 ||
+           testTurtle.position.y < 40.0 || testTurtle.position.y > 760.0 {
+            stayedInBounds = false
+        }
     }
+
     let paddleAdvanced = testTurtle.paddlePhase > initialPaddle
-    let stayedInBounds = testTurtle.position.x >= 40.0 && testTurtle.position.x <= CGFloat(pondBounds.width - 40.0) &&
-                         testTurtle.position.y >= 40.0 && testTurtle.position.y <= CGFloat(pondBounds.height - 40.0)
+    let displacement = hypot(Double(testTurtle.position.x - initialPos.x), Double(testTurtle.position.y - initialPos.y))
+    let movedSmoothly = displacement > 40.0
 
-    // Step 4: Return to rock
-    testTurtle.stateDuration = 0.10
-    testTurtle.update(dt: 0.12, bounds: pondBounds, spawnRipple: rippleCollector) // swimming -> returning
-    let reachedReturning = testTurtle.state == .returning
-
-    // Step 5: Fast forward return to waterPosition -> climbingOut
-    testTurtle.position = testTurtle.waterPosition
-    testTurtle.update(dt: 0.05, bounds: pondBounds, spawnRipple: rippleCollector)
-    let reachedClimbing = testTurtle.state == .climbingOut
-
-    // Step 6: Climb onto rock -> basking
-    testTurtle.stateDuration = 0.10
-    testTurtle.update(dt: 0.12, bounds: pondBounds, spawnRipple: rippleCollector)
-    let backToBasking = testTurtle.state == .basking
-
-    let t18_2Passed = reachedSlidingIn && reachedSwimming && paddleAdvanced && stayedInBounds && reachedReturning && reachedClimbing && backToBasking
+    let t18_2Passed = paddleAdvanced && movedSmoothly && stayedInBounds
     recordSimTest(
-        "T18.2 Autonomous Basking to Swimming Lifecycle Progression",
+        "T18.2 Autonomous Wandering, Flipper Paddle Progression & Boundary Confinement",
         passed: t18_2Passed,
-        details: "slidingIn=\(reachedSlidingIn), swimming=\(reachedSwimming), paddleAdvanced=\(paddleAdvanced), stayedInBounds=\(stayedInBounds), returning=\(reachedReturning), climbing=\(reachedClimbing), backToBasking=\(backToBasking)"
+        details: "paddleAdvanced=\(paddleAdvanced), displacement=\(displacement)pt, stayedInBounds=\(stayedInBounds)"
     )
 
-    // T18.3 Interactive Startle Reaction & Dive
+    // T18.3 Interactive Click Startle & Speed-Burst Response
     let startleSim = PondSimulation(bounds: pondBounds, seed: 100)
-    let rockPoint = PondVector(x: Double(startleSim.turtle.rockPosition.x), y: Double(startleSim.turtle.rockPosition.y))
+    let turtlePos = PondVector(x: Double(startleSim.turtle.position.x), y: Double(startleSim.turtle.position.y))
 
-    // Click far away -> turtle ignores
-    let farClick = PondVector(x: rockPoint.x + 200.0, y: rockPoint.y + 200.0)
+    // Click far away -> turtle ignores and continues calm swimming
+    let farClick = PondVector(x: turtlePos.x + 250.0, y: turtlePos.y + 250.0)
     startleSim.handleWaterClick(at: farClick)
-    let ignoredFarClick = startleSim.turtle.state == .basking
+    let ignoredFarClick = startleSim.turtle.state == .swimming && startleSim.turtle.speed == 20.0
 
-    // Click right next to basking turtle -> startled!
-    let nearClick = PondVector(x: rockPoint.x + 15.0, y: rockPoint.y - 10.0)
+    // Click right next to swimming turtle -> startled speed burst!
+    let nearClick = PondVector(x: turtlePos.x + 20.0, y: turtlePos.y - 15.0)
     startleSim.handleWaterClick(at: nearClick)
-    let startledByClick = startleSim.turtle.state == .startled
+    let startledByClick = startleSim.turtle.state == .startled && startleSim.turtle.speed == 46.0
 
-    // Advance 0.33s (20 frames) -> turtle dives into slidingIn and spawns splash ripple
-    let rippleCountBefore = startleSim.ripples.count
-    for _ in 0..<20 {
+    // Advance 2.5s (150 frames) -> settles back to calm swimming
+    for _ in 0..<150 {
         startleSim.advance(deltaTime: 1.0 / 60.0)
     }
-    let divedIntoWater = startleSim.turtle.state == .slidingIn || startleSim.turtle.state == .swimming
-    let splashSpawned = startleSim.ripples.count > rippleCountBefore
+    let calmedBackToSwimming = startleSim.turtle.state == .swimming && startleSim.turtle.speed == 20.0
 
-    let t18_3Passed = ignoredFarClick && startledByClick && divedIntoWater && splashSpawned
+    let t18_3Passed = ignoredFarClick && startledByClick && calmedBackToSwimming
     recordSimTest(
-        "T18.3 Interactive Startle Reaction & Dive",
+        "T18.3 Interactive Click Startle & Speed-Burst Response",
         passed: t18_3Passed,
-        details: "ignoredFarClick=\(ignoredFarClick), startledByClick=\(startledByClick), divedIntoWater=\(divedIntoWater), splashSpawned=\(splashSpawned)"
+        details: "ignoredFarClick=\(ignoredFarClick), startledByClick=\(startledByClick), calmedBack=\(calmedBackToSwimming)"
     )
 
     // T18.4 Turtle Pause Stasis & Zero Drift Guarantee
@@ -1650,7 +1626,7 @@ do {
     pauseSim.isPaused = true
     let pausePos = pauseSim.turtle.position
     let pauseStateTime = pauseSim.turtle.stateTime
-    let pausePhase = pauseSim.turtle.breathPhase
+    let pausePhase = pauseSim.turtle.paddlePhase
 
     for _ in 0..<60 {
         pauseSim.advance(deltaTime: 1.0 / 60.0)
@@ -1658,33 +1634,34 @@ do {
 
     let afterPos = pauseSim.turtle.position
     let afterStateTime = pauseSim.turtle.stateTime
-    let afterPhase = pauseSim.turtle.breathPhase
+    let afterPhase = pauseSim.turtle.paddlePhase
 
     let pauseSuccess = (pausePos == afterPos) && (pauseStateTime == afterStateTime) && (pausePhase == afterPhase)
     recordSimTest(
         "T18.4 Turtle Pause Stasis & Zero Drift Guarantee",
         passed: pauseSuccess,
-        details: "positionFrozen=\(pausePos == afterPos), stateTimeFrozen=\(pauseStateTime == afterStateTime), breathPhaseFrozen=\(pausePhase == afterPhase)"
+        details: "positionFrozen=\(pausePos == afterPos), stateTimeFrozen=\(pauseStateTime == afterStateTime), paddlePhaseFrozen=\(pausePhase == afterPhase)"
     )
 
     // T18.5 Turtle Proportional Bounds Resize Adaptability
     let resizeSim = PondSimulation(bounds: pondBounds, seed: 300)
-    let oldRockPos = resizeSim.turtle.rockPosition
+    let oldPos = resizeSim.turtle.position
 
     // Resize to larger screen (1920x1080)
     resizeSim.resize(width: 1920.0, height: 1080.0)
-    let newRockPos = resizeSim.turtle.rockPosition
-    let expectedScaledX = 0.194 * 1920.0
-    let expectedScaledY = 0.722 * 1080.0
-    let scaledCorrectly = abs(newRockPos.x - CGFloat(expectedScaledX)) < 1.0 &&
-                          abs(newRockPos.y - CGFloat(expectedScaledY)) < 1.0
-    let turtlePositionUpdated = resizeSim.turtle.position == newRockPos
+    let newPos = resizeSim.turtle.position
+    let expectedScaledX = oldPos.x * (1920.0 / 1280.0)
+    let expectedScaledY = oldPos.y * (1080.0 / 800.0)
+    let scaledCorrectly = abs(newPos.x - expectedScaledX) < 1.0 &&
+                          abs(newPos.y - expectedScaledY) < 1.0
+    let insideNewBounds = newPos.x >= 40.0 && newPos.x <= 1880.0 &&
+                          newPos.y >= 40.0 && newPos.y <= 1040.0
 
-    let t18_5Passed = scaledCorrectly && turtlePositionUpdated
+    let t18_5Passed = scaledCorrectly && insideNewBounds
     recordSimTest(
         "T18.5 Turtle Proportional Bounds Resize Adaptability",
         passed: t18_5Passed,
-        details: "oldRock=(\(oldRockPos.x), \(oldRockPos.y)), newRock=(\(newRockPos.x), \(newRockPos.y)), scaledCorrectly=\(scaledCorrectly), positionUpdated=\(turtlePositionUpdated)"
+        details: "oldPos=(\(oldPos.x), \(oldPos.y)), newPos=(\(newPos.x), \(newPos.y)), scaledCorrectly=\(scaledCorrectly), insideBounds=\(insideNewBounds)"
     )
 }
 

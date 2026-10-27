@@ -139,34 +139,33 @@ private func renderTurtlePondPreview(to outputURL: URL) throws {
 
     let shadowStyle = PondLighting.shadowStyle(for: .day)
 
-    // Spot 1: Basking on Pixel-Art River Stone (Top Left, near Lily Pads)
-    let stoneCenter = CGPoint(x: 280, y: 650)
-    PondTurtleArtwork.drawPixelRiverRock(at: stoneCenter, scale: 2.1, in: context, theme: .day)
-    PondTurtleArtwork.drawPixelTurtle(pose: .topDown, variant: .nagomi, at: CGPoint(x: stoneCenter.x + 2, y: stoneCenter.y + 6), heading: 0.18, scale: 1.65, in: context)
+    // Turtle 1: Swimming in Open Water (Nagomi Moss Jade)
+    var turtle1 = PondTurtle(bounds: PondBounds(width: Double(size.width), height: Double(size.height)))
+    turtle1.position = CGPoint(x: 480, y: 520)
+    turtle1.heading = 0.35
+    turtle1.paddlePhase = 1.8
+    turtle1.variant = .nagomi
 
-    drawBadge(title: "Pose 1: Berjemur di Batu (Pixel-Art Nagomi)",
-              subtitle: "Bertengger santai di batu kali pixel dengan warna lumut giok",
-              at: CGPoint(x: stoneCenter.x - 120, y: stoneCenter.y - 125), in: context)
+    PondTurtleArtwork.drawShadow(turtle1, in: context, shadowStyle: shadowStyle)
+    PondTurtleArtwork.draw(turtle1, in: context, theme: .day)
 
-    // Spot 2: Swimming in Open Water (Right Center, among Koi - Nagomi Palette)
-    let swimCenter = CGPoint(x: 940, y: 460)
-    PondTurtleArtwork.drawPixelShadow(pose: .swimming3D, at: swimCenter, scale: 1.65, heading: 0.28, in: context, shadowStyle: shadowStyle)
-    PondTurtleArtwork.drawPixelRipples(at: swimCenter, radius: 46.0, in: context)
-    PondTurtleArtwork.drawPixelTurtle(pose: .swimming3D, variant: .nagomi, at: swimCenter, heading: 0.28, scale: 1.65, in: context)
+    drawBadge(title: "Kura-kura Kolam (Nagomi Moss Jade)",
+              subtitle: "Berenang bebas tampak atas dengan lempeng giok lumut & dayungan alami",
+              at: CGPoint(x: turtle1.position.x - 120, y: turtle1.position.y - 120), in: context)
 
-    drawBadge(title: "Pose 2: Berenang Bersama Koi (Pixel-Art Nagomi)",
-              subtitle: "Mendayung lembut dengan warna koi kolam & perut terracotta",
-              at: CGPoint(x: swimCenter.x - 130, y: swimCenter.y - 125), in: context)
+    // Turtle 2: Swimming in Open Water (Golden Amber Ishigame)
+    var turtle2 = PondTurtle(bounds: PondBounds(width: Double(size.width), height: Double(size.height)))
+    turtle2.position = CGPoint(x: 940, y: 380)
+    turtle2.heading = -0.45
+    turtle2.paddlePhase = 4.2
+    turtle2.variant = .ishigame
 
-    // Spot 3: Swimming in Open Water (Bottom Center-Right - Original Vibrant Palette)
-    let swim2Center = CGPoint(x: 690, y: 350)
-    PondTurtleArtwork.drawPixelShadow(pose: .swimming3D, at: swim2Center, scale: 1.65, heading: -0.22, in: context, shadowStyle: shadowStyle)
-    PondTurtleArtwork.drawPixelRipples(at: swim2Center, radius: 46.0, in: context)
-    PondTurtleArtwork.drawPixelTurtle(pose: .swimming3D, variant: .vibrant, at: swim2Center, heading: -0.22, scale: 1.65, in: context)
+    PondTurtleArtwork.drawShadow(turtle2, in: context, shadowStyle: shadowStyle)
+    PondTurtleArtwork.draw(turtle2, in: context, theme: .day)
 
-    drawBadge(title: "Pose 3: Berenang Palet Asli Referensi (Vibrant Pixel-Art)",
-              subtitle: "Warna cerah asli sesuai pack referensi dengan pixel tajam",
-              at: CGPoint(x: 550, y: 235), in: context)
+    drawBadge(title: "Kura-kura Kolam (Golden Amber Ishigame)",
+              subtitle: "Warna batu ambar keemasan khas kura-kura kolam Jepang alami",
+              at: CGPoint(x: turtle2.position.x - 130, y: turtle2.position.y - 120), in: context)
 
     // Inset Reference Card (Bottom Left)
     drawReferenceSummaryCard(in: context)
