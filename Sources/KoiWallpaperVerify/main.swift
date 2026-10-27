@@ -3023,6 +3023,67 @@ do {
 recordTest(.m7Seasons, "T13.4 StatusBarController Season Submenu Items & Action Wiring",
            passed: t13_4_passed, details: t13_4_details)
 
+// --- Section 14: Pond Turtle (Kame) Visual Compositor & Palette Verification ---
+print("\n--- Section 14: Pond Turtle (Kame) Visual Compositor & Palette Verification ---")
+
+// T14.1 Turtle Pure Pixel-Art Sprite Caches & Palettes
+var t14_1_passed = false
+var t14_1_details = ""
+do {
+    let topNagomi = PondTurtleArtwork.spriteImage(pose: .topDown, variant: .nagomi)
+    let swimNagomi = PondTurtleArtwork.spriteImage(pose: .swimming3D, variant: .nagomi)
+    let topVibrant = PondTurtleArtwork.spriteImage(pose: .topDown, variant: .vibrant)
+    let swimVibrant = PondTurtleArtwork.spriteImage(pose: .swimming3D, variant: .vibrant)
+
+    let allLoaded = (topNagomi != nil) && (swimNagomi != nil) && (topVibrant != nil) && (swimVibrant != nil)
+    let dimsValid = (topNagomi?.width == 48) && (topNagomi?.height == 54) &&
+                    (swimNagomi?.width == 50) && (swimNagomi?.height == 54)
+
+    t14_1_passed = allLoaded && dimsValid
+    t14_1_details = "allLoaded=\(allLoaded), dimsValid=\(dimsValid)"
+}
+recordTest(.viewState, "T14.1 Turtle Pure Pixel-Art Sprite Caches & Palettes",
+           passed: t14_1_passed, details: t14_1_details)
+
+// T14.2 Native Compositor Turtle Rendering Stability in Basking & Swimming States
+var t14_2_passed = false
+var t14_2_details = ""
+do {
+    let simBounds = PondBounds(width: 800, height: 600)
+    let sim = PondSimulation(bounds: simBounds, seed: 888)
+    let size = CGSize(width: 800, height: 600)
+    guard let context = CGContext(
+        data: nil,
+        width: 800,
+        height: 600,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        throw NSError(domain: "Test", code: 1, userInfo: nil)
+    }
+
+    let renderer = PondRenderer()
+
+    // 1. Render basking state
+    renderer.render(simulation: sim, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
+    let baskingRenderOk = (context.makeImage() != nil)
+
+    // 2. Render swimming state
+    sim.turtle.state = .swimming
+    sim.turtle.position = CGPoint(x: 400.0, y: 300.0)
+    renderer.render(simulation: sim, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
+    let swimmingRenderOk = (context.makeImage() != nil)
+
+    t14_2_passed = baskingRenderOk && swimmingRenderOk
+    t14_2_details = "baskingRenderOk=\(baskingRenderOk), swimmingRenderOk=\(swimmingRenderOk)"
+} catch {
+    t14_2_details = "Render failure: \(error)"
+}
+recordTest(.viewState, "T14.2 Native Compositor Turtle Rendering Stability in Basking & Swimming States",
+           passed: t14_2_passed, details: t14_2_details)
+
 // Worker process termination: Save metrics and exit cleanly.
 // T9.11, final summary, and post-process filesystem isolation verification
 // are executed by the supervisor process after this worker terminates and cfprefsd flushes.

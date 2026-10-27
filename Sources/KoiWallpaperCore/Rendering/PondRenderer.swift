@@ -467,6 +467,7 @@ public final class PondRenderer {
                     drawShadowOnly: true
                 )
             }
+            PondTurtleArtwork.drawShadow(simulation.turtle, in: bitmap, shadowStyle: shadowStyle)
             for fish in simulation.fish {
                 KoiArtwork.draw(fish, in: bitmap, theme: toTheme, customFishAmbientStyle: fishAmbientStyle)
             }
@@ -481,6 +482,7 @@ public final class PondRenderer {
                     drawShadowOnly: false
                 )
             }
+            PondTurtleArtwork.draw(simulation.turtle, in: bitmap, theme: toTheme)
             bitmap.restoreGState()
 
             if let image = bitmap.makeImage() {

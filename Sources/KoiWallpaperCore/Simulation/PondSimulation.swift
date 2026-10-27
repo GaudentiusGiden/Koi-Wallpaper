@@ -20,6 +20,7 @@ public final class PondSimulation: @unchecked Sendable {
     public private(set) var decorativeSchools: [DecorativeSchool] = []
     public private(set) var floatingDebris: [FloatingDebris] = []
     public var frog: PondFrog
+    public var turtle: PondTurtle
 
     public var isPaused: Bool = false
     public var mood: PondMood = .calm
@@ -120,6 +121,7 @@ public final class PondSimulation: @unchecked Sendable {
         }
 
         self.frog = PondFrog.initial(bounds: bounds)
+        self.turtle = PondTurtle.initial(bounds: bounds)
 
         if let customFish = initialFish {
             self.fish = customFish
@@ -247,6 +249,10 @@ public final class PondSimulation: @unchecked Sendable {
             decorativeSchools[i].resize(oldBounds: oldBounds, newBounds: bounds)
         }
         frog.updateLocations(bounds: bounds)
+        if turtle.state == .swimming {
+            turtle.position = CGPoint(x: turtle.position.x * scaleX, y: turtle.position.y * scaleY)
+        }
+        turtle.updateLocations(bounds: bounds)
 
         clampAllEntitiesToBounds()
         resolveFishSeparation()
@@ -271,6 +277,10 @@ public final class PondSimulation: @unchecked Sendable {
         for i in 0..<floatingDebris.count {
             floatingDebris[i].position = bounds.clamped(floatingDebris[i].position, inset: 10.0)
         }
+        if turtle.state == .swimming {
+            let p = bounds.clamped(PondVector(x: Double(turtle.position.x), y: Double(turtle.position.y)), inset: 32.0)
+            turtle.position = CGPoint(x: p.x, y: p.y)
+        }
     }
 
     // MARK: - Input Handling
@@ -284,6 +294,12 @@ public final class PondSimulation: @unchecked Sendable {
         let frogDist = hypot(point.x - Double(frog.position.x), point.y - Double(frog.position.y))
         if frogDist < 48.0 {
             frog.triggerJumpIfPerched()
+        }
+
+        // Startle basking turtle if click is nearby
+        let turtleDist = hypot(point.x - Double(turtle.position.x), point.y - Double(turtle.position.y))
+        if turtleDist < 54.0 {
+            turtle.triggerStartleIfBasking()
         }
 
         // Spawn ripple (cyan)
@@ -1011,6 +1027,20 @@ public final class PondSimulation: @unchecked Sendable {
                     type: rippleType,
                     initialRadius: 4.0,
                     maxRadius: (rippleType == .waterCall ? 44.0 : 22.0)
+                ))
+            }
+        }
+
+        // 7b. Update Pond Turtle (Kame)
+        turtle.update(dt: dt, bounds: bounds) { [weak self] point, rippleType in
+            guard let self = self else { return }
+            if self.ripples.count < self.maxRipples {
+                let p = PondVector(x: Double(point.x), y: Double(point.y))
+                self.ripples.append(WaterRipple(
+                    center: p,
+                    type: rippleType,
+                    initialRadius: 4.0,
+                    maxRadius: (rippleType == .waterCall ? 48.0 : 24.0)
                 ))
             }
         }

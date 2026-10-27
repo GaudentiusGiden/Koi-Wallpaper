@@ -227,4 +227,63 @@ public enum PondTurtleArtwork {
 
         context.restoreGState()
     }
+
+    // MARK: - High-Level Composite Drawing
+
+    /// Draws the swimming depth shadow for the turtle if it is actively in the pond water.
+    public static func drawShadow(
+        _ turtle: PondTurtle,
+        in context: CGContext,
+        shadowStyle: PondLighting.ShadowStyle
+    ) {
+        guard turtle.state == .swimming || turtle.state == .slidingIn || turtle.state == .returning else { return }
+        drawPixelShadow(
+            pose: .swimming3D,
+            at: turtle.position,
+            scale: turtle.scale,
+            heading: turtle.heading,
+            in: context,
+            shadowStyle: shadowStyle
+        )
+    }
+
+    /// Renders the river rock and the pond turtle (*Kame*) according to its simulation state.
+    public static func draw(
+        _ turtle: PondTurtle,
+        in context: CGContext,
+        theme: PondTheme = .day,
+        variant: PaletteVariant? = nil
+    ) {
+        let activeVariant = variant ?? turtle.variant
+
+        // 1. River rock is always present at its shoreline cove
+        drawPixelRiverRock(at: turtle.rockPosition, scale: 2.0, in: context, theme: theme)
+
+        guard turtle.isVisible else { return }
+
+        // 2. Turtle on rock or swimming
+        switch turtle.state {
+        case .basking, .startled:
+            drawPixelTurtle(
+                pose: .topDown,
+                variant: activeVariant,
+                at: turtle.position,
+                heading: turtle.heading,
+                scale: turtle.scale,
+                in: context
+            )
+        case .swimming, .slidingIn, .returning, .climbingOut:
+            drawPixelRipples(at: turtle.position, radius: 30.0, in: context)
+            drawPixelTurtle(
+                pose: .swimming3D,
+                variant: activeVariant,
+                at: turtle.position,
+                heading: turtle.heading,
+                scale: turtle.scale,
+                in: context
+            )
+        case .away:
+            break
+        }
+    }
 }
