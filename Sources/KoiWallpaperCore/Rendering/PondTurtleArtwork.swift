@@ -5,7 +5,8 @@ import Foundation
 /// Procedural coarse pixel-art generator for the swimming pond turtle (*Nihon Ishigame / Kame*).
 ///
 /// Rendered directly in the pond's coarse rasterizer buffer (270-line grid with nearest-neighbor magnification),
-/// matching the authentic Nagomi aesthetic, top-down perspective, and lighting of the koi fish and flora.
+/// matching the authentic Nagomi aesthetic, top-down perspective, smooth organic texture, and dynamic lighting
+/// of the koi fish and flora.
 public enum PondTurtleArtwork {
 
     public enum PaletteVariant: String, Sendable, CaseIterable {
@@ -20,35 +21,72 @@ public enum PondTurtleArtwork {
         public let shellMid: CGColor
         public let shellLight: CGColor
         public let scuteLine: CGColor
+        public let scuteTone1: CGColor
+        public let scuteTone2: CGColor
         public let skinDark: CGColor
         public let skinBase: CGColor
+        public let skinFin: CGColor
         public let skinHighlight: CGColor
         public let eyeDark: CGColor
         public let eyeCatchlight: CGColor
+
+        public init(
+            shellDark: CGColor,
+            shellMid: CGColor,
+            shellLight: CGColor,
+            scuteLine: CGColor,
+            scuteTone1: CGColor? = nil,
+            scuteTone2: CGColor? = nil,
+            skinDark: CGColor,
+            skinBase: CGColor,
+            skinFin: CGColor? = nil,
+            skinHighlight: CGColor,
+            eyeDark: CGColor,
+            eyeCatchlight: CGColor
+        ) {
+            self.shellDark = shellDark
+            self.shellMid = shellMid
+            self.shellLight = shellLight
+            self.scuteLine = scuteLine
+            self.scuteTone1 = scuteTone1 ?? shellMid.copy(alpha: 0.90)!
+            self.scuteTone2 = scuteTone2 ?? shellLight.copy(alpha: 0.85)!
+            self.skinDark = skinDark
+            self.skinBase = skinBase
+            self.skinFin = skinFin ?? skinBase.copy(alpha: 0.68)!
+            self.skinHighlight = skinHighlight
+            self.eyeDark = eyeDark
+            self.eyeCatchlight = eyeCatchlight
+        }
     }
 
     public static let nagomiPalette = TurtlePalette(
-        shellDark: CGColor(red: 0.14, green: 0.30, blue: 0.16, alpha: 1.0),     // Defined jade rim
-        shellMid: CGColor(red: 0.32, green: 0.58, blue: 0.28, alpha: 1.0),      // Radiant forest moss jade (#529447)
-        shellLight: CGColor(red: 0.52, green: 0.80, blue: 0.40, alpha: 1.0),    // Bright lime-olive highlight (#85CC66)
-        scuteLine: CGColor(red: 0.09, green: 0.20, blue: 0.10, alpha: 0.95),    // Crisp contrasting scute grooves
-        skinDark: CGColor(red: 0.18, green: 0.34, blue: 0.14, alpha: 1.0),     // Clear contour
-        skinBase: CGColor(red: 0.42, green: 0.68, blue: 0.28, alpha: 1.0),     // Fresh vibrant spring moss green (#6BAD47)
-        skinHighlight: CGColor(red: 0.64, green: 0.88, blue: 0.46, alpha: 1.0),// Sunlit snout & flipper highlight (#A3E075)
-        eyeDark: CGColor(red: 0.04, green: 0.06, blue: 0.04, alpha: 1.0),      // Glossy black eye
-        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.98)   // Catchlight glint
+        shellDark: CGColor(red: 0.16, green: 0.30, blue: 0.15, alpha: 1.0),      // Deep sumi jade edge
+        shellMid: CGColor(red: 0.31, green: 0.53, blue: 0.25, alpha: 1.0),       // Radiant forest moss jade (#4E8740)
+        shellLight: CGColor(red: 0.47, green: 0.74, blue: 0.35, alpha: 0.85),    // Soft sunlit dorsal ridge (#78BC58)
+        scuteLine: CGColor(red: 0.14, green: 0.24, blue: 0.12, alpha: 0.45),     // Subtle translucent scute seam
+        scuteTone1: CGColor(red: 0.25, green: 0.45, blue: 0.21, alpha: 0.92),    // Soft deep facet
+        scuteTone2: CGColor(red: 0.37, green: 0.59, blue: 0.29, alpha: 0.92),    // Soft light facet
+        skinDark: CGColor(red: 0.14, green: 0.25, blue: 0.11, alpha: 1.0),      // Soft boundary tone
+        skinBase: CGColor(red: 0.38, green: 0.64, blue: 0.26, alpha: 1.0),      // Fresh vibrant spring moss green (#61A342)
+        skinFin: CGColor(red: 0.42, green: 0.68, blue: 0.30, alpha: 0.68),       // Translucent webbed flipper matching koi fins
+        skinHighlight: CGColor(red: 0.58, green: 0.84, blue: 0.42, alpha: 0.75), // Soft snout sheen
+        eyeDark: CGColor(red: 0.045, green: 0.12, blue: 0.105, alpha: 1.0),      // Pure Japanese sumi ink (KoiArtwork.ink)
+        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.90)    // Delicate catchlight glint
     )
 
     public static let ishigamePalette = TurtlePalette(
-        shellDark: CGColor(red: 0.26, green: 0.18, blue: 0.10, alpha: 1.0),     // Dark bronze rim
-        shellMid: CGColor(red: 0.58, green: 0.44, blue: 0.20, alpha: 1.0),      // Radiant warm golden amber (#947033)
-        shellLight: CGColor(red: 0.78, green: 0.65, blue: 0.30, alpha: 1.0),    // Bright amber ridge (#C7A64D)
-        scuteLine: CGColor(red: 0.16, green: 0.11, blue: 0.06, alpha: 0.95),
-        skinDark: CGColor(red: 0.20, green: 0.26, blue: 0.14, alpha: 1.0),
-        skinBase: CGColor(red: 0.45, green: 0.56, blue: 0.28, alpha: 1.0),
-        skinHighlight: CGColor(red: 0.66, green: 0.78, blue: 0.42, alpha: 1.0),
-        eyeDark: CGColor(red: 0.04, green: 0.05, blue: 0.04, alpha: 1.0),
-        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.98)
+        shellDark: CGColor(red: 0.22, green: 0.15, blue: 0.08, alpha: 1.0),      // Dark bronze rim
+        shellMid: CGColor(red: 0.53, green: 0.40, blue: 0.19, alpha: 1.0),       // Radiant warm golden amber (#876530)
+        shellLight: CGColor(red: 0.75, green: 0.63, blue: 0.32, alpha: 0.85),    // Bright amber ridge (#BFA052)
+        scuteLine: CGColor(red: 0.18, green: 0.12, blue: 0.06, alpha: 0.45),     // Subtle translucent seam
+        scuteTone1: CGColor(red: 0.44, green: 0.33, blue: 0.16, alpha: 0.92),
+        scuteTone2: CGColor(red: 0.62, green: 0.48, blue: 0.24, alpha: 0.92),
+        skinDark: CGColor(red: 0.22, green: 0.28, blue: 0.14, alpha: 1.0),
+        skinBase: CGColor(red: 0.42, green: 0.54, blue: 0.28, alpha: 1.0),
+        skinFin: CGColor(red: 0.46, green: 0.58, blue: 0.32, alpha: 0.68),       // Translucent amber-olive fin
+        skinHighlight: CGColor(red: 0.62, green: 0.74, blue: 0.42, alpha: 0.75),
+        eyeDark: CGColor(red: 0.045, green: 0.12, blue: 0.105, alpha: 1.0),
+        eyeCatchlight: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.90)
     )
 
     public static func palette(for variant: PaletteVariant) -> TurtlePalette {
@@ -69,40 +107,94 @@ public enum PondTurtleArtwork {
         guard turtle.isVisible else { return }
 
         context.saveGState()
-        let offset = PondLighting.shadowOffset(distance: 16.0)
+        let offset = PondLighting.shadowOffset(distance: turtle.length * 0.22)
         context.translateBy(x: turtle.position.x + offset.x, y: turtle.position.y + offset.y)
         context.rotate(by: CGFloat(turtle.heading))
 
         let length = turtle.length
-        let width = length * 0.74
+        let halfWidth = length * 0.37
         let strokeCycle = sin(turtle.paddlePhase)
         let strokeCos = cos(turtle.paddlePhase)
 
-        let flipperSweep = strokeCycle * 0.38 - 0.20
-        let rearFlipperSweep = strokeCos * 0.22 + 0.15
+        let flipperSweep = strokeCycle * 0.36 - 0.18
+        let rearSweep = strokeCos * 0.20 + 0.12
 
-        let c = shadowStyle.color
-        // 1. Penumbra (soft aquatic boundary)
-        context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.penumbraAlpha)
-        drawSilhouette(in: context, length: length * 1.10, width: width * 1.10, flipperSweep: flipperSweep, rearSweep: rearFlipperSweep)
+        let shellRect = CGRect(x: -length * 0.44, y: -halfWidth, width: length * 0.88, height: halfWidth * 2)
+        let headLen = length * 0.30
+        let headWid = length * 0.22
+        let headOriginX = length * 0.36 + CGFloat(strokeCycle * 1.8)
+        let headRect = CGRect(x: headOriginX, y: -headWid * 0.5, width: headLen, height: headWid)
+
+        let tailPath = CGMutablePath()
+        tailPath.move(to: CGPoint(x: -length * 0.40, y: -length * 0.04))
+        tailPath.addQuadCurve(to: CGPoint(x: -length * 0.62 + CGFloat(strokeCycle * 2.2), y: 0),
+                              control: CGPoint(x: -length * 0.51, y: CGFloat(strokeCycle * 1.0)))
+        tailPath.addQuadCurve(to: CGPoint(x: -length * 0.40, y: length * 0.04),
+                              control: CGPoint(x: -length * 0.51, y: CGFloat(-strokeCycle * 1.0)))
+        tailPath.closeSubpath()
+
+        func flipperPath(side: CGFloat) -> CGPath {
+            let pLen = length * 0.45
+            let pWid = length * 0.19
+            var t = CGAffineTransform(translationX: length * 0.20, y: side * halfWidth * 0.72)
+            t = t.rotated(by: (side > 0 ? 1.05 : -1.05) + flipperSweep * side)
+            let p = CGMutablePath()
+            p.move(to: .zero, transform: t)
+            p.addQuadCurve(to: CGPoint(x: pLen * 0.72, y: side * pWid * 0.80),
+                           control: CGPoint(x: pLen * 0.30, y: side * pWid * 1.15), transform: t)
+            p.addQuadCurve(to: CGPoint(x: pLen, y: 0),
+                           control: CGPoint(x: pLen * 0.96, y: side * pWid * 0.40), transform: t)
+            p.addQuadCurve(to: CGPoint(x: pLen * 0.48, y: -side * pWid * 0.35),
+                           control: CGPoint(x: pLen * 0.78, y: -side * pWid * 0.28), transform: t)
+            p.closeSubpath()
+            return p
+        }
+
+        func rearPath(side: CGFloat) -> CGPath {
+            let fLen = length * 0.33
+            let fWid = length * 0.16
+            var t = CGAffineTransform(translationX: -length * 0.28, y: side * halfWidth * 0.76)
+            t = t.rotated(by: (side > 0 ? 2.45 : -2.45) + rearSweep * side)
+            let p = CGMutablePath()
+            p.addEllipse(in: CGRect(x: 0, y: -fWid * 0.5, width: fLen, height: fWid), transform: t)
+            return p
+        }
+
+        // 1. Soft Penumbra (expanded silhouette)
+        let pShell = CGPath(ellipseIn: shellRect.insetBy(dx: -length * 0.05, dy: -halfWidth * 0.05), transform: nil)
+        context.setFillColor(red: shadowStyle.color.0, green: shadowStyle.color.1, blue: shadowStyle.color.2, alpha: shadowStyle.penumbraAlpha)
+        context.addPath(pShell)
+        context.addEllipse(in: headRect.insetBy(dx: -headLen * 0.05, dy: -headWid * 0.05))
+        context.addPath(tailPath)
+        context.addPath(flipperPath(side: -1))
+        context.addPath(flipperPath(side: 1))
+        context.addPath(rearPath(side: -1))
+        context.addPath(rearPath(side: 1))
         context.fillPath()
 
-        // 2. Umbra core (solid shadow)
-        context.setFillColor(red: c.0, green: c.1, blue: c.2, alpha: shadowStyle.coreAlpha)
-        drawSilhouette(in: context, length: length, width: width, flipperSweep: flipperSweep, rearSweep: rearFlipperSweep)
+        // 2. Umbra core silhouette
+        context.setFillColor(red: shadowStyle.color.0, green: shadowStyle.color.1, blue: shadowStyle.color.2, alpha: shadowStyle.coreAlpha)
+        context.addEllipse(in: shellRect)
+        context.addEllipse(in: headRect)
+        context.addPath(tailPath)
+        context.addPath(flipperPath(side: -1))
+        context.addPath(flipperPath(side: 1))
+        context.addPath(rearPath(side: -1))
+        context.addPath(rearPath(side: 1))
         context.fillPath()
 
         context.restoreGState()
     }
 
-    // MARK: - Top-Down Turtle Rendering
+    // MARK: - Top-Down Smooth Turtle Rendering
 
-    /// Renders the swimming top-down turtle into the active context.
+    /// Renders the swimming top-down turtle into the active context with smooth koi-harmonized texture and lighting.
     public static func draw(
         _ turtle: PondTurtle,
         in context: CGContext,
         theme: PondTheme = .day,
-        variant: PaletteVariant? = nil
+        variant: PaletteVariant? = nil,
+        customFishAmbientStyle: PondLighting.FishAmbientStyle? = nil
     ) {
         guard turtle.isVisible else { return }
 
@@ -112,258 +204,157 @@ public enum PondTurtleArtwork {
 
         let pal = palette(for: variant ?? turtle.variant)
         let length = turtle.length
-        let width = length * 0.74
+        let halfWidth = length * 0.37
         let strokeCycle = sin(turtle.paddlePhase)
         let strokeCos = cos(turtle.paddlePhase)
 
-        let flipperSweep = strokeCycle * 0.38 - 0.20
-        let rearFlipperSweep = strokeCos * 0.22 + 0.15
+        let flipperSweep = strokeCycle * 0.36 - 0.18
+        let rearSweep = strokeCos * 0.20 + 0.12
 
-        // 1. Tiny Cute Tail
+        let shellRect = CGRect(x: -length * 0.44, y: -halfWidth, width: length * 0.88, height: halfWidth * 2)
+        let headLen = length * 0.30
+        let headWid = length * 0.22
+        let headOriginX = length * 0.36 + CGFloat(strokeCycle * 1.8)
+        let headRect = CGRect(x: headOriginX, y: -headWid * 0.5, width: headLen, height: headWid)
+
         let tailPath = CGMutablePath()
-        tailPath.move(to: CGPoint(x: -length * 0.42, y: -length * 0.045))
-        tailPath.addLine(to: CGPoint(x: -length * 0.64 + CGFloat(strokeCycle * 2.5), y: 0.0))
-        tailPath.addLine(to: CGPoint(x: -length * 0.42, y: length * 0.045))
+        tailPath.move(to: CGPoint(x: -length * 0.40, y: -length * 0.04))
+        tailPath.addQuadCurve(to: CGPoint(x: -length * 0.62 + CGFloat(strokeCycle * 2.2), y: 0),
+                              control: CGPoint(x: -length * 0.51, y: CGFloat(strokeCycle * 1.0)))
+        tailPath.addQuadCurve(to: CGPoint(x: -length * 0.40, y: length * 0.04),
+                              control: CGPoint(x: -length * 0.51, y: CGFloat(-strokeCycle * 1.0)))
         tailPath.closeSubpath()
+
+        func flipperPath(side: CGFloat) -> CGPath {
+            let pLen = length * 0.45
+            let pWid = length * 0.19
+            var t = CGAffineTransform(translationX: length * 0.20, y: side * halfWidth * 0.72)
+            t = t.rotated(by: (side > 0 ? 1.05 : -1.05) + flipperSweep * side)
+            let p = CGMutablePath()
+            p.move(to: .zero, transform: t)
+            p.addQuadCurve(to: CGPoint(x: pLen * 0.72, y: side * pWid * 0.80),
+                           control: CGPoint(x: pLen * 0.30, y: side * pWid * 1.15), transform: t)
+            p.addQuadCurve(to: CGPoint(x: pLen, y: 0),
+                           control: CGPoint(x: pLen * 0.96, y: side * pWid * 0.40), transform: t)
+            p.addQuadCurve(to: CGPoint(x: pLen * 0.48, y: -side * pWid * 0.35),
+                           control: CGPoint(x: pLen * 0.78, y: -side * pWid * 0.28), transform: t)
+            p.closeSubpath()
+            return p
+        }
+
+        func rearPath(side: CGFloat) -> CGPath {
+            let fLen = length * 0.33
+            let fWid = length * 0.16
+            var t = CGAffineTransform(translationX: -length * 0.28, y: side * halfWidth * 0.76)
+            t = t.rotated(by: (side > 0 ? 2.45 : -2.45) + rearSweep * side)
+            let p = CGMutablePath()
+            p.addEllipse(in: CGRect(x: 0, y: -fWid * 0.5, width: fLen, height: fWid), transform: t)
+            return p
+        }
+
+        // 1. Translucent webbed paddles & tail (no harsh strokes!)
+        context.setFillColor(pal.skinFin)
+        context.addPath(flipperPath(side: -1))
+        context.addPath(flipperPath(side: 1))
+        context.addPath(rearPath(side: -1))
+        context.addPath(rearPath(side: 1))
+        context.fillPath()
+
         context.setFillColor(pal.skinBase)
         context.addPath(tailPath)
         context.fillPath()
-        context.setStrokeColor(pal.skinDark)
-        context.setLineWidth(1.4)
-        context.addPath(tailPath)
-        context.strokePath()
 
-        // 2. Rear Flippers (Kaki Dayung Belakang)
-        for side in [-1.0, 1.0] {
-            context.saveGState()
-            let originX = -length * 0.30
-            let originY = CGFloat(side) * width * 0.38
-            context.translateBy(x: originX, y: originY)
-            let baseAngle = (side > 0 ? 2.5 : -2.5) + rearFlipperSweep * side
-            context.rotate(by: CGFloat(baseAngle))
-
-            let footPath = CGMutablePath()
-            let footLen = length * 0.32
-            let footWid = length * 0.16
-            footPath.addEllipse(in: CGRect(x: 0, y: -footWid * 0.5, width: footLen, height: footWid))
-
-            context.setFillColor(pal.skinBase)
-            context.addPath(footPath)
-            context.fillPath()
-
-            context.setStrokeColor(pal.skinDark)
-            context.setLineWidth(1.2)
-            context.addPath(footPath)
-            context.strokePath()
-            context.restoreGState()
-        }
-
-        // 3. Front Flippers (Kaki Dayung Depan - Main Swimming Paddles)
-        for side in [-1.0, 1.0] {
-            context.saveGState()
-            let originX = length * 0.22
-            let originY = CGFloat(side) * width * 0.38
-            context.translateBy(x: originX, y: originY)
-            let baseAngle = (side > 0 ? 1.05 : -1.05) + flipperSweep * side
-            context.rotate(by: CGFloat(baseAngle))
-
-            let paddlePath = CGMutablePath()
-            let pLen = length * 0.44
-            let pWid = length * 0.18
-            paddlePath.move(to: .zero)
-            paddlePath.addQuadCurve(to: CGPoint(x: pLen * 0.7, y: CGFloat(side) * pWid * 0.8),
-                                    control: CGPoint(x: pLen * 0.3, y: CGFloat(side) * pWid * 1.1))
-            paddlePath.addQuadCurve(to: CGPoint(x: pLen, y: 0),
-                                    control: CGPoint(x: pLen * 0.95, y: CGFloat(side) * pWid * 0.4))
-            paddlePath.addQuadCurve(to: CGPoint(x: pLen * 0.5, y: -CGFloat(side) * pWid * 0.4),
-                                    control: CGPoint(x: pLen * 0.8, y: -CGFloat(side) * pWid * 0.3))
-            paddlePath.closeSubpath()
-
-            context.setFillColor(pal.skinBase)
-            context.addPath(paddlePath)
-            context.fillPath()
-
-            // Leading edge highlight
-            context.setStrokeColor(pal.skinHighlight)
-            context.setLineWidth(1.5)
-            context.move(to: .zero)
-            context.addQuadCurve(to: CGPoint(x: pLen * 0.7, y: CGFloat(side) * pWid * 0.8),
-                                 control: CGPoint(x: pLen * 0.3, y: CGFloat(side) * pWid * 1.1))
-            context.strokePath()
-
-            context.setStrokeColor(pal.skinDark)
-            context.setLineWidth(1.2)
-            context.addPath(paddlePath)
-            context.strokePath()
-            context.restoreGState()
-        }
-
-        // 4. Head and Rounded Snout (Kepala Kura-kura)
-        context.saveGState()
-        let headBob = CGFloat(strokeCycle * 2.0)
-        let headOriginX = length * 0.38 + headBob
-        let headPath = CGMutablePath()
-        let headLen = length * 0.28
-        let headWid = length * 0.21
-
-        headPath.addEllipse(in: CGRect(x: headOriginX, y: -headWid * 0.5, width: headLen, height: headWid))
+        // 2. Head & Ink eyes (smooth organic dome without dark outer strokes)
         context.setFillColor(pal.skinBase)
-        context.addPath(headPath)
-        context.fillPath()
+        context.fillEllipse(in: headRect)
 
-        // Snout highlight
         context.setFillColor(pal.skinHighlight)
-        context.fillEllipse(in: CGRect(x: headOriginX + headLen * 0.32, y: -headWid * 0.25, width: headLen * 0.48, height: headWid * 0.5))
+        context.fillEllipse(in: CGRect(x: headOriginX + headLen * 0.35, y: -headWid * 0.22, width: headLen * 0.45, height: headWid * 0.44))
 
-        // Eyes (Two glossy beads with catchlight glints)
-        for eyeSide in [-1.0, 1.0] {
-            let eyeX = headOriginX + headLen * 0.55
-            let eyeY = CGFloat(eyeSide) * headWid * 0.36
-            let eyeR = length * 0.040
-
-            context.setFillColor(pal.eyeDark)
-            context.fillEllipse(in: CGRect(x: eyeX - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
-
-            let clR = eyeR * 0.50
+        let eyeSize = length * 0.036
+        context.setFillColor(pal.eyeDark)
+        for side: CGFloat in [-1, 1] {
+            let eyeX = headOriginX + headLen * 0.58
+            let eyeY = side * headWid * 0.32 - eyeSize / 2
+            context.fillEllipse(in: CGRect(x: eyeX, y: eyeY, width: eyeSize, height: eyeSize))
             context.setFillColor(pal.eyeCatchlight)
-            context.fillEllipse(in: CGRect(x: eyeX - eyeR * 0.3, y: eyeY - eyeR * 0.3, width: clR * 2, height: clR * 2))
+            context.fillEllipse(in: CGRect(x: eyeX + eyeSize * 0.20, y: eyeY + eyeSize * 0.20, width: eyeSize * 0.40, height: eyeSize * 0.40))
+            context.setFillColor(pal.eyeDark)
         }
 
-        context.setStrokeColor(pal.skinDark)
-        context.setLineWidth(1.2)
-        context.addPath(headPath)
-        context.strokePath()
-        context.restoreGState()
-
-        // 5. Carapace (Tempurung Kura-kura)
-        let shellRect = CGRect(x: -length * 0.44, y: -width * 0.5, width: length * 0.88, height: width)
-
-        // Marginal Rim (Pinggiran Luar Tempurung)
+        // 3. Carapace (Shell) - Organic Dome without harsh cartoon strokes!
         context.setFillColor(pal.shellDark)
         context.fillEllipse(in: shellRect)
 
-        // Inner Dome (Kubah Dalam)
-        let innerRect = shellRect.insetBy(dx: length * 0.045, dy: width * 0.045)
+        let domeRect = shellRect.insetBy(dx: length * 0.045, dy: halfWidth * 0.055)
         context.setFillColor(pal.shellMid)
-        context.fillEllipse(in: innerRect)
+        context.fillEllipse(in: domeRect)
 
-        // Hexagonal Scutes (Lempeng Tempurung Khas Kura-kura)
+        // Clipped scutes & dynamic ambient lighting
         context.saveGState()
-        context.setStrokeColor(pal.scuteLine)
-        context.setLineWidth(1.6)
+        context.addEllipse(in: domeRect)
+        context.clip()
 
-        let cx0 = -length * 0.22
-        let cx1 = 0.0
-        let cx2 = length * 0.22
+        // Soft organic scute facets
+        let scuteCenters: [CGPoint] = [
+            CGPoint(x: -length * 0.22, y: 0),
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: length * 0.22, y: 0),
+            CGPoint(x: -length * 0.12, y: halfWidth * 0.46),
+            CGPoint(x: -length * 0.12, y: -halfWidth * 0.46),
+            CGPoint(x: length * 0.12, y: halfWidth * 0.46),
+            CGPoint(x: length * 0.12, y: -halfWidth * 0.46),
+        ]
         let scuteW = length * 0.18
-        let scuteH = width * 0.26
+        let scuteH = halfWidth * 0.48
 
-        for cx in [cx0, cx1, cx2] {
-            let hexPath = CGMutablePath()
-            hexPath.move(to: CGPoint(x: cx - scuteW * 0.5, y: 0))
-            hexPath.addLine(to: CGPoint(x: cx - scuteW * 0.25, y: scuteH * 0.5))
-            hexPath.addLine(to: CGPoint(x: cx + scuteW * 0.25, y: scuteH * 0.5))
-            hexPath.addLine(to: CGPoint(x: cx + scuteW * 0.5, y: 0))
-            hexPath.addLine(to: CGPoint(x: cx + scuteW * 0.25, y: -scuteH * 0.5))
-            hexPath.addLine(to: CGPoint(x: cx - scuteW * 0.25, y: -scuteH * 0.5))
-            hexPath.closeSubpath()
-
-            context.setFillColor(pal.shellLight.copy(alpha: 0.40)!)
-            context.addPath(hexPath)
-            context.fillPath()
-
-            context.addPath(hexPath)
-            context.strokePath()
+        for (i, c) in scuteCenters.enumerated() {
+            let facetRect = CGRect(x: c.x - scuteW * 0.5, y: c.y - scuteH * 0.5, width: scuteW, height: scuteH)
+            let color = (i % 2 == 0) ? pal.scuteTone1 : pal.scuteTone2
+            context.setFillColor(color)
+            context.fillEllipse(in: facetRect)
         }
 
-        // Costal scutes (Garis lempeng lateral)
-        for side in [-1.0, 1.0] {
-            for cx in [cx0, cx1, cx2] {
-                let costalPath = CGMutablePath()
-                costalPath.move(to: CGPoint(x: cx, y: CGFloat(side) * scuteH * 0.5))
-                costalPath.addLine(to: CGPoint(x: cx * 1.1, y: CGFloat(side) * width * 0.44))
-                context.addPath(costalPath)
-                context.strokePath()
-            }
+        // Subtle soft scute seams (delicate alpha, not harsh black lines)
+        context.setStrokeColor(pal.scuteLine)
+        context.setLineWidth(length * 0.016)
+        for c in scuteCenters.prefix(3) {
+            context.move(to: CGPoint(x: c.x, y: -halfWidth * 0.65))
+            context.addLine(to: CGPoint(x: c.x, y: halfWidth * 0.65))
         }
-        context.restoreGState()
+        context.move(to: CGPoint(x: -length * 0.35, y: 0))
+        context.addLine(to: CGPoint(x: length * 0.35, y: 0))
+        context.strokePath()
 
-        // Dorsal Ridge Highlight (Kilau garis punggung)
-        context.saveGState()
-        let ridgePath = CGMutablePath()
-        ridgePath.addEllipse(in: CGRect(x: -length * 0.26, y: -width * 0.07, width: length * 0.52, height: width * 0.14))
-        context.setFillColor(pal.shellLight.copy(alpha: 0.35)!)
-        context.addPath(ridgePath)
+        // Ambient flank shade (identik KoiArtwork)
+        let fishAmbient = customFishAmbientStyle ?? PondLighting.fishAmbientStyle(for: theme)
+        let shade = CGMutablePath()
+        shade.move(to: CGPoint(x: -length * 0.42, y: -halfWidth * 0.35))
+        shade.addQuadCurve(to: CGPoint(x: length * 0.42, y: -halfWidth * 0.35),
+                           control: CGPoint(x: 0, y: -halfWidth * 0.95))
+        shade.addLine(to: CGPoint(x: length * 0.42, y: -halfWidth))
+        shade.addLine(to: CGPoint(x: -length * 0.42, y: -halfWidth))
+        shade.closeSubpath()
+        context.setFillColor(red: fishAmbient.shadeColor.0, green: fishAmbient.shadeColor.1,
+                             blue: fishAmbient.shadeColor.2, alpha: fishAmbient.shadeAlpha * 0.85)
+        context.addPath(shade)
         context.fillPath()
+
+        // Soft dorsal spine highlight
+        context.setStrokeColor(red: fishAmbient.highlightColor.0, green: fishAmbient.highlightColor.1,
+                               blue: fishAmbient.highlightColor.2, alpha: fishAmbient.highlightAlpha * 0.90)
+        context.setLineWidth(length * 0.032)
+        context.move(to: CGPoint(x: -length * 0.28, y: halfWidth * 0.08))
+        context.addQuadCurve(to: CGPoint(x: length * 0.28, y: halfWidth * 0.08),
+                             control: CGPoint(x: 0, y: halfWidth * 0.16))
+        context.strokePath()
+
+        // Warm sunlit ridge
+        context.setFillColor(pal.shellLight)
+        context.fillEllipse(in: CGRect(x: -length * 0.24, y: -halfWidth * 0.12, width: length * 0.48, height: halfWidth * 0.24))
+
         context.restoreGState()
 
-        // Shell Outline
-        context.setStrokeColor(pal.shellDark)
-        context.setLineWidth(1.8)
-        context.strokeEllipse(in: shellRect)
-
         context.restoreGState()
-    }
-
-    private static func drawSilhouette(
-        in context: CGContext,
-        length: CGFloat,
-        width: CGFloat,
-        flipperSweep: CGFloat,
-        rearSweep: CGFloat
-    ) {
-        let shellRect = CGRect(x: -length * 0.44, y: -width * 0.5, width: length * 0.88, height: width)
-        context.addEllipse(in: shellRect)
-
-        let headLen = length * 0.28
-        let headWid = length * 0.20
-        context.addEllipse(in: CGRect(x: length * 0.38, y: -headWid * 0.5, width: headLen, height: headWid))
-
-        let tailPath = CGMutablePath()
-        tailPath.move(to: CGPoint(x: -length * 0.42, y: -length * 0.05))
-        tailPath.addLine(to: CGPoint(x: -length * 0.62, y: 0.0))
-        tailPath.addLine(to: CGPoint(x: -length * 0.42, y: length * 0.05))
-        tailPath.closeSubpath()
-        context.addPath(tailPath)
-
-        for side in [-1.0, 1.0] {
-            let originX = length * 0.22
-            let originY = CGFloat(side) * width * 0.38
-            let pLen = length * 0.44
-            let pWid = length * 0.18
-            let baseAngle = (side > 0 ? 1.05 : -1.05) + flipperSweep * side
-
-            var t = CGAffineTransform(translationX: originX, y: originY)
-            t = t.rotated(by: baseAngle)
-
-            let p = CGMutablePath()
-            p.move(to: .zero, transform: t)
-            p.addQuadCurve(to: CGPoint(x: pLen * 0.7, y: CGFloat(side) * pWid * 0.8),
-                           control: CGPoint(x: pLen * 0.3, y: CGFloat(side) * pWid * 1.1),
-                           transform: t)
-            p.addQuadCurve(to: CGPoint(x: pLen, y: 0),
-                           control: CGPoint(x: pLen * 0.95, y: CGFloat(side) * pWid * 0.4),
-                           transform: t)
-            p.addQuadCurve(to: CGPoint(x: pLen * 0.5, y: -CGFloat(side) * pWid * 0.4),
-                           control: CGPoint(x: pLen * 0.8, y: -CGFloat(side) * pWid * 0.3),
-                           transform: t)
-            p.closeSubpath()
-            context.addPath(p)
-        }
-
-        for side in [-1.0, 1.0] {
-            let originX = -length * 0.30
-            let originY = CGFloat(side) * width * 0.38
-            let footLen = length * 0.32
-            let footWid = length * 0.16
-            let baseAngle = (side > 0 ? 2.5 : -2.5) + rearSweep * side
-
-            var t = CGAffineTransform(translationX: originX, y: originY)
-            t = t.rotated(by: baseAngle)
-
-            let p = CGMutablePath()
-            p.addEllipse(in: CGRect(x: 0, y: -footWid * 0.5, width: footLen, height: footWid), transform: t)
-            context.addPath(p)
-        }
     }
 }

@@ -482,7 +482,7 @@ public final class PondRenderer {
                     drawShadowOnly: false
                 )
             }
-            PondTurtleArtwork.draw(simulation.turtle, in: bitmap, theme: toTheme)
+            PondTurtleArtwork.draw(simulation.turtle, in: bitmap, theme: toTheme, customFishAmbientStyle: fishAmbientStyle)
             bitmap.restoreGState()
 
             if let image = bitmap.makeImage() {
