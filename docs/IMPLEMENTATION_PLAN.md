@@ -240,27 +240,24 @@ Selesai ketika:
 - [x] Fullscreen dapat ditutup melalui Escape serta mengembalikan keadaan desktop sebelumnya (terverifikasi secara programatik via `KoiWallpaperVerify` T10.2 & T10.3, serta divalidasi langsung pada WindowServer desktop nyata via `scripts/test_live_fullscreen.swift` untuk level layer 3, pemulihan `.clickThrough` & `.interactive`, dan exit event Escape; pengujian penekanan tombol Escape fisik secara mekanis oleh jari manusia tetap PENDING).
 - [x] Mode ini tidak mengubah konfigurasi penguncian atau waktu sleep sistem (terverifikasi via audit statis leksikal pada berkas Swift di `Sources` oleh `KoiWallpaperVerify` T10.4).
 
-### M6 — Integrasi Layar Terkunci & Penghemat Layar (Lock Screen & Screen Saver)
+### M6 — Mode Wallpaper Statis Dinamis & Zero-CPU Eco Mode (Pengganti Screen Saver)
 
-Status: **SELESAI & TERVERIFIKASI PENUH** (Implementasi target `KoiWallpaperSaver`, bundel `KoiWallpaper.saver`, dan integrasi installer selesai 100%; suite in-process `KoiWallpaperVerify` 57/57 assertion [53 regresi M0–M5 + 4 penerimaan M6] dan `KoiWallpaperSimTest` 41/41 lulus; packaging otomatis disematkan ke dalam `KoiWallpaper.app/Contents/Resources/KoiWallpaper.saver` dan divalidasi via `codesign --verify --deep --strict`).
+Status: **SELESAI & TERVERIFIKASI PENUH** (Target legacy `KoiWallpaperSaver` / `.saver` telah dihapus sepenuhnya untuk mengeliminasi beban CPU tinggi pada proses `legacyScreenSaver` macOS 14+; arsitektur wallpaper desktop ditingkatkan menjadi model hibrida: Animasi Aktif (Live Wallpaper) dengan smart occlusion auto-pause vs Wallpaper Statis Dinamis (0% CPU idle) dengan pembaruan snapshot berkala 15 menit dan transisi CALayer cross-fade halus; suite in-process `KoiWallpaperVerify` 68/68 lulus dan `KoiWallpaperSimTest` 53/53 lulus).
 
-Tujuan: memungkinkan kolam koi tampil secara resmi pada Layar Terkunci (Lock Screen) macOS saat perangkat terkunci atau idle tanpa mengorbankan keamanan sistem dan tetap berformat satu aplikasi tunggal terpadu.
+Tujuan: Mengatasi konsumsi CPU tinggi pada screen saver dan animasi desktop dengan menghadirkan mode wallpaper statis dinamis berdaya 0% CPU yang tetap hidup secara visual lewat pergantian pose berkala.
 
 Pekerjaan:
-- [x] Buat target library dinamis `KoiWallpaperSaver` (`Sources/KoiWallpaperSaver/KoiWallpaperSaverView.swift`) yang mewarisi `ScreenSaverView` dari `ScreenSaver.framework` dengan Principal Class `@objc(KoiWallpaperSaverView)`.
-- [x] Host dan gunakan kembali engine `WallpaperView`, `PondSimulation`, `PondRenderer`, dan `TimeOfDayController` dari `KoiWallpaperCore` secara modular tanpa duplikasi kode.
-- [x] Tambahkan store konfigurasi bersama `SharedFileSettingsStore` di `~/Library/Application Support/KoiWallpaper/settings.json` sehingga perubahan preferensi di menu bar (tema siang/malam, hujan, mood) otomatis tercermin pada layar terkunci.
-- [x] Tambahkan skrip build otomatis `scripts/build_saver.sh` untuk menghasilkan bundel `KoiWallpaper.saver` valid dengan Info.plist BNDL dan ad-hoc codesign.
-- [x] Integrasikan pemaketan ke dalam `scripts/build_app.sh` sehingga `KoiWallpaper.saver` otomatis dibundel di dalam `Contents/Resources/` aplikasi utama.
-- [x] Tambahkan opsi menu installer di `StatusBarController.swift` ("Pasang di Layar Terkunci (Screen Saver)..." dan "Buka Pengaturan Screen Saver Sistem...") dengan logika penyalinan aman ke `~/Library/Screen Savers/` pada `AppCoordinator.swift`.
-- [x] Tambahkan suite pengujian Bagian 11 (T11.1–T11.4) pada `KoiWallpaperVerify` untuk menguji inisialisasi view, siklus start/stop animasi, sinkronisasi setelan file bersama lintas-proses, dan verifikasi installer bundel.
+- [x] Hapus target dinamis dan bundel `KoiWallpaperSaver` (`Sources/KoiWallpaperSaver/KoiWallpaperSaverView.swift`, `scripts/build_saver.sh`, dan referensi pemaketan pada `scripts/build_app.sh`).
+- [x] Sederhanakan UI Menu Bar di `StatusBarController.swift`: Hapus opsi menu screen saver dan perbarui item toggle menjadi "Jeda Animasi (Jadikan Wallpaper Statis)" / "Lanjutkan Animasi (Live Wallpaper)" dengan label status yang jelas.
+- [x] Implementasikan `advanceSnapshot(simulatedSeconds:animated:)` pada `PondSimulation`, `WallpaperView`, dan `ScreenManager` dengan transisi fade CALayer GPU yang lembut (1.2 detik).
+- [x] Implementasikan penjadwalan `snapshotTimer` (15 menit) di `AppCoordinator.swift` yang hanya aktif saat wallpaper dijeda (mode statis) dan otomatis diperbarui saat tema waktu berganti.
+- [x] Perbarui suite pengujian Bagian 11 (T11.1–T11.4) pada `KoiWallpaperVerify` untuk memvalidasi stasis CPU timer 0%, langkah snapshot dinamis dengan animasi cross-fade, sinkronisasi file bersama, dan siklus timer snapshot pada `AppCoordinator`.
 
 Selesai ketika:
-- [x] Bundel `KoiWallpaper.saver` dapat dimuat oleh macOS (`NSBundle.load() == true`) dan menginstansiasi `KoiWallpaperSaverView` (terverifikasi via T11.1 dan inspeksi biner).
-- [x] Siklus animasi `startAnimation` / `stopAnimation` tersinkronisasi mulus dengan status jeda view (terverifikasi via T11.2).
-- [x] Pengaturan bersama dapat dibaca dan ditulis lintas-proses tanpa kehilangan data (terverifikasi via T11.3).
-- [x] Logika installer menyalin bundel saver secara utuh ke direktori tujuan (terverifikasi via T11.4).
-- [x] Seluruh suite pengujian lolos regresi (57/57 di `KoiWallpaperVerify`, 41/41 di `KoiWallpaperSimTest`).
+- [x] Target `.saver` bersih dihapus dari proyek dan aplikasi utama dapat dikompilasi tanpa dependensi screen saver.
+- [x] Saat jeda manual diaktifkan, loop animasi timer berhenti total (0% continuous CPU) dan snapshot 1 frame baru berhasil di-render.
+- [x] Pembaruan snapshot tiap 15 menit dan saat pergantian tema berjalan mulus dengan efek cross-fade tanpa timer berkelanjutan.
+- [x] Seluruh suite pengujian lolos (68/68 di `KoiWallpaperVerify`, 53/53 di `KoiWallpaperSimTest`).
 
 ## Struktur kode yang diusulkan
 

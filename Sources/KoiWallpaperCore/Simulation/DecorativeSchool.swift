@@ -15,6 +15,8 @@ public struct DecorativeFishInstance: Sendable {
     public var swimPhase: Double
     public let groupIndex: Int
     public let index: Int
+    public var wanderPhase: Double
+    public var isScout: Bool
 
     public init(
         position: PondVector,
@@ -29,7 +31,9 @@ public struct DecorativeFishInstance: Sendable {
         panicTimer: Double = 0.0,
         swimPhase: Double = 0.0,
         groupIndex: Int = 0,
-        index: Int = 0
+        index: Int = 0,
+        wanderPhase: Double = 0.0,
+        isScout: Bool = false
     ) {
         self.position = position
         self.velocity = velocity
@@ -44,11 +48,22 @@ public struct DecorativeFishInstance: Sendable {
         self.swimPhase = swimPhase
         self.groupIndex = groupIndex
         self.index = index
+        self.wanderPhase = wanderPhase
+        self.isScout = isScout
     }
 }
 
+/// Represents the behavioral state of a decorative small fish school.
+public enum SchoolingMode: String, Sendable {
+    /// Loose cruising formation where fish swim in roughly the same direction with comfortable spacing.
+    case cohesive
+    /// Dispersed / foraging mode where fish scatter and spread out over a wide area, wandering independently.
+    case dispersed
+}
+
 /// Represents an autonomous school of decorative small fish.
-/// Maintains cohesive schooling, active cruising across the pond,
+/// Maintains dynamic schooling modes (loose cohesive cruise vs dispersed foraging mencar),
+/// active cruising across the pond, generous pairwise separation,
 /// and reactive evasion from water splashes (ripples) and large koi fish.
 public struct DecorativeSchool: Sendable {
     public static let fishPerSchool = 8
@@ -64,6 +79,10 @@ public struct DecorativeSchool: Sendable {
     public var boundingRadius: Double
     public var fish: [DecorativeFishInstance]
     public var rng: SeededRandomNumberGenerator
+
+    public var mode: SchoolingMode
+    public var modeTimer: Double
+    public var dispersionFactor: Double
 
     public init(groupIndex: Int, bounds: PondBounds, seed: UInt64? = nil) {
         self.groupIndex = groupIndex
@@ -85,8 +104,23 @@ public struct DecorativeSchool: Sendable {
         self.velocity = PondVector.fromAngle(self.heading, length: baseCruisingSpeed)
         self.targetWaypoint = initialCenter
         self.waypointTimer = Double.random(in: 4.0...9.0, using: &prng)
-        self.boundingRadius = 65.0
         self.rng = prng
+
+        // Stagger initial modes across schools so they don't look synchronized:
+        // Group 1 starts dispersed ("mencar") right away across its sector,
+        // while Groups 0 & 2 start in loose cohesive mode.
+        switch groupIndex % 3 {
+        case 1:
+            self.mode = .dispersed
+            self.modeTimer = Double.random(in: 12.0...20.0, using: &prng)
+            self.dispersionFactor = 2.6
+            self.boundingRadius = 110.0
+        default:
+            self.mode = .cohesive
+            self.modeTimer = Double.random(in: 8.0...16.0, using: &prng)
+            self.dispersionFactor = 1.35
+            self.boundingRadius = 75.0
+        }
 
         var instances: [DecorativeFishInstance] = []
         instances.reserveCapacity(Self.fishPerSchool)
@@ -113,12 +147,15 @@ public struct DecorativeSchool: Sendable {
             let slot = formationOffsets[index % formationOffsets.count]
             let localDist = hypot(slot.0, slot.1)
             let localAngle = atan2(slot.1, slot.0)
+            let initialSpread = self.dispersionFactor
             let rotOffset = PondVector(
-                x: slot.0 * cos(self.heading) - slot.1 * sin(self.heading),
-                y: slot.0 * sin(self.heading) + slot.1 * cos(self.heading)
+                x: (slot.0 * initialSpread) * cos(self.heading) - (slot.1 * initialSpread) * sin(self.heading),
+                y: (slot.0 * initialSpread) * sin(self.heading) + (slot.1 * initialSpread) * cos(self.heading)
             )
             let fishPos = initialCenter + rotOffset
             let initialSwimPhase = Double.random(in: 0...(2 * .pi), using: &self.rng)
+            let initialWanderPhase = Double.random(in: 0...(2 * .pi), using: &self.rng)
+            let isScout = (index == 0 || index == 5)
 
             let inst = DecorativeFishInstance(
                 position: fishPos,
@@ -133,7 +170,9 @@ public struct DecorativeSchool: Sendable {
                 panicTimer: 0.0,
                 swimPhase: initialSwimPhase,
                 groupIndex: groupIndex,
-                index: index
+                index: index,
+                wanderPhase: initialWanderPhase,
+                isScout: isScout
             )
             instances.append(inst)
         }
@@ -204,6 +243,24 @@ public struct DecorativeSchool: Sendable {
 
         let short = min(bounds.width, bounds.height)
 
+        // 0. Update Schooling Mode (Loose Cohesion vs Mencar Dispersal Cycle)
+        modeTimer -= dt
+        if modeTimer <= 0.0 {
+            switch mode {
+            case .cohesive:
+                mode = .dispersed
+                modeTimer = Double.random(in: 14.0...24.0, using: &rng)
+            case .dispersed:
+                mode = .cohesive
+                modeTimer = Double.random(in: 9.0...16.0, using: &rng)
+            }
+        }
+
+        let targetDispersion: Double = (mode == .dispersed) ? 3.0 : 1.35
+        let dispersionSpeed = (mode == .dispersed) ? 0.7 : 0.45
+        dispersionFactor += (targetDispersion - dispersionFactor) * min(1.0, dt * dispersionSpeed)
+        boundingRadius = 45.0 + dispersionFactor * 24.0
+
         // 1. Update Roaming Waypoint
         waypointTimer -= dt
         if waypointTimer <= 0.0 || center.distanceSquared(to: targetWaypoint) < 30.0 * 30.0 {
@@ -271,6 +328,7 @@ public struct DecorativeSchool: Sendable {
         for i in 0..<fish.count {
             fish[i].length = fish[i].lengthRatio * short
             fish[i].halfWidth = fish[i].length * 0.18
+            fish[i].wanderPhase += dt * (1.1 + Double(i) * 0.22)
 
             var fleeForce = PondVector.zero
             var isFleeingThisFrame = false
@@ -336,11 +394,25 @@ public struct DecorativeSchool: Sendable {
                 }
             }
 
-            // C. Cohesion & Cruising (when not overwhelmed by panic)
+            // C. Cohesion, Cruising & Dispersal
             let isPanicking = fish[i].panicTimer > 0.0 || isFleeingThisFrame
-            let idealSlotAngle = heading + fish[i].localAngle
-            let idealPosition = center + PondVector.fromAngle(idealSlotAngle, length: fish[i].localDistance)
+            let isDispersed = (mode == .dispersed)
+
+            // Dynamic spread based on dispersionFactor and scout status
+            let scoutMult = fish[i].isScout ? 1.45 : 1.0
+            let spreadDist = max(20.0, fish[i].localDistance * dispersionFactor * scoutMult)
+
+            // Organic meandering angles and radial offset
+            let wanderAngleAmp = isDispersed ? 0.85 : 0.28
+            let wanderDistAmp = isDispersed ? 26.0 : 8.0
+            let wanderAngle = sin(fish[i].wanderPhase) * wanderAngleAmp
+            let wanderDist = cos(fish[i].wanderPhase * 0.77 + Double(i)) * wanderDistAmp
+
+            let currentSlotAngle = heading + fish[i].localAngle + wanderAngle
+            let currentDist = max(18.0, spreadDist + wanderDist)
+            let idealPosition = center + PondVector.fromAngle(currentSlotAngle, length: currentDist)
             let toSlot = idealPosition - fish[i].position
+            let distToSlot = toSlot.length
 
             if isFleeingThisFrame && fleeForce.lengthSquared > 1.0 {
                 // Immediate C-start startle escape reflex
@@ -352,14 +424,37 @@ public struct DecorativeSchool: Sendable {
                 // Sustained burst running away
                 fish[i].swimPhase += dt * (9.0 + Double(i) * 1.0)
                 fish[i].panicTimer = max(0.0, fish[i].panicTimer - dt)
-                // Gradually decay toward normal cruising
-                let cruiseVelocity = velocity + (toSlot * 1.2)
-                fish[i].velocity = fish[i].velocity.lerp(to: cruiseVelocity, t: min(1.0, dt * 2.5))
+                let cruiseVelocity = velocity + (toSlot * 1.1)
+                fish[i].velocity = fish[i].velocity.lerp(to: cruiseVelocity, t: min(1.0, dt * 2.2))
+            } else if isDispersed {
+                // Dispersed / Foraging "Mencar" mode:
+                // Small fish swim with high individual autonomy, exploring different headings,
+                // veering off, drifting, and only feeling a gentle tether if wandering too far.
+                fish[i].swimPhase += dt * (3.3 + Double(i % 3) * 0.40)
+
+                let personalSpeed = cruisingSpeed * (0.80 + Double(i % 4) * 0.10)
+                let individualHeading = heading + wanderAngle * 1.5 + Double(i - 4) * 0.12
+                let foragingVec = PondVector.fromAngle(individualHeading, length: personalSpeed)
+
+                // Soft tether toward dispersed slot if fish drifts too far away
+                let tetherForce: PondVector
+                if distToSlot > 35.0 {
+                    let tetherMag = min(cruisingSpeed * 0.70, (distToSlot - 35.0) * 0.75)
+                    tetherForce = (toSlot / distToSlot) * tetherMag
+                } else {
+                    tetherForce = toSlot * 0.20
+                }
+
+                let targetVelocity = foragingVec + tetherForce
+                fish[i].velocity = fish[i].velocity.lerp(to: targetVelocity, t: min(1.0, dt * 2.5))
             } else {
-                // Peaceful schooling cruise
+                // Peaceful cohesive cruise:
+                // Loose, relaxed natural schooling with breathing space and gentle individual sway.
                 fish[i].swimPhase += dt * (3.8 + Double(i) * 0.35)
-                let targetVelocity = velocity + (toSlot * 2.4)
-                fish[i].velocity = fish[i].velocity.lerp(to: targetVelocity, t: min(1.0, dt * 3.2))
+                let personalSpeed = cruisingSpeed * (0.92 + Double(i % 3) * 0.08)
+                let schoolForward = PondVector.fromAngle(heading + wanderAngle * 0.5, length: personalSpeed)
+                let targetVelocity = schoolForward * 0.45 + velocity * 0.35 + (toSlot * 1.8)
+                fish[i].velocity = fish[i].velocity.lerp(to: targetVelocity, t: min(1.0, dt * 3.0))
             }
 
             // Boundary repulsion on individual fish
@@ -389,20 +484,43 @@ public struct DecorativeSchool: Sendable {
             fish[i].turn = fish[i].heading + sin(fish[i].swimPhase) * wiggleAmplitude
         }
 
-        // 5. Intra-School Pairwise Fish Separation Constraint
-        // Guarantees small fish never bunch up or overlap on top of each other
-        let minClearance = 15.0
+        // 5. Intra-School Pairwise Fish Separation & Anti-Bunching
+        // 2 iterations of relaxation guarantees small fish never bunch up, keeping generous personal space
+        let minClearance = 16.0
+        let comfortDistance = (mode == .dispersed) ? 50.0 : 32.0
+
         for a in 0..<fish.count {
             for b in (a + 1)..<fish.count {
                 let diff = fish[a].position - fish[b].position
                 let distSq = diff.lengthSquared
-                if distSq < minClearance * minClearance && distSq > 0.001 {
+                guard distSq > 0.001 else { continue }
+                let dist = sqrt(distSq)
+
+                if dist < comfortDistance && dist >= minClearance {
+                    // Soft organic separation steering (nudges fish to disperse comfortably)
+                    let intensity = (comfortDistance - dist) / comfortDistance
+                    let softPush = (diff / dist) * (intensity * 20.0 * dt)
+                    fish[a].velocity += softPush
+                    fish[b].velocity -= softPush
+                }
+            }
+        }
+
+        for _ in 0..<2 {
+            for a in 0..<fish.count {
+                for b in (a + 1)..<fish.count {
+                    let diff = fish[a].position - fish[b].position
+                    let distSq = diff.lengthSquared
+                    guard distSq > 0.001 else { continue }
                     let dist = sqrt(distSq)
-                    let push = (diff / dist) * ((minClearance - dist) * 0.5)
-                    fish[a].position += push
-                    fish[b].position -= push
-                    fish[a].velocity += push * 1.5
-                    fish[b].velocity -= push * 1.5
+
+                    if dist < minClearance {
+                        let push = (diff / dist) * ((minClearance - dist) * 0.5)
+                        fish[a].position += push
+                        fish[b].position -= push
+                        fish[a].velocity += push * 1.2
+                        fish[b].velocity -= push * 1.2
+                    }
                 }
             }
         }

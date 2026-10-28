@@ -337,6 +337,27 @@ public final class WallpaperView: NSView {
         animationTimer = nil
     }
 
+    /// Advances the simulation by `simulatedSeconds` and renders a single frame,
+    /// optionally applying a gentle CALayer cross-fade transition without keeping an animation loop running.
+    public func advanceSnapshot(simulatedSeconds: Double = 10.0, animated: Bool = true) {
+        simulation.advanceSnapshot(simulatedSeconds: simulatedSeconds)
+        updateLayer()
+        if animated {
+            let transition = CATransition()
+            transition.duration = 1.2
+            transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            transition.type = .fade
+            sceneLayer.add(transition, forKey: "snapshotTransition")
+
+            let fadeAnim = CABasicAnimation(keyPath: "opacity")
+            fadeAnim.fromValue = 0.92
+            fadeAnim.toValue = 1.0
+            fadeAnim.duration = 1.2
+            fadeAnim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer?.add(fadeAnim, forKey: "snapshotCrossFade")
+        }
+    }
+
     // MARK: - Drawing & Layer Composition
 
     private func configureSceneLayers() {

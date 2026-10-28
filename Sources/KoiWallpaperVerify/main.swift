@@ -6,8 +6,6 @@ import IOKit
 import IOKit.ps
 import QuartzCore
 import KoiWallpaperCore
-import ScreenSaver
-import KoiWallpaperSaver
 
 enum TestCategory: String {
     case config = "CONFIG"
@@ -30,7 +28,7 @@ enum TestCategory: String {
     case m4Personality = "M4 PERSONALITY"
     case m5Visitors = "M5 VISITORS"
     case m5Fullscreen = "M5 FULLSCREEN"
-    case m6ScreenSaver = "M6 SCREEN SAVER"
+    case m6StaticWallpaper = "M6 STATIC WALLPAPER"
     case launchAtLogin = "LAUNCH AT LOGIN"
     case m7Seasons = "M7 SEASONS"
     case audit = "ARCH AUDIT"
@@ -2549,7 +2547,7 @@ do {
     ]
 
     if let enumerator = FileManager.default.enumerator(at: sourceRoot, includingPropertiesForKeys: [.isRegularFileKey]) {
-        for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" && !fileURL.path.contains("KoiWallpaperVerify") && !fileURL.path.contains("KoiWallpaperSaver") {
+        for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" && !fileURL.path.contains("KoiWallpaperVerify") {
             if let content = try? String(contentsOf: fileURL, encoding: .utf8) {
                 for pattern in forbiddenPatterns {
                     if content.contains(pattern) {
@@ -2570,53 +2568,50 @@ recordTest(.m5Fullscreen, "T10.4 Idle Policy Separation & Zero System Sleep/Lock
            details: idleAuditDetails)
 
 // -------------------------------------------------------------
-// SECTION 11: Milestone M6 Lock Screen & Screen Saver Verification
+// SECTION 11: Milestone M6 Dynamic Static Wallpaper & Zero-CPU Eco Mode Verification
 // -------------------------------------------------------------
-print("\n--- Section 11: Milestone M6 Lock Screen & Screen Saver Verification ---")
+print("\n--- Section 11: Milestone M6 Dynamic Static Wallpaper & Zero-CPU Eco Mode Verification ---")
 
-// T11.1: KoiWallpaperSaverView Instantiation, Properties & Preview Framing
-var saverInstantiationPassed = false
-var saverInstantiationDetails = ""
+// T11.1: Dynamic Static Wallpaper Pause State & Zero Timer Verification
+var staticPausePassed = false
+var staticPauseDetails = ""
 do {
-    let previewFrame = NSRect(x: 0, y: 0, width: 320, height: 200)
-    if let saverView = KoiWallpaperSaverView(frame: previewFrame, isPreview: true) {
-        let hasWallpaperView = (saverView.wallpaperView != nil)
-        let fpsInterval = (abs(saverView.animationTimeInterval - (1.0 / 30.0)) < 0.001)
-        let nonInteractive = (saverView.wallpaperView?.isInteractionMode == false)
-        let noHUD = (saverView.wallpaperView?.showHUD == false)
-        let noConfigSheet = (!saverView.hasConfigureSheet)
+    let statusController = StatusBarController()
+    statusController.updatePauseState(isPaused: true, reasons: [.manual])
 
-        saverInstantiationPassed = hasWallpaperView && fpsInterval && nonInteractive && noHUD && noConfigSheet
-        saverInstantiationDetails = "hasView=\(hasWallpaperView), interval30FPS=\(fpsInterval), nonInteractive=\(nonInteractive), noHUD=\(noHUD), hasConfigSheet=\(saverView.hasConfigureSheet)"
-    }
+    let view = WallpaperView(frame: NSRect(x: 0, y: 0, width: 320, height: 200))
+    view.isPaused = true
+
+    let timerStopped = (!view.isAnimating)
+    let isPausedState = view.isPaused
+
+    staticPausePassed = timerStopped && isPausedState
+    staticPauseDetails = "timerStopped=\(timerStopped), isPaused=\(isPausedState)"
 }
-recordTest(.m6ScreenSaver, "T11.1 Screen Saver Host View Instantiation & Preview Setup",
-           passed: saverInstantiationPassed,
-           details: saverInstantiationDetails)
+recordTest(.m6StaticWallpaper, "T11.1 Dynamic Static Wallpaper Pause State & Zero-CPU Timer Stasis",
+           passed: staticPausePassed,
+           details: staticPauseDetails)
 
-// T11.2: KoiWallpaperSaverView Animation Lifecycle (Start / Step / Stop)
-var saverLifecyclePassed = false
-var saverLifecycleDetails = ""
+// T11.2: Dynamic Snapshot Step & CALayer Cross-Fade Transition
+var snapshotStepPassed = false
+var snapshotStepDetails = ""
 do {
-    let fullFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
-    if let saverView = KoiWallpaperSaverView(frame: fullFrame, isPreview: false) {
-        saverView.startAnimation()
-        let runningUnpaused = (saverView.wallpaperView?.isPaused == false)
-        let runningTimer = (saverView.wallpaperView?.isAnimating == true)
+    let view = WallpaperView(frame: NSRect(x: 0, y: 0, width: 640, height: 400))
+    view.isPaused = true
+    let initialElapsed = view.simulation.elapsedTime
 
-        saverView.animateOneFrame()
+    view.advanceSnapshot(simulatedSeconds: 10.0, animated: true)
 
-        saverView.stopAnimation()
-        let stoppedPaused = (saverView.wallpaperView?.isPaused == true)
-        let stoppedTimer = (saverView.wallpaperView?.isAnimating == false)
+    let elapsedAdvanced = (view.simulation.elapsedTime >= initialElapsed + 9.9)
+    let stillNotAnimating = (!view.isAnimating)
+    let transitionAttached = (view.layer?.animation(forKey: "snapshotCrossFade") != nil)
 
-        saverLifecyclePassed = runningUnpaused && runningTimer && stoppedPaused && stoppedTimer
-        saverLifecycleDetails = "startedUnpaused=\(runningUnpaused), startedTimer=\(runningTimer), stoppedPaused=\(stoppedPaused), stoppedTimer=\(stoppedTimer)"
-    }
+    snapshotStepPassed = elapsedAdvanced && stillNotAnimating && transitionAttached
+    snapshotStepDetails = "elapsedAdvanced=\(elapsedAdvanced), stillNotAnimating=\(stillNotAnimating), transitionAttached=\(transitionAttached)"
 }
-recordTest(.m6ScreenSaver, "T11.2 Screen Saver Animation Lifecycle & Pause State Synchronization",
-           passed: saverLifecyclePassed,
-           details: saverLifecycleDetails)
+recordTest(.m6StaticWallpaper, "T11.2 Dynamic Snapshot Step & CALayer Cross-Fade Transition",
+           passed: snapshotStepPassed,
+           details: snapshotStepDetails)
 
 // T11.3: Cross-Process Settings Synchronization via SharedFileSettingsStore
 var sharedSyncPassed = false
@@ -2633,7 +2628,7 @@ do {
         $0.isRainActive = true
     }
 
-    // Simulate separate ScreenSaverEngine reading from the shared file
+    // Simulate separate process reading from the shared file
     let storeB = SharedFileSettingsStore(fileURL: tempSettingsURL, fallbackStore: nil)
     let managerB = SettingsManager(store: storeB)
 
@@ -2648,55 +2643,40 @@ do {
     sharedSyncPassed = matchesMode && matchesTheme && matchesMood && matchesRain
     sharedSyncDetails = "mode=\(loaded.timeOfDayMode.rawValue), theme=\(loaded.manualTheme.rawValue), mood=\(loaded.pondMood.rawValue), rain=\(loaded.isRainActive)"
 }
-recordTest(.m6ScreenSaver, "T11.3 Shared File Settings Cross-Process Synchronization",
+recordTest(.m6StaticWallpaper, "T11.3 Shared File Settings Cross-Process Synchronization",
            passed: sharedSyncPassed,
            details: sharedSyncDetails)
 
-// T11.4: Screen Saver Bundle Installer Verification
-var installerPassed = false
-var installerDetails = ""
+// T11.4: Dynamic Snapshot Timer Scheduling on AppCoordinator
+var snapshotTimerPassed = false
+var snapshotTimerDetails = ""
 do {
-    let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("koi_test_saver_install_\(UUID().uuidString)")
     let coordinator = AppCoordinator()
+    let initialNoTimer = (coordinator.snapshotTimer == nil)
 
-    // Create a mock saver bundle to verify install mechanics
-    let mockSourceDir = tempDir.appendingPathComponent("Source/KoiWallpaper.saver/Contents/MacOS", isDirectory: true)
-    try FileManager.default.createDirectory(at: mockSourceDir, withIntermediateDirectories: true)
-    let mockPlist = """
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    <plist version="1.0">
-    <dict>
-        <key>CFBundleName</key>
-        <string>KoiWallpaper</string>
-        <key>CFBundleExecutable</key>
-        <string>KoiWallpaperSaver</string>
-    </dict>
-    </plist>
-    """
-    try mockPlist.write(to: tempDir.appendingPathComponent("Source/KoiWallpaper.saver/Contents/Info.plist"), atomically: true, encoding: .utf8)
-    try "BINARY".write(to: mockSourceDir.appendingPathComponent("KoiWallpaperSaver"), atomically: true, encoding: .utf8)
+    if let statusController = coordinator.statusBarController {
+        // Toggle into static wallpaper mode
+        coordinator.statusBarDidToggleManualPause(statusController)
+        let timerActiveInStatic = (coordinator.snapshotTimer != nil)
 
-    let mockDestDir = tempDir.appendingPathComponent("Dest")
-    let sourceURL = tempDir.appendingPathComponent("Source/KoiWallpaper.saver")
+        // Toggle back to live animation mode
+        coordinator.statusBarDidToggleManualPause(statusController)
+        let timerClearedInLive = (coordinator.snapshotTimer == nil)
 
-    let installed = coordinator.installScreenSaver(
-        destinationDirectory: mockDestDir,
-        sourceBundleURL: sourceURL,
-        showAlert: false
-    )
-
-    let destPlistExists = FileManager.default.fileExists(atPath: mockDestDir.appendingPathComponent("KoiWallpaper.saver/Contents/Info.plist").path)
-    let destBinaryExists = FileManager.default.fileExists(atPath: mockDestDir.appendingPathComponent("KoiWallpaper.saver/Contents/MacOS/KoiWallpaperSaver").path)
-
-    try? FileManager.default.removeItem(at: tempDir)
-
-    installerPassed = installed && destPlistExists && destBinaryExists
-    installerDetails = "installed=\(installed), plistExists=\(destPlistExists), binaryExists=\(destBinaryExists)"
+        snapshotTimerPassed = initialNoTimer && timerActiveInStatic && timerClearedInLive
+        snapshotTimerDetails = "initialNoTimer=\(initialNoTimer), timerActiveInStatic=\(timerActiveInStatic), timerClearedInLive=\(timerClearedInLive)"
+    } else {
+        // Fallback testing via direct method
+        coordinator.setupSnapshotTimerIfNeeded()
+        let timerState = (coordinator.snapshotTimer == nil)
+        snapshotTimerPassed = timerState
+        snapshotTimerDetails = "directSetupTimerState=\(timerState)"
+    }
+    coordinator.teardown()
 }
-recordTest(.m6ScreenSaver, "T11.4 Screen Saver Bundle Installer & Destination Packaging",
-           passed: installerPassed,
-           details: installerDetails)
+recordTest(.m6StaticWallpaper, "T11.4 Dynamic Snapshot Timer Lifecycle on AppCoordinator",
+           passed: snapshotTimerPassed,
+           details: snapshotTimerDetails)
 
 // -------------------------------------------------------------
 // SECTION 12: Launch at Login (Start on Boot) Verification
@@ -2840,9 +2820,6 @@ do {
         func statusBarDidRequestSpawnVisitor(_ controller: StatusBarController, type: PondVisitorType) {}
         func statusBarDidRequestClearVisitors(_ controller: StatusBarController) {}
         func statusBarDidToggleFullscreen(_ controller: StatusBarController) {}
-        func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController) {}
-        func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController) {}
-        func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {}
         func statusBarDidToggleLaunchAtLogin(_ controller: StatusBarController) {
             didToggleLaunchAtLogin = true
         }

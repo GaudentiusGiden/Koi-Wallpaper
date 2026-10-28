@@ -17,9 +17,6 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidToggleFullscreen(_ controller: StatusBarController)
     func statusBarDidToggleLaunchAtLogin(_ controller: StatusBarController)
     func statusBarDidRequestOpenLoginItemsSettings(_ controller: StatusBarController)
-    func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController)
-    func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController)
-    func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController)
     func statusBarDidSelectSeasonMode(_ controller: StatusBarController, mode: SeasonMode)
     func statusBarDidSelectManualSeason(_ controller: StatusBarController, season: PondSeason)
     func statusBarDidToggleFloatingDebris(_ controller: StatusBarController)
@@ -38,9 +35,6 @@ extension StatusBarControllerDelegate {
     public func statusBarDidToggleFullscreen(_ controller: StatusBarController) {}
     public func statusBarDidToggleLaunchAtLogin(_ controller: StatusBarController) {}
     public func statusBarDidRequestOpenLoginItemsSettings(_ controller: StatusBarController) {}
-    public func statusBarDidRequestInstallScreenSaver(_ controller: StatusBarController) {}
-    public func statusBarDidRequestOpenScreenSaverSettings(_ controller: StatusBarController) {}
-    public func statusBarDidRequestStartScreenSaver(_ controller: StatusBarController) {}
     public func statusBarDidSelectSeasonMode(_ controller: StatusBarController, mode: SeasonMode) {}
     public func statusBarDidSelectManualSeason(_ controller: StatusBarController, season: PondSeason) {}
     public func statusBarDidToggleFloatingDebris(_ controller: StatusBarController) {}
@@ -54,9 +48,9 @@ public final class StatusBarController {
 
     // Primary menu items
     private let headerItem = NSMenuItem(title: "Koi Wallpaper (M5)", action: nil, keyEquivalent: "")
-    private let pauseStatusItem = NSMenuItem(title: "Status Kolam: Aktif", action: nil, keyEquivalent: "")
+    private let pauseStatusItem = NSMenuItem(title: "Status: Animasi Aktif (Live)", action: nil, keyEquivalent: "")
     private let pauseToggleItem = NSMenuItem(
-        title: "Jeda Kolam (Pause)",
+        title: "Jeda Animasi (Jadikan Wallpaper Statis)",
         action: #selector(pauseToggled),
         keyEquivalent: "p"
     )
@@ -73,13 +67,6 @@ public final class StatusBarController {
         title: "Mode Layar Penuh (Escape untuk Keluar)",
         action: #selector(fullscreenToggled),
         keyEquivalent: "f"
-    )
-
-    // Screen Saver trigger
-    private let startScreenSaverItem = NSMenuItem(
-        title: "Mulai Screen Saver Kolam Koi Sekarang",
-        action: #selector(startScreenSaverClicked),
-        keyEquivalent: "s"
     )
 
     // Time of Day & Theme submenu
@@ -156,11 +143,6 @@ public final class StatusBarController {
         action: #selector(resetSettingsClicked),
         keyEquivalent: ""
     )
-    private let installScreenSaverItem = NSMenuItem(
-        title: "Pasang di Layar Terkunci (Screen Saver)...",
-        action: #selector(installScreenSaverClicked),
-        keyEquivalent: ""
-    )
 
     // Quit
     private let quitItem = NSMenuItem(
@@ -203,7 +185,6 @@ public final class StatusBarController {
 
         // Action targets
         pauseToggleItem.target = self
-        startScreenSaverItem.target = self
         interactionToggleItem.target = self
         fullscreenToggleItem.target = self
         autoTimeItem.target = self
@@ -230,7 +211,6 @@ public final class StatusBarController {
         launchAtLoginItem.toolTip = "Buka Koi Wallpaper secara otomatis setiap kali MacBook dinyalakan atau setelah pengguna login"
         pauseOnBatteryItem.target = self
         showHUDItem.target = self
-        installScreenSaverItem.target = self
         resetSettingsItem.target = self
         quitItem.target = self
 
@@ -291,8 +271,6 @@ public final class StatusBarController {
         settingsMenu.addItem(pauseOnBatteryItem)
         settingsMenu.addItem(showHUDItem)
         settingsMenu.addItem(NSMenuItem.separator())
-        settingsMenu.addItem(installScreenSaverItem)
-        settingsMenu.addItem(NSMenuItem.separator())
         settingsMenu.addItem(resetSettingsItem)
         settingsMenuItem.submenu = settingsMenu
 
@@ -302,7 +280,6 @@ public final class StatusBarController {
         menu.addItem(pauseToggleItem)
         menu.addItem(pauseStatusItem)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(startScreenSaverItem)
         menu.addItem(fullscreenToggleItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(interactionToggleItem)
@@ -332,14 +309,20 @@ public final class StatusBarController {
 
     public func updatePauseState(isPaused: Bool, reasons: Set<PauseReason>) {
         if isPaused {
-            let reasonStr = reasons.map(\.rawValue).sorted().joined(separator: ", ")
-            pauseStatusItem.title = "Status Kolam: Paused (\(reasonStr))"
             let isManual = reasons.contains(.manual)
-            pauseToggleItem.title = isManual ? "Lanjutkan Kolam (Resume)" : "Jeda Kolam (Pause)"
-            pauseToggleItem.state = isManual ? .on : .off
+            if isManual {
+                pauseStatusItem.title = "Status: Wallpaper Statis (Hemat Daya)"
+                pauseToggleItem.title = "Lanjutkan Animasi (Live Wallpaper)"
+                pauseToggleItem.state = .on
+            } else {
+                let reasonStr = reasons.map(\.rawValue).sorted().joined(separator: ", ")
+                pauseStatusItem.title = "Status: Dijeda Otomatis (\(reasonStr))"
+                pauseToggleItem.title = "Jeda Animasi (Jadikan Wallpaper Statis)"
+                pauseToggleItem.state = .off
+            }
         } else {
-            pauseStatusItem.title = "Status Kolam: Aktif"
-            pauseToggleItem.title = "Jeda Kolam (Pause)"
+            pauseStatusItem.title = "Status: Animasi Aktif (Live)"
+            pauseToggleItem.title = "Jeda Animasi (Jadikan Wallpaper Statis)"
             pauseToggleItem.state = .off
         }
 
@@ -639,10 +622,6 @@ public final class StatusBarController {
         delegate?.statusBarDidToggleFullscreen(self)
     }
 
-    @objc private func startScreenSaverClicked() {
-        delegate?.statusBarDidRequestStartScreenSaver(self)
-    }
-
     @objc private func spawnBallClicked() {
         delegate?.statusBarDidRequestSpawnVisitor(self, type: .ball)
     }
@@ -665,10 +644,6 @@ public final class StatusBarController {
 
     @objc private func resetSettingsClicked() {
         delegate?.statusBarDidResetSettings(self)
-    }
-
-    @objc private func installScreenSaverClicked() {
-        delegate?.statusBarDidRequestInstallScreenSaver(self)
     }
 
     @objc private func quitClicked() {

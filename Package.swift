@@ -26,22 +26,12 @@ let package = Package(
         .library(
             name: "KoiWallpaperCore",
             targets: ["KoiWallpaperCore"]
-        ),
-        .library(
-            name: "KoiWallpaperSaver",
-            type: .dynamic,
-            targets: ["KoiWallpaperSaver"]
         )
     ],
     targets: [
         .target(
             name: "KoiWallpaperCore",
             path: "Sources/KoiWallpaperCore"
-        ),
-        .target(
-            name: "KoiWallpaperSaver",
-            dependencies: ["KoiWallpaperCore"],
-            path: "Sources/KoiWallpaperSaver"
         ),
         .executableTarget(
             name: "KoiWallpaper",
@@ -50,7 +40,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "KoiWallpaperVerify",
-            dependencies: ["KoiWallpaperCore", "KoiWallpaperSaver"],
+            dependencies: ["KoiWallpaperCore"],
             path: "Sources/KoiWallpaperVerify"
         ),
         .executableTarget(

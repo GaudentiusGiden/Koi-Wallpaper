@@ -1330,6 +1330,51 @@ recordSimTest(
     details: "centersFrozen=\(centersIdentical), positionsFrozen=\(positionsIdentical), phasesFrozen=\(phasesIdentical)"
 )
 
+// T15.6 Dynamic Dispersion & Anti-Clumping Cycle (Mencar Behavior)
+let dispersionSim = PondSimulation(bounds: PondBounds(width: 800.0, height: 600.0), seed: 777)
+var t15_6ModesSeen: Set<String> = []
+var t15_6AvgSpreads: [Double] = []
+var t15_6MaxSpreads: [Double] = []
+var t15_6MinPairDist = Double.infinity
+
+for _ in 0..<1200 { // 20 seconds of simulation
+    dispersionSim.advance(deltaTime: 1.0 / 60.0)
+    for school in dispersionSim.decorativeSchools {
+        t15_6ModesSeen.insert(school.mode.rawValue)
+        let center = school.center
+        var sumD = 0.0
+        var maxD = 0.0
+        for f in school.fish {
+            let d = f.position.distance(to: center)
+            sumD += d
+            if d > maxD { maxD = d }
+        }
+        t15_6AvgSpreads.append(sumD / Double(school.fish.count))
+        t15_6MaxSpreads.append(maxD)
+
+        for a in 0..<school.fish.count {
+            for b in (a + 1)..<school.fish.count {
+                let pDist = school.fish[a].position.distance(to: school.fish[b].position)
+                if pDist < t15_6MinPairDist { t15_6MinPairDist = pDist }
+            }
+        }
+    }
+}
+
+let t15_6OverallAvg = t15_6AvgSpreads.reduce(0.0, +) / Double(t15_6AvgSpreads.count)
+let t15_6PeakMax = t15_6MaxSpreads.max() ?? 0.0
+let t15_6Passed = t15_6ModesSeen.contains("dispersed") &&
+                  t15_6ModesSeen.contains("cohesive") &&
+                  (t15_6OverallAvg > 40.0) &&
+                  (t15_6PeakMax > 80.0) &&
+                  (t15_6MinPairDist >= 12.0)
+
+recordSimTest(
+    "T15.6 Decorative Fish Dynamic Dispersion & Anti-Clumping Cycle",
+    passed: t15_6Passed,
+    details: "modes=\(t15_6ModesSeen.sorted()), avgSpread=\(String(format: "%.1f", t15_6OverallAvg))pt (old ~21pt), peakSpread=\(String(format: "%.1f", t15_6PeakMax))pt, minPairDist=\(String(format: "%.1f", t15_6MinPairDist))pt"
+)
+
 // -------------------------------------------------------------
 // TEST 16: Long-Duration Multi-Seed Koi Wandering Stability
 // -------------------------------------------------------------

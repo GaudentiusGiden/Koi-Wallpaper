@@ -232,6 +232,15 @@ public final class ScreenManager {
         }
     }
 
+    /// Advances the static snapshot on all visible desktop controllers with optional gentle cross-fade.
+    public func advanceSnapshot(simulatedSeconds: Double = 10.0, animated: Bool = true) {
+        for controller in controllers {
+            if !controller.isOccluded {
+                controller.wallpaperView.advanceSnapshot(simulatedSeconds: simulatedSeconds, animated: animated)
+            }
+        }
+    }
+
     public func applySeason(_ season: PondSeason, showBanner: Bool = false) {
         self.currentManualSeason = season
         for controller in controllers {

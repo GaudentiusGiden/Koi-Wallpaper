@@ -734,6 +734,22 @@ public final class PondSimulation: @unchecked Sendable {
         }
     }
 
+    /// Advances the simulation by simulatedSeconds for a discrete snapshot, even when paused.
+    public func advanceSnapshot(simulatedSeconds: Double = 10.0) {
+        let dt = fixedDeltaTime
+        var remaining = max(0.0, simulatedSeconds)
+        let maxSteps = max(1200, Int(ceil(remaining / dt)) + 10)
+        var steps = 0
+        while remaining >= dt && steps < maxSteps {
+            stepSimulation(dt: dt)
+            remaining -= dt
+            steps += 1
+        }
+        if remaining > 0 && steps < maxSteps {
+            stepSimulation(dt: remaining)
+        }
+    }
+
     /// Executes a single discrete physics update step.
     public func stepSimulation(dt: Double) {
         elapsedTime += dt
@@ -1049,7 +1065,7 @@ public final class PondSimulation: @unchecked Sendable {
         // 9. Update Decorative Schooling Small Fish
         // Compute inter-school repulsion so the 3 schools maintain separate paths
         var schoolRepulsions = [PondVector](repeating: .zero, count: decorativeSchools.count)
-        let minSchoolClearance = 190.0
+        let minSchoolClearance = 210.0
         for i in 0..<decorativeSchools.count {
             for j in (i + 1)..<decorativeSchools.count {
                 let diff = decorativeSchools[i].center - decorativeSchools[j].center
@@ -1072,6 +1088,25 @@ public final class PondSimulation: @unchecked Sendable {
                 ripples: ripples,
                 externalRepulsion: schoolRepulsions[i]
             )
+        }
+
+        // Soft inter-school pairwise fish separation (prevents cross-school bunching)
+        let crossSchoolComfort = 30.0
+        for sA in 0..<decorativeSchools.count {
+            for sB in (sA + 1)..<decorativeSchools.count {
+                for fA in 0..<decorativeSchools[sA].fish.count {
+                    for fB in 0..<decorativeSchools[sB].fish.count {
+                        let diff = decorativeSchools[sA].fish[fA].position - decorativeSchools[sB].fish[fB].position
+                        let distSq = diff.lengthSquared
+                        if distSq < crossSchoolComfort * crossSchoolComfort && distSq > 0.001 {
+                            let dist = sqrt(distSq)
+                            let push = (diff / dist) * (((crossSchoolComfort - dist) / crossSchoolComfort) * 16.0 * dt)
+                            decorativeSchools[sA].fish[fA].velocity += push
+                            decorativeSchools[sB].fish[fB].velocity -= push
+                        }
+                    }
+                }
+            }
         }
 
         // 10. Update Seasonal Floating Debris & Ripple Physical Impulses
