@@ -12,6 +12,7 @@ struct PondStroke {
     let path: CGPath
     let color: CGColor
     let width: CGFloat
+    var fillColor: CGColor? = nil
 }
 
 struct PondRenderFrame {
@@ -261,10 +262,17 @@ public final class PondRenderer {
             if let swimmers = frame.swimmers { draw(swimmers, in: context) }
             context.setLineCap(.round)
             for stroke in frame.surface {
-                context.setStrokeColor(stroke.color)
-                context.setLineWidth(stroke.width)
-                context.addPath(stroke.path)
-                context.strokePath()
+                if let fill = stroke.fillColor {
+                    context.setFillColor(fill)
+                    context.addPath(stroke.path)
+                    context.fillPath()
+                }
+                if stroke.width > 0 {
+                    context.setStrokeColor(stroke.color)
+                    context.setLineWidth(stroke.width)
+                    context.addPath(stroke.path)
+                    context.strokePath()
+                }
             }
             for placement in frame.flora { draw(placement, in: context) }
             if let insects = frame.insects { draw(insects, in: context) }
@@ -319,10 +327,17 @@ public final class PondRenderer {
             if let swimmers = frame.swimmers { draw(swimmers, in: context) }
             context.setLineCap(.round)
             for stroke in frame.surface {
-                context.setStrokeColor(stroke.color)
-                context.setLineWidth(stroke.width)
-                context.addPath(stroke.path)
-                context.strokePath()
+                if let fill = stroke.fillColor {
+                    context.setFillColor(fill)
+                    context.addPath(stroke.path)
+                    context.fillPath()
+                }
+                if stroke.width > 0 {
+                    context.setStrokeColor(stroke.color)
+                    context.setLineWidth(stroke.width)
+                    context.addPath(stroke.path)
+                    context.strokePath()
+                }
             }
             for placement in frame.flora {
                 draw(placement, in: context)
@@ -765,8 +780,9 @@ public final class PondRenderer {
                 width: 1.1
             ))
         }
+        let effectiveRippleTheme = (t < 0.5 ? fromTheme : toTheme)
         for ripple in simulation.ripples where !ripple.isDead {
-            strokes.append(contentsOf: PondArtwork.rippleStrokes(for: ripple))
+            strokes.append(contentsOf: PondArtwork.rippleStrokes(for: ripple, theme: effectiveRippleTheme))
         }
         return strokes
     }

@@ -37,6 +37,13 @@ struct PondCausticPalette {
     let alphaGain: CGFloat
 }
 
+struct PondRipplePalette {
+    let brush: PondRGBColor
+    let specular: PondRGBColor
+    let bubble: PondRGBAColor
+    let bubbleShadow: PondRGBAColor
+}
+
 /// Shared colors for the cached pond layers. Keeping theme values together makes
 /// water, lighting, foliage, and reflections respond as one visual treatment.
 struct PondThemePalette {
@@ -62,6 +69,14 @@ struct PondThemePalette {
     let flowerCenter: PondRGBColor
     let flowerCore: PondRGBColor
     let glimmer: PondRGBAColor
+    let ripple: PondRipplePalette
+
+    static let foodRipple = PondRipplePalette(
+        brush: PondRGBColor(hex: 0xF5A038),
+        specular: PondRGBColor(hex: 0xFFF5D0),
+        bubble: PondRGBAColor(color: PondRGBColor(hex: 0xFFA040), alpha: 0.50),
+        bubbleShadow: PondRGBAColor(color: PondRGBColor(hex: 0x301808), alpha: 0.40)
+    )
 
     private static let paletteCache: [PondTheme: PondThemePalette] = {
         Dictionary(uniqueKeysWithValues: PondTheme.allCases.map { ($0, makePalette($0)) })
@@ -88,7 +103,8 @@ struct PondThemePalette {
                 leafRim: rgba(0x96D686, 0.35),
                 flowerPetal: rgb(0xF26588), flowerInnerPetal: rgb(0xFFC0C8),
                 flowerCenter: rgb(0xF7B63B), flowerCore: rgb(0x704020),
-                glimmer: rgba(0xD4FFE9, 0.10)
+                glimmer: rgba(0xD4FFE9, 0.10),
+                ripple: .init(brush: rgb(0x40D8C0), specular: rgb(0xF4FFFA), bubble: rgba(0x8EE0BE, 0.45), bubbleShadow: rgba(0x0A3628, 0.40))
             )
         case .dawn:
             return PondThemePalette(
@@ -105,7 +121,8 @@ struct PondThemePalette {
                 leafRim: rgba(0xE4C486, 0.38),
                 flowerPetal: rgb(0xF57B8C), flowerInnerPetal: rgb(0xFFCCC2),
                 flowerCenter: rgb(0xF6B445), flowerCore: rgb(0x6E4224),
-                glimmer: rgba(0xFFE9D0, 0.08)
+                glimmer: rgba(0xFFE9D0, 0.08),
+                ripple: .init(brush: rgb(0x52A699), specular: rgb(0xFFF0DE), bubble: rgba(0xFFD6B5, 0.45), bubbleShadow: rgba(0x123832, 0.40))
             )
         case .goldenHour:
             return PondThemePalette(
@@ -122,7 +139,8 @@ struct PondThemePalette {
                 leafRim: rgba(0xF0D070, 0.46),
                 flowerPetal: rgb(0xEF7560), flowerInnerPetal: rgb(0xFFCAA0),
                 flowerCenter: rgb(0xF8BD44), flowerCore: rgb(0x724025),
-                glimmer: rgba(0xFFE0A0, 0.09)
+                glimmer: rgba(0xFFE0A0, 0.09),
+                ripple: .init(brush: rgb(0xE8B84B), specular: rgb(0xFFF5D6), bubble: rgba(0xFFE2A6, 0.50), bubbleShadow: rgba(0x153A37, 0.45))
             )
         case .dusk:
             return PondThemePalette(
@@ -139,7 +157,8 @@ struct PondThemePalette {
                 leafRim: rgba(0xC793B3, 0.38),
                 flowerPetal: rgb(0xD66F9C), flowerInnerPetal: rgb(0xE7B2CB),
                 flowerCenter: rgb(0xE3A447), flowerCore: rgb(0x5F3248),
-                glimmer: rgba(0xE6B6D6, 0.06)
+                glimmer: rgba(0xE6B6D6, 0.06),
+                ripple: .init(brush: rgb(0x8A7CA8), specular: rgb(0xF3DCE8), bubble: rgba(0xD88EAF, 0.40), bubbleShadow: rgba(0x171E3A, 0.45))
             )
         case .night:
             return PondThemePalette(
@@ -156,7 +175,8 @@ struct PondThemePalette {
                 leafRim: rgba(0x5FA39D, 0.30),
                 flowerPetal: rgb(0xA66896), flowerInnerPetal: rgb(0xCBA0C0),
                 flowerCenter: rgb(0xD2A147), flowerCore: rgb(0x502F3C),
-                glimmer: rgba(0x66BDE0, 0.04)
+                glimmer: rgba(0x66BDE0, 0.04),
+                ripple: .init(brush: rgb(0x2E6F94), specular: rgb(0xB8E6F8), bubble: rgba(0x3B7996, 0.35), bubbleShadow: rgba(0x041119, 0.50))
             )
         case .deepClear:
             return PondThemePalette(
@@ -173,7 +193,8 @@ struct PondThemePalette {
                 leafRim: rgba(0x84E0A0, 0.42),
                 flowerPetal: rgb(0xF0688C), flowerInnerPetal: rgb(0xFFC2CE),
                 flowerCenter: rgb(0xF7B63B), flowerCore: rgb(0x6E3E1F),
-                glimmer: rgba(0xC2FFF3, 0.10)
+                glimmer: rgba(0xC2FFF3, 0.10),
+                ripple: .init(brush: rgb(0x24C8C0), specular: rgb(0xD6FFFA), bubble: rgba(0x7DF6EF, 0.50), bubbleShadow: rgba(0x053A44, 0.45))
             )
         case .rain:
             return PondThemePalette(
@@ -190,7 +211,8 @@ struct PondThemePalette {
                 leafRim: rgba(0xA0BA7F, 0.32),
                 flowerPetal: rgb(0xCB788E), flowerInnerPetal: rgb(0xDFBAC1),
                 flowerCenter: rgb(0xD0A65B), flowerCore: rgb(0x573C41),
-                glimmer: rgba(0xC2D7D7, 0.06)
+                glimmer: rgba(0xC2D7D7, 0.06),
+                ripple: .init(brush: rgb(0x6D8E92), specular: rgb(0xE0ECEC), bubble: rgba(0xA5BDBD, 0.40), bubbleShadow: rgba(0x16292D, 0.40))
             )
         }
     }

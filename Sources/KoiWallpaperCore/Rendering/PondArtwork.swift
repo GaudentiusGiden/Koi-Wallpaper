@@ -314,13 +314,16 @@ public enum PondArtwork {
 
     // MARK: - Water Surface Ripples
 
-    /// Generates aligned ripple strokes matching realistic water surface splash reflections.
-    static func rippleStrokes(for ripple: WaterRipple) -> [PondStroke] {
+    /// Generates Ukiyo-e wave arc strokes, specular foam crests, and central dimple micro-bubbles.
+    static func rippleStrokes(for ripple: WaterRipple, theme: PondTheme = .day) -> [PondStroke] {
         guard !ripple.isDead, ripple.alpha > 0.001 else { return [] }
 
         let center = CGPoint(x: CGFloat(ripple.center.x), y: CGFloat(ripple.center.y))
         let radius = CGFloat(ripple.radius)
         let alpha = CGFloat(ripple.alpha)
+
+        let themePalette = theme.renderPalette
+        let palette = (ripple.type == .foodDrop) ? PondThemePalette.foodRipple : themePalette.ripple
 
         switch ripple.type {
         case .eatingNibble:
@@ -334,149 +337,171 @@ public enum PondArtwork {
             return [
                 PondStroke(
                     path: nibblePath,
-                    color: CGColor(red: 0.94, green: 0.98, blue: 0.90, alpha: alpha * 0.75),
+                    color: palette.specular.cgColor(alpha: alpha * 0.75),
                     width: 1.1
                 )
             ]
 
         case .rainDrop:
-            // Realistic atmospheric rain droplet impact & wide surface wave reflection
-            let rainPath = CGMutablePath()
-            let baseAngle = CGFloat((ripple.center.x * 0.041 + ripple.center.y * 0.067).truncatingRemainder(dividingBy: .pi))
-            let t = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: baseAngle)
+            // High-contrast sparkling silver capillary rings & impact pearl flash
+            let rx = radius * 1.03
+            let ry = radius * 0.97
+            let outerRect = CGRect(x: center.x - rx, y: center.y - ry, width: rx * 2.0, height: ry * 2.0)
 
-            // 1. Primary outer capillary droplet ring with slight organic eccentricity
-            let rx = radius * 1.025
-            let ry = radius * 0.975
-            rainPath.addEllipse(in: CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2), transform: t)
-
-            // 2. Specular reflection arc on the outer rim (sky glint)
-            let arcPath = CGMutablePath()
-            arcPath.addArc(center: .zero, radius: radius, startAngle: .pi * 0.22, endAngle: .pi * 0.80, clockwise: false)
-            let arcT = CGAffineTransform(scaleX: 1.025, y: 0.975).concatenating(t)
-            rainPath.addPath(arcPath, transform: arcT)
-
-            // 3. Fresnel counter-reflection on the opposing rim for wide splashes
-            if radius >= 12.0 {
-                let fresnelArc = CGMutablePath()
-                fresnelArc.addArc(center: .zero, radius: radius, startAngle: .pi * 1.25, endAngle: .pi * 1.75, clockwise: false)
-                rainPath.addPath(fresnelArc, transform: arcT)
+            // Path 1: Diffuse Sky Specular Halo Bloom
+            let haloPath = CGMutablePath()
+            haloPath.addEllipse(in: outerRect)
+            if radius <= 12.0 {
+                // Flash glow around initial impact
+                haloPath.addEllipse(in: CGRect(x: center.x - 6.0, y: center.y - 6.0, width: 12.0, height: 12.0))
             }
 
-            // 4. Secondary graduated rebound droplet ring
-            if radius >= 8.0 {
-                let rInner = radius * 0.62
-                let innerRect = CGRect(x: -rInner * 0.98, y: -rInner * 1.02, width: rInner * 1.96, height: rInner * 2.04)
-                rainPath.addEllipse(in: innerRect, transform: t)
+            // Path 2: Crisp Sparkling Silver Crest & Core Pearl Ping
+            let crestPath = CGMutablePath()
+            crestPath.addEllipse(in: outerRect)
+
+            // Rebound inner capillary ring
+            if radius >= 10.0 {
+                let rInner = radius * 0.52
+                crestPath.addEllipse(in: CGRect(x: center.x - rInner, y: center.y - rInner, width: rInner * 2.0, height: rInner * 2.0))
             }
 
-            // 5. Tertiary wave crest as the ripple expands wide
-            if radius >= 18.0 {
-                let rCenter = radius * 0.36
-                let centerRect = CGRect(x: -rCenter * 1.01, y: -rCenter * 0.99, width: rCenter * 2.02, height: rCenter * 1.98)
-                rainPath.addEllipse(in: centerRect, transform: t)
+            // Central impact ping flash
+            if radius <= 14.0 {
+                let pingR: CGFloat = max(2.0, (14.0 - radius) * 0.35 + 2.0)
+                crestPath.addEllipse(in: CGRect(x: center.x - pingR, y: center.y - pingR, width: pingR * 2.0, height: pingR * 2.0))
             }
 
-            // 6. Instant impact splash glint when droplet first touches surface
-            if radius <= 10.0 {
-                let pingR = max(2.0, radius * 0.38)
-                rainPath.addEllipse(in: CGRect(x: -pingR, y: -pingR, width: pingR * 2, height: pingR * 2), transform: t)
-            }
+            let silverColor = CGColor(red: 0.96, green: 0.99, blue: 1.0, alpha: min(1.0, alpha * 0.95))
+            let haloColor = CGColor(red: 0.80, green: 0.94, blue: 1.0, alpha: alpha * 0.38)
+            let pearlFill = CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: min(1.0, alpha * 0.98))
 
             return [
                 PondStroke(
-                    path: rainPath,
-                    color: CGColor(red: 0.88, green: 0.94, blue: 0.98, alpha: min(1.0, alpha * 0.85)),
-                    width: 1.0
+                    path: haloPath,
+                    color: haloColor,
+                    width: 3.2,
+                    fillColor: (radius <= 12.0) ? CGColor(red: 0.85, green: 0.96, blue: 1.0, alpha: alpha * 0.25) : nil
+                ),
+                PondStroke(
+                    path: crestPath,
+                    color: silverColor,
+                    width: 1.5,
+                    fillColor: (radius <= 14.0) ? pearlFill : nil
                 )
             ]
 
         case .waterCall, .foodDrop:
-            let isWater = (ripple.type == .waterCall)
-            // Color palettes
-            // Main wave body lines: clear refraction tone
-            let waveColor = isWater
-                ? CGColor(red: 0.40, green: 0.84, blue: 0.80, alpha: alpha * 0.65)
-                : CGColor(red: 0.96, green: 0.62, blue: 0.24, alpha: alpha * 0.70)
-            // Specular water reflection ("pantulan air"): luminous sky reflection
-            let specularColor = isWater
-                ? CGColor(red: 0.94, green: 0.99, blue: 0.98, alpha: min(1.0, alpha * 0.85))
-                : CGColor(red: 1.0, green: 0.96, blue: 0.82, alpha: min(1.0, alpha * 0.90))
-
+            // Full Ukiyo-e Wave System & Subsurface Micro-Bubbles (strictly bounded to max 2 strokes per ripple)
             let wavePath = CGMutablePath()
-            let highlightPath = CGMutablePath()
+            let specularPath = CGMutablePath()
 
-            // Unique, deterministic orientation angle for this ripple based on its spawn location
-            let baseAngle = CGFloat((ripple.center.x * 0.037 + ripple.center.y * 0.053).truncatingRemainder(dividingBy: .pi))
+            // --- PART 1: Inner Bubble & Translucent Meniscus Dimple (Initial touch <= 36.0 pt) ---
+            if radius <= 36.0 {
+                let dimpleR = max(5.0, radius * 0.60)
+                let dimpleRect = CGRect(x: center.x - dimpleR * 1.04, y: center.y - dimpleR * 0.96, width: dimpleR * 2.08, height: dimpleR * 1.92)
+                specularPath.addEllipse(in: dimpleRect)
 
-            // Graduated wave crest configurations: (radius fraction, rx scale, ry scale, angle offset, minRadiusToAppear)
-            let crestConfigs: [(fraction: CGFloat, scaleX: CGFloat, scaleY: CGFloat, angleOffset: CGFloat, minR: CGFloat)] = [
-                (1.00, 1.025, 0.975, 0.18, 0.0),
-                (0.68, 0.980, 1.020, -0.26, 8.0),
-                (0.44, 1.020, 0.985, 0.52, 10.0),
-                (0.25, 0.985, 1.015, -0.42, 10.0)
-            ]
+                // Subsurface micro-bubbles
+                let bubbles: [(dx: CGFloat, dy: CGFloat, r: CGFloat)] = [
+                    (-3.5, 4.5, 3.8),
+                    (5.0, -2.5, 2.6),
+                    (-6.0, -4.0, 1.8)
+                ]
 
-            for (fraction, scaleX, scaleY, angleOffset, minR) in crestConfigs {
-                let crestR = radius * fraction
-                guard crestR >= minR && crestR > 2.0 else { continue }
-
-                let rx = crestR * scaleX
-                let ry = crestR * scaleY
-                let angle = baseAngle + angleOffset
-
-                let t = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: angle)
-                let rect = CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2)
-                wavePath.addEllipse(in: rect, transform: t)
-
-                // Specular water reflection arcs on wave crests
-                if fraction >= 0.60 && crestR >= 5.0 {
-                    let arcPath = CGMutablePath()
-                    // Primary sky reflection facing ambient pond lighting (upper-left)
-                    let startA: CGFloat = (fraction > 0.9) ? (.pi * 0.22) : (.pi * 0.28)
-                    let endA: CGFloat = (fraction > 0.9) ? (.pi * 0.82) : (.pi * 0.76)
-                    arcPath.addArc(center: .zero, radius: crestR, startAngle: startA, endAngle: endA, clockwise: false)
-
-                    // Secondary Fresnel reflection on the opposing curved rim (bottom-right)
-                    if fraction > 0.9 && crestR >= 12.0 {
-                        arcPath.addArc(center: .zero, radius: crestR, startAngle: .pi * 1.25, endAngle: .pi * 1.75, clockwise: false)
-                    }
-
-                    let highlightTransform = CGAffineTransform(scaleX: scaleX, y: scaleY).concatenating(t)
-                    highlightPath.addPath(arcPath, transform: highlightTransform)
+                for b in bubbles {
+                    let bp = CGPoint(x: center.x + b.dx * (radius / 18.0), y: center.y + b.dy * (radius / 18.0))
+                    specularPath.addEllipse(in: CGRect(x: bp.x - b.r, y: bp.y - b.r, width: b.r * 2.0, height: b.r * 2.0))
+                    specularPath.addEllipse(in: CGRect(x: bp.x - b.r * 0.45, y: bp.y + b.r * 0.25, width: b.r * 0.7, height: b.r * 0.7))
                 }
             }
 
-            // Central splash impact reflection glint during the initial disturbance phase
-            if radius <= 36.0 {
-                let splashR = max(2.5, radius * 0.38)
-                let splashRect = CGRect(x: -splashR * 0.96, y: -splashR * 1.04, width: splashR * 1.92, height: splashR * 2.08)
-                let tCenter = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: baseAngle + 0.35)
-                highlightPath.addEllipse(in: splashRect, transform: tCenter)
+            // --- PART 2: Ukiyo-e Wave Arcs (Expanding outwards) ---
+            let rings: [(fraction: CGFloat, aGain: CGFloat, minR: CGFloat)] = [
+                (1.00, 0.88, 3.0),
+                (0.64, 0.62, 10.0),
+                (0.36, 0.38, 20.0)
+            ]
+
+            let arcs: [(start: CGFloat, end: CGFloat, isPrimary: Bool)] = [
+                (.pi * 0.32, .pi * 0.88, true),  // Primary light-facing crest
+                (.pi * 1.05, .pi * 1.45, false), // Side crest
+                (.pi * 1.68, .pi * 1.96, false)  // Counter crest
+            ]
+
+            for ring in rings {
+                let r = radius * ring.fraction
+                guard r >= ring.minR else { continue }
+
+                for arc in arcs {
+                    let steps = 18
+                    for s in 0..<steps {
+                        let frac = CGFloat(s) / CGFloat(steps)
+                        let a1 = arc.start + frac * (arc.end - arc.start)
+                        let a2 = arc.start + CGFloat(s + 1) / CGFloat(steps) * (arc.end - arc.start)
+
+                        let p1 = CGPoint(x: center.x + r * cos(a1) * 1.05, y: center.y + r * sin(a1) * 0.95)
+                        let p2 = CGPoint(x: center.x + r * cos(a2) * 1.05, y: center.y + r * sin(a2) * 0.95)
+
+                        wavePath.move(to: p1)
+                        wavePath.addLine(to: p2)
+                    }
+
+                    // Primary crest: Specular highlight and Ukiyo-e foam bead
+                    if arc.isPrimary && ring.fraction >= 0.60 && r >= 6.0 {
+                        let specArc = CGMutablePath()
+                        specArc.addArc(center: center, radius: r * 1.01, startAngle: .pi * 0.48, endAngle: .pi * 0.75, clockwise: false)
+                        specularPath.addPath(specArc)
+
+                        // Characteristic Ukiyo-e leading foam bead
+                        let foamA: CGFloat = .pi * 0.86
+                        let foamP = CGPoint(x: center.x + r * cos(foamA) * 1.05, y: center.y + r * sin(foamA) * 0.95)
+                        let foamR: CGFloat = ring.fraction > 0.8 ? 2.4 : 1.7
+                        specularPath.addEllipse(in: CGRect(x: foamP.x - foamR, y: foamP.y - foamR, width: foamR * 2, height: foamR * 2))
+                    }
+                }
             }
 
             var strokes: [PondStroke] = []
-            strokes.append(PondStroke(path: wavePath, color: waveColor, width: 1.1))
+            if !wavePath.isEmpty {
+                strokes.append(PondStroke(
+                    path: wavePath,
+                    color: palette.brush.cgColor(alpha: alpha * 0.70),
+                    width: 1.4
+                ))
+            }
 
-            if !highlightPath.isEmpty {
-                strokes.append(PondStroke(path: highlightPath, color: specularColor, width: 1.2))
+            if !specularPath.isEmpty {
+                strokes.append(PondStroke(
+                    path: specularPath,
+                    color: palette.specular.cgColor(alpha: alpha * 0.90),
+                    width: 1.2,
+                    fillColor: palette.bubble.color.cgColor(alpha: palette.bubble.alpha * alpha * 0.50)
+                ))
             }
 
             return strokes
         }
     }
 
-    public static func drawRipples(_ ripples: [WaterRipple], in context: CGContext) {
+    public static func drawRipples(_ ripples: [WaterRipple], in context: CGContext, theme: PondTheme = .day) {
         guard !ripples.isEmpty else { return }
         context.saveGState()
         context.setLineCap(.round)
 
         for ripple in ripples where !ripple.isDead {
-            for stroke in rippleStrokes(for: ripple) {
-                context.setStrokeColor(stroke.color)
-                context.setLineWidth(stroke.width)
-                context.addPath(stroke.path)
-                context.strokePath()
+            for stroke in rippleStrokes(for: ripple, theme: theme) {
+                if let fill = stroke.fillColor {
+                    context.setFillColor(fill)
+                    context.addPath(stroke.path)
+                    context.fillPath()
+                }
+                if stroke.width > 0 {
+                    context.setStrokeColor(stroke.color)
+                    context.setLineWidth(stroke.width)
+                    context.addPath(stroke.path)
+                    context.strokePath()
+                }
             }
         }
 

@@ -181,6 +181,7 @@ public final class PondSceneLayer: CALayer {
                 let stroke = frame.surface[index]
                 if layer.path !== stroke.path { layer.path = stroke.path }
                 if layer.strokeColor != stroke.color { layer.strokeColor = stroke.color }
+                if layer.fillColor != stroke.fillColor { layer.fillColor = stroke.fillColor }
                 if layer.lineWidth != stroke.width { layer.lineWidth = stroke.width }
                 if layer.contentsScale != backingScale { layer.contentsScale = backingScale }
             }
