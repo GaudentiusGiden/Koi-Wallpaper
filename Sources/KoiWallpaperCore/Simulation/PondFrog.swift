@@ -15,6 +15,8 @@ public enum PondFrogState: String, Sendable, CaseIterable {
     case jumpingIn
     /// Brief squash-and-stretch settle upon landing back on the lily pad.
     case landing
+    /// Quick hop between neighbouring lily pads when startled by a koi pad bump.
+    case hoppingToPad
 }
 
 /// Visual design variants for the pond frog.
@@ -59,8 +61,15 @@ public struct PondFrog: Sendable {
 
     // MARK: - Perch & Water Locations
 
+    public static let bumpStartleChance: Double = 0.40
+    public static let hopRange: Double = 70.0
+    public static let hopSeconds: Double = 0.50
+
+    public var currentPadIndex: Int = 4
     public var perchPosition: CGPoint = .zero
     public var waterPosition: CGPoint = .zero
+    public var hopOriginPosition: CGPoint = .zero
+    public var hopTargetPosition: CGPoint = .zero
 
     // MARK: - Timing & Progression
 
@@ -174,6 +183,9 @@ public struct PondFrog: Sendable {
 
         case .landing:
             updateLanding(dt: dt)
+
+        case .hoppingToPad:
+            updateHoppingToPad(dt: dt, spawnRipple: spawnRipple)
         }
     }
 
@@ -341,6 +353,93 @@ public struct PondFrog: Sendable {
             // Settle back to perched state with fresh duration
             transitionTo(state: .perched, duration: Double.random(in: 11.0...17.0))
         }
+    }
+
+    // MARK: - Lily Pad Neighbor Hop (Nagomi Frog Pad-to-Pad Leap)
+
+    private mutating func updateHoppingToPad(dt: Double, spawnRipple: (CGPoint, RippleType) -> Void) {
+        let p = min(1.0, CGFloat(stateTime / stateDuration))
+        let smoothP = p * p * (3.0 - 2.0 * p)
+
+        position.x = hopOriginPosition.x + (hopTargetPosition.x - hopOriginPosition.x) * smoothP
+        position.y = hopOriginPosition.y + (hopTargetPosition.y - hopOriginPosition.y) * smoothP
+
+        // Parabolic vertical jump arc (apex ~18 pt above lily pad surface)
+        let maxApex: CGFloat = 18.0
+        altitude = 4.0 * maxApex * p * (1.0 - p)
+
+        scaleX = 1.12
+        scaleY = 0.90
+
+        let hopHeading = atan2(Double(hopTargetPosition.y - hopOriginPosition.y), Double(hopTargetPosition.x - hopOriginPosition.x))
+        heading = hopHeading
+
+        if stateTime >= stateDuration {
+            altitude = 0.0
+            position = hopTargetPosition
+            perchPosition = hopTargetPosition
+
+            spawnRipple(CGPoint(x: position.x + 6.0, y: position.y - 4.0), .eatingNibble)
+            transitionTo(state: .landing, duration: 0.22)
+        }
+    }
+
+    /// Initiates a quick hop to a designated neighboring lily pad.
+    public mutating func initiateHopToPad(targetPosition: CGPoint, padIndex: Int, duration: Double = hopSeconds) {
+        self.hopOriginPosition = position
+        self.hopTargetPosition = targetPosition
+        self.currentPadIndex = padIndex
+        transitionTo(state: .hoppingToPad, duration: duration)
+    }
+
+    /// Evaluates koi collision with the frog's current lily pad.
+    /// Runs a 40% chance (bumpStartleChance = 0.40) to hop to the nearest neighboring lily pad within radius 70pt.
+    @discardableResult
+    public mutating func handlePadBump(
+        bumpedPadId: Int,
+        allPads: [PondLilyPad],
+        maxRange: Double? = nil,
+        randomRoll: Double? = nil
+    ) -> Bool {
+        guard state == .perched else { return false }
+        let currentPos = position
+        guard let currentPad = allPads.first(where: { $0.id == bumpedPadId }),
+              hypot(currentPad.position.x - Double(currentPos.x), currentPad.position.y - Double(currentPos.y)) <= (currentPad.radius + 15.0) else {
+            return false
+        }
+
+        var defaultRng = SeededRandomNumberGenerator(seed: UInt64(truncatingIfNeeded: Int(stateTime * 1000) ^ bumpedPadId))
+        let roll = randomRoll ?? Double.random(in: 0.0...1.0, using: &defaultRng)
+        guard roll <= Self.bumpStartleChance else { return false }
+
+        let allowedRange = maxRange ?? Self.hopRange
+
+        let candidates = allPads.filter { pad in
+            guard pad.id != bumpedPadId else { return false }
+            let dist = hypot(pad.position.x - Double(currentPos.x), pad.position.y - Double(currentPos.y))
+            return dist > 5.0 && dist <= allowedRange
+        }.sorted { a, b in
+            hypot(a.position.x - Double(currentPos.x), a.position.y - Double(currentPos.y)) <
+            hypot(b.position.x - Double(currentPos.x), b.position.y - Double(currentPos.y))
+        }
+
+        if let nearest = candidates.first {
+            let targetPos = CGPoint(x: nearest.position.x, y: nearest.position.y)
+            initiateHopToPad(targetPosition: targetPos, padIndex: nearest.id)
+            return true
+        }
+        return false
+    }
+
+    @discardableResult
+    public mutating func handlePadBump(
+        bumpedPadId: Int,
+        allPads: [PondLilyPad],
+        maxRange: Double? = nil,
+        rng: inout SeededRandomNumberGenerator
+    ) -> Bool {
+        let roll = Double.random(in: 0.0...1.0, using: &rng)
+        return handlePadBump(bumpedPadId: bumpedPadId, allPads: allPads, maxRange: maxRange, randomRoll: roll)
     }
 
     private mutating func transitionTo(state newState: PondFrogState, duration: Double) {

@@ -41,7 +41,18 @@ public enum KoiArtwork {
         let halfWidth = CGFloat(fish.width / 2)
         let s = KoiFish.localSpinePoints(length: fish.length, flex: fish.spineCurvature, wigglePhase: fish.wigglePhase)
         let spine = [s.p0, s.p1, s.p2, s.p3, s.p4, s.p5, s.p6].map { CGPoint(x: $0.x, y: $0.y) }
-        let shadowOffset = drawShadowOnly ? PondLighting.shadowOffset(distance: length * 0.28) : .zero
+
+        // Dynamic Z-Depth shadow offset: as fish dives deeper, shadow shifts closer to under the fish
+        // based on Nagomi depthOffset (-3.0, -7.0) scaled relative to base length 48.0
+        let depthFactor = CGFloat(min(1.0, max(0.0, fish.depth)))
+        let baseOffset = PondLighting.shadowOffset(distance: length * 0.28)
+        let scaleFactor = length / 48.0
+        let shadowDepthShiftX = CGFloat(-3.0) * scaleFactor * depthFactor
+        let shadowDepthShiftY = CGFloat(-7.0) * scaleFactor * depthFactor
+        let shadowOffset = drawShadowOnly
+            ? CGPoint(x: baseOffset.x + shadowDepthShiftX, y: baseOffset.y + shadowDepthShiftY)
+            : .zero
+
         context.translateBy(x: CGFloat(fish.position.x) + shadowOffset.x, y: CGFloat(fish.position.y) + shadowOffset.y)
         context.rotate(by: CGFloat(fish.heading))
         let body = torso(spine: spine, halfWidth: halfWidth)
@@ -50,12 +61,17 @@ public enum KoiArtwork {
         let turnFinBias = CGFloat(fish.spineCurvature) * 0.10
         if drawShadowOnly {
             let style = customShadowStyle ?? PondLighting.shadowStyle(for: theme)
+            // As fish dives deeper closer to the pond floor, shadow becomes denser / darker
+            let depthAlphaMultiplier = CGFloat((0.38 + (0.56 - 0.38) * Double(depthFactor)) / 0.38)
+            let penumbraAlpha = min(1.0, style.penumbraAlpha * depthAlphaMultiplier)
+            let coreAlpha = min(1.0, style.coreAlpha * depthAlphaMultiplier)
+
             // 1. Slightly expanded stepped penumbra (soft edge into pond bed)
             let penumbraWidth = halfWidth * 1.14
             let penumbraLength = length * 1.05
             let penumbraBody = Self.torso(spine: spine, halfWidth: penumbraWidth)
             let penumbraTail = Self.tail(spine: spine, halfWidth: penumbraWidth, length: penumbraLength)
-            context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: style.penumbraAlpha)
+            context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: penumbraAlpha)
             context.addPath(penumbraBody)
             context.addPath(penumbraTail)
             for side: CGFloat in [-1, 1] {
@@ -65,7 +81,7 @@ public enum KoiArtwork {
             context.fillPath()
 
             // 2. Core umbra silhouette
-            context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: style.coreAlpha)
+            context.setFillColor(red: style.color.0, green: style.color.1, blue: style.color.2, alpha: coreAlpha)
             context.addPath(body)
             context.addPath(tail)
             // A single filled silhouette keeps translucent fins from producing
@@ -81,8 +97,10 @@ public enum KoiArtwork {
 
         let baseSim = fish.variety.bodyBaseColor(for: paletteMode)
         let finSim = fish.variety.finColor(for: paletteMode)
-        let base = CGColor(red: CGFloat(baseSim.red), green: CGFloat(baseSim.green), blue: CGFloat(baseSim.blue), alpha: CGFloat(baseSim.alpha))
-        let finColor = CGColor(red: CGFloat(finSim.red), green: CGFloat(finSim.green), blue: CGFloat(finSim.blue), alpha: CGFloat(finSim.alpha))
+        let rawBase = CGColor(red: CGFloat(baseSim.red), green: CGFloat(baseSim.green), blue: CGFloat(baseSim.blue), alpha: CGFloat(baseSim.alpha))
+        let rawFin = CGColor(red: CGFloat(finSim.red), green: CGFloat(finSim.green), blue: CGFloat(finSim.blue), alpha: CGFloat(finSim.alpha))
+        let base = Self.applyDepthWaterAbsorption(to: rawBase, depth: fish.depth)
+        let finColor = Self.applyDepthWaterAbsorption(to: rawFin, depth: fish.depth)
 
         // Broad translucent fins with gentle swim stroke flutter and turn steering flare.
         context.setFillColor(finColor)
@@ -102,9 +120,13 @@ public enum KoiArtwork {
         context.clip()
 
         let primarySim = fish.variety.primaryPatternColor(for: paletteMode)
-        let primaryColor = CGColor(red: CGFloat(primarySim.red), green: CGFloat(primarySim.green), blue: CGFloat(primarySim.blue), alpha: CGFloat(primarySim.alpha))
+        let rawPrimary = CGColor(red: CGFloat(primarySim.red), green: CGFloat(primarySim.green), blue: CGFloat(primarySim.blue), alpha: CGFloat(primarySim.alpha))
+        let primaryColor = Self.applyDepthWaterAbsorption(to: rawPrimary, depth: fish.depth)
         let secondarySim = fish.variety.secondaryPatternColor(for: paletteMode)
-        let secondaryColor = secondarySim.map { CGColor(red: CGFloat($0.red), green: CGFloat($0.green), blue: CGFloat($0.blue), alpha: CGFloat($0.alpha)) }
+        let secondaryColor = secondarySim.map { sim -> CGColor in
+            let rawSec = CGColor(red: CGFloat(sim.red), green: CGFloat(sim.green), blue: CGFloat(sim.blue), alpha: CGFloat(sim.alpha))
+            return Self.applyDepthWaterAbsorption(to: rawSec, depth: fish.depth)
+        }
 
         // 1. Draw mathematical pattern patches along spine
         for (idx, p) in fish.variety.patterns.enumerated() {
@@ -151,9 +173,10 @@ public enum KoiArtwork {
 
         // 2. Specialized variety accents (Asagi reticulation scale grid & Ogon luster)
         if fish.variety.type == .asagi {
-            let strokeCol = (paletteMode == .neon)
+            let rawStroke = (paletteMode == .neon)
                 ? CGColor(red: 0.05, green: 0.12, blue: 0.38, alpha: 0.70)
                 : Self.asagiStroke
+            let strokeCol = Self.applyDepthWaterAbsorption(to: rawStroke, depth: fish.depth)
             context.setStrokeColor(strokeCol)
             context.setLineWidth(length * 0.018)
             for i in 0..<7 {
@@ -165,9 +188,10 @@ public enum KoiArtwork {
             }
             context.strokePath()
         } else if fish.variety.type == .ogon {
-            let lusterCol = (paletteMode == .neon)
+            let rawLuster = (paletteMode == .neon)
                 ? CGColor(red: 1.0, green: 0.92, blue: 0.45, alpha: 0.95)
                 : Self.ogonHighlight
+            let lusterCol = Self.applyDepthWaterAbsorption(to: rawLuster, depth: fish.depth)
             let xCoord = length * 0.07
             let cy = spineY(at: xCoord, spine: spine) + halfWidth * 0.15
             let shape = Self.patchShapes[1]
@@ -205,15 +229,61 @@ public enum KoiArtwork {
 
         // Small eyes and gill marks stay legible at the scene's logical resolution.
         let eyeSize = length * 0.035
-        let eyeColor = (paletteMode == .neon)
+        let rawEye = (paletteMode == .neon)
             ? CGColor(red: 0.05, green: 0.12, blue: 0.38, alpha: 1.0)
             : ink
+        let eyeColor = Self.applyDepthWaterAbsorption(to: rawEye, depth: fish.depth)
         context.setFillColor(eyeColor)
         for side: CGFloat in [-1, 1] {
             context.fill(CGRect(x: spine[1].x + length * 0.025, y: side * halfWidth * 0.59 - eyeSize / 2,
                                 width: eyeSize, height: eyeSize))
         }
         context.restoreGState()
+    }
+
+    /// Modulates fish color according to water light absorption and deep water tinting (Nagomi physics).
+    /// Between visualStart (0.10) and visualEnd (0.72), brightness dims to 0.59, saturation reduces to 0.76,
+    /// and deep water tint [0.66, 0.84, 0.80] is blended in.
+    public static func applyDepthWaterAbsorption(to color: CGColor, depth: Double) -> CGColor {
+        let visualStart = 0.10
+        let visualEnd = 0.72
+        guard depth > visualStart else { return color }
+        let t = CGFloat(min(1.0, max(0.0, (depth - visualStart) / (visualEnd - visualStart))))
+        guard let comp = color.components, comp.count >= 3 else { return color }
+        let r = comp[0]
+        let g = comp[1]
+        let b = comp[2]
+        let a = color.alpha
+
+        // 1. Modulate brightness (down to 0.59 at depthEnd)
+        let brightness = 1.0 - (1.0 - CGFloat(0.59)) * t
+        var modR = r * brightness
+        var modG = g * brightness
+        var modB = b * brightness
+
+        // 2. Modulate saturation (down to 0.76 at depthEnd)
+        let gray = 0.299 * modR + 0.587 * modG + 0.114 * modB
+        let saturation = 1.0 - (1.0 - CGFloat(0.76)) * t
+        modR = gray + (modR - gray) * saturation
+        modG = gray + (modG - gray) * saturation
+        modB = gray + (modB - gray) * saturation
+
+        // 3. Blend with deepWaterTint [0.66, 0.84, 0.80]
+        let tintR: CGFloat = 0.66
+        let tintG: CGFloat = 0.84
+        let tintB: CGFloat = 0.80
+        let tintWeight = 0.35 * t
+
+        let finalR = modR * (1.0 - tintWeight) + (modR * tintR) * tintWeight
+        let finalG = modG * (1.0 - tintWeight) + (modG * tintG) * tintWeight
+        let finalB = modB * (1.0 - tintWeight) + (modB * tintB) * tintWeight
+
+        return CGColor(
+            red: max(0, min(1, finalR)),
+            green: max(0, min(1, finalG)),
+            blue: max(0, min(1, finalB)),
+            alpha: a
+        )
     }
 
     private static func pectoralFin(at point: CGPoint, length: CGFloat, halfWidth: CGFloat,

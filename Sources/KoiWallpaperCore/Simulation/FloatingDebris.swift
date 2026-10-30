@@ -102,12 +102,14 @@ public struct FloatingDebris: Identifiable, Sendable {
         position = PondVector(x: position.x + ambientDriftX, y: position.y + ambientDriftY)
     }
 
-    /// Receives a physical impulse when an expanding water ripple passes near this debris.
-    public mutating func receiveRippleImpulse(
+    /// Receives a physical wave impulse from an expanding water surface ripple,
+    /// pushing the debris radially outward and imparting rotational spin (Nagomi duckweed rippleResponse).
+    public mutating func applyRippleImpulse(
         rippleCenter: PondVector,
         rippleRadius: Double,
-        maxRadius: Double,
-        strength: Double = 1.0
+        maxRadius: Double = 140.0,
+        strength: Double = 1.0,
+        rippleType: RippleType = .waterCall
     ) {
         let toDebris = position - rippleCenter
         let dist = toDebris.length
@@ -117,17 +119,40 @@ public struct FloatingDebris: Identifiable, Sendable {
         let crestDistance = abs(dist - rippleRadius)
         guard crestDistance <= 16.0 else { return }
 
-        // Radial outward unit vector
+        let typeWeight: Double
+        switch rippleType {
+        case .waterCall: typeWeight = 0.8
+        case .rainDrop: typeWeight = 1.4
+        case .eatingNibble: typeWeight = 0.8
+        case .foodDrop: typeWeight = 0.6
+        case .padBump: typeWeight = 0.5
+        }
+
         let radial = toDebris / dist
-        // Impulse attenuates as ripple grows larger and towards crest boundary
         let proximityFactor = max(0.0, 1.0 - (crestDistance / 16.0))
         let radiusFactor = max(0.2, 1.0 - (rippleRadius / max(1.0, maxRadius)))
-        let impulseMagnitude = 32.0 * strength * proximityFactor * radiusFactor
 
-        // Push outwards
+        let maxPush = 48.0
+        let impulseMagnitude = min(maxPush, 32.0 * strength * typeWeight * proximityFactor * radiusFactor)
+
         velocity = velocity + (radial * impulseMagnitude)
-        // Add random rotational wobble
         let wobbleDirection: Double = (id.hashValue % 2 == 0) ? 1.0 : -1.0
-        spin += wobbleDirection * (impulseMagnitude * 0.04)
+        spin += wobbleDirection * (0.39 * proximityFactor * strength * typeWeight)
+    }
+
+    /// Receives a physical impulse when an expanding water ripple passes near this debris.
+    public mutating func receiveRippleImpulse(
+        rippleCenter: PondVector,
+        rippleRadius: Double,
+        maxRadius: Double,
+        strength: Double = 1.0
+    ) {
+        applyRippleImpulse(
+            rippleCenter: rippleCenter,
+            rippleRadius: rippleRadius,
+            maxRadius: maxRadius,
+            strength: strength,
+            rippleType: .waterCall
+        )
     }
 }

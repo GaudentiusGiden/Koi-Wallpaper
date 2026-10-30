@@ -2,6 +2,56 @@
 
 Rencana ini mengikuti [analisis referensi](REA.md) dan [hasil REA CLI](REA_FINDINGS.md). Fondasi native M0 telah dibangun, diverifikasi (executable `KoiWallpaper`, bundle `.app`, dan suite verifikasi `KoiWallpaperVerify`), dan **resmi diterima pada 20 Oktober 2026 (Asia/Jakarta)** dengan batasan platform WindowServer macOS yang disepakati (Koi Wallpaper terbukti tidak mengambil fokus; klik fisik pada kolam desktop dapat mengaktifkan Finder dan mendefokuskan aplikasi sebelumnya). Milestone **M1 (Simulasi Kolam Mandiri)** telah selesai diimplementasikan, diverifikasi melalui unit test in-process 17/17 lulus (termasuk 4 uji regresi geometri kapsul tirus T0.1–T0.4 dan uji non-penetrasi geometri kapsul multi-langkah deterministik T3.1 pada 5 skenario benturan ekstrim dengan oracle independen), dan divalidasi secara visual melalui 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis berhadapan pada jendela GUI macOS WindowServer dengan perbaikan tuntas pada cacat penumpukan makan, pembagian target sirkumferensial klik air, relaksasi posisi kapsul tulang belakang, dan pemotongan batas resize (status visual temporal kolam diklasifikasikan parsial untuk ketiadaan kerumunan jangka panjang; T3.1 berlaku pada skenario ber-seed dan bukan klaim jaminan universal matematis). Milestone **M2 (Wallpaper yang Dapat Dipakai)** telah selesai diimplementasikan penuh sebagai MVP satu monitor, mengintegrasikan simulasi M1 ke host desktop M0, menyediakan menu lengkap status bar, Time of Day multi-fase, persistensi pengaturan, isolasi multi-alasan pause baterai/sleep/manual, mitigasi lonjakan delta waktu simulasi, dan kode sumber bebas dependensi jaringan (terverifikasi melalui suite in-process 21 assertion `KoiWallpaperVerify` [15 regresi M0 + 6 penerimaan M2] dan 17/17 pada `KoiWallpaperSimTest`). Milestone **M3 (Banyak Monitor dan Efisiensi)** telah selesai diimplementasikan pada tingkat perangkat lunak dan arsitektur, menghadirkan `ScreenManager` untuk orkestrasi multi-display, dunia simulasi dan viewport mandiri per monitor dengan sinkronisasi pengaturan global, penanganan hot-plug (attach/detach bersih dengan pembersihan observer dan pelepasan memori tanpa jendela yatim atau timer bocor), adaptasi Retina heterogen, pemetaan origin negatif presisi, isolasi stasis occlusion mandiri per monitor, dan profil performa perangkat target (terverifikasi 27/27 lulus pada `KoiWallpaperVerify` dan 17/17 pada `KoiWallpaperSimTest`; validasi fisik multi-monitor dengan kabel/layar eksternal kedua serta pengukuran energi kuantitatif Watt tetap berstatus PENDING). Fondasi visual **M3.5 (Pixel Art dan Air Bercahaya)** diterapkan setelah M3 dan sebelum **M4 (Perilaku Personal dan Atmosfer)**; rincian serta cara meninjau ada di [fondasi visual](VISUAL_FOUNDATION.md). Status dan rincian keputusan M0 dicatat di [audit M0](M0_AUDIT.md).
 
+## Catatan terkini — Adopsi Nagomi Fase 3: Micro-Interactions Ekosistem & Arsitektur Hybrid Flora (30 Oktober 2026)
+
+Implementasi Fase 3 dari [Rencana Adopsi Fitur & Visual Nagomi Desktop](decisions/2026-10-30-nagomi-adoption-fase3.md) telah selesai dan terverifikasi penuh:
+
+- **Hybrid PondLilyPad & Goyangan Daun Teratai**:
+  - Dibuat `PondLilyPad.swift` menyimpan 16 daun teratai mandiri (4 teratai memiliki bunga mekar), dengan radius, status bunga, dan state goyangan (`wobbleTime`, `wobbleStrength`, `displacementOffset`, `currentWobbleAngle`).
+  - Saat koi berenang di permukaan (`depth < 0.25`) menyenggol daun, daun terdorong menjauh dan bergetar sinusoidal selama `bumpWobbleSeconds = 0.6s`, memicu riak `.padBump`.
+  - Terintegrasi langsung dengan `PondFloraArtwork` dan `PondRenderer`.
+- **Katak Kaget & Melompat Antar-Teratai**:
+  - State mesin `PondFrog` diperluas dengan `.hoppingToPad` (`hopSeconds = 0.50s`).
+  - Saat daun teratai tempat bertengger disenggol koi, katak memiliki peluang 40% (`bumpStartleChance = 0.40`) kaget dan melompat ke daun tetangga terdekat dalam radius jangkauan efektif ($\le 70$ pt referensi).
+- **Ikan Kecil Mencuri Makanan (`tinyFishSteal`)**:
+  - `FoodPellet.swift` dilengkapi `bitesRemaining: Double` (1.0–3.0 gigitan, default 2.0).
+  - Kawanan ikan kecil (`DecorativeSchool`) dalam radius 70pt memiliki peluang 55% menyerbu pelet, mengurangi `bitesRemaining` sebesar 0.35 per gigitan, dan memicu riak `.eatingNibble`.
+- **Kupu-Kupu Mengorbit & Hinggap di Bunga Teratai**:
+  - `PondInsect.swift` mengimplementasikan siklus 4-state (`wandering`, `approaching`, `orbiting`, `resting`).
+  - Kupu-kupu mendekati salah satu dari 4 bunga teratai mekar, mengorbit pada radius 7–12pt selama 2.0–4.5s, lalu hinggap istirahat di atas bunga selama 3.0–6.0s dengan penurunan ketinggian terbang (`altitude = 0.06`).
+- **Duckweed & Debris Terdorong Riak Air + 5 Tipe Riak**:
+  - `WaterRipple.swift` melengkapi 5 varian riak: `.waterCall`, `.foodDrop`, `.eatingNibble`, `.rainDrop`, dan `.padBump`.
+  - `FloatingDebris.swift` menerapkan impuls gelombang radial (`applyRippleImpulse`) dengan bobot riak Nagomi (`rainDrop = 1.4`, `waterCall = 0.8`, `eatingNibble = 0.8`, `foodDrop = 0.6`, `padBump = 0.5`) dan putaran angular `spin = 0.39`.
+- **Pengujian & Validasi**:
+  - Seluruh 71 pengujian `KoiWallpaperSimTest` lulus (termasuk seksi T22.1–T22.5).
+  - Seluruh 68 pengujian `KoiWallpaperVerify` lulus (total 139/139 assertions in-process lulus 100%).
+  - Aplikasi release `build/KoiWallpaper.app` aktif berjalan di macOS desktop layer.
+
+## Catatan terkini — Adopsi Nagomi Fase 2: Z-Depth & Kinematika Renang (30 Oktober 2026)
+
+Implementasi Fase 2 dari [Rencana Adopsi Fitur & Visual Nagomi Desktop](decisions/2026-10-30-nagomi-adoption-fase2.md) telah selesai dan terverifikasi penuh:
+
+- **Simulasi Kedalaman 3D (`depth: 0.0...1.0`)**: 
+  - Ikan koi memiliki properti `depth` (0.0 = permukaan air, 1.0 = dasar kolam / deep bed).
+  - Ikan pemberani (`traits.boldness >= 0.60`) lebih menyukai kedalaman dangkal `[0.04...0.22]` selama 8–22 detik, sedangkan ikan pemalu sering menyelam ke kedalaman `[0.45...0.75]` selama 4–10 detik.
+  - Saat ada makanan atau klik interaktif, ikan otomatis naik ke permukaan (`callRiseDepth = 0.035`) dalam waktu 2.4 detik.
+- **Modulasi Visual Kedalaman Air**:
+  - **Bayangan Dinamis**: Offset bayangan bergeser mendekat ke bawah tubuh ikan (`depthOffset: (-3.0, -7.0)` diskalakan dengan panjang ikan) dan opasitas bayangan bertambah pekat (`0.38` hingga `0.56`) saat menyelam mendekati dasar kolam.
+  - **Penyerapan Cahaya Air**: Ketika berada di air dalam (`visualStart = 0.10` hingga `visualEnd = 0.72`), kecerahan tubuh meredup ke `0.59`, saturasi turun ke `0.76`, dan diberi pencampuran tint kehijauan `deepWaterTint [0.66, 0.84, 0.80]`.
+  - **Z-Sorting Bertingkat**: `PondRenderer` mengurutkan render ikan dari kedalaman terdalam ke permukaan (`simulation.fish.sorted { $0.depth > $1.depth }`), sehingga ikan di permukaan selalu berenang di atas ikan yang sedang menyelam.
+- **Siklus Renang 5-State (`KoiSwimCadence`)**:
+  - Siklus gerak alami saat berkeliaran (`wandering`): `glide` (kecepatan jelajah normal), `coast` (meluncur pelan 0.30x), `hover` (mengapung santai nyaris diam dengan kibasan lambat 0.45x), `burst` (akselerasi dorongan bertenaga 1.55x), dan `pivot` (manuver belok tajam 1.4x–1.8x turn rate).
+- **4 Gaya Menghampiri Target (`KoiApproachStyle`)**:
+  - Pemilihan gaya gerak otomatis berdasarkan kepribadian (`FishTraits`):
+    - `direct`: Ikan sangat rakus (`feedingEagerness >= 0.80`, seperti Kohaku, Showa, Ogon) langsung melaju lurus ke target.
+    - `curvedArc`: Lintasan melengkung anggun dengan deviasi sinus lateral (Taisho Sanke, Shiro Utsuri, Tancho).
+    - `cautious`: Ikan berhati-hati (`boldness < 0.55`, seperti Asagi) melambat ke `0.75x` saat mendekati target sebelum menyambar.
+    - `overshootOrbit`: Ikan lincah (`agility >= 1.10`, seperti Kikusui) melaju melewati target sedikit (`1.10x`), lalu berputar mengitari target.
+- **Pengujian & Validasi**:
+  - Seluruh 66 pengujian `KoiWallpaperSimTest` lulus (termasuk seksi T21.1–T21.4).
+  - Seluruh 68 pengujian `KoiWallpaperVerify` lulus (total 134/134 assertions in-process).
+- **Aset & Tangkapan Layar**: [Preview Modulasi Z-Depth](../reports/screenshots/fase2_zdepth_visuals.png) dan [Preview Z-Sorting Overlap](../reports/screenshots/fase2_zsorting_overlap.png).
+
 ## Catatan terkini — Adopsi Nagomi Fase 1 (30 Oktober 2026)
 
 Implementasi Fase 1 dari [Rencana Adopsi Fitur & Visual Nagomi Desktop](decisions/2026-10-30-nagomi-adoption-fase1.md) telah selesai dan terverifikasi penuh:

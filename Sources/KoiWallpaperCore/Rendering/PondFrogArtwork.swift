@@ -35,7 +35,7 @@ public enum PondFrogArtwork {
         context.rotate(by: CGFloat(frog.heading))
         context.scaleBy(x: frog.scaleX * baseScale, y: frog.scaleY * baseScale)
 
-        if frog.state == .jumpingOut || frog.state == .jumpingIn {
+        if frog.state == .jumpingOut || frog.state == .jumpingIn || frog.state == .hoppingToPad {
             drawLeapingFrog(frog, in: context)
         } else {
             drawPerchedFrog(frog, in: context)

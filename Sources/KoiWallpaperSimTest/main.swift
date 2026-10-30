@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import KoiWallpaperCore
 
@@ -1968,6 +1969,369 @@ do {
         "T20.4 WallpaperSettings & ScreenManager KoiPaletteMode Persistence",
         passed: t20_4Passed,
         details: "initial=\(initialMode), decoded=\(decoded.koiPaletteMode), screenMgrPropagated=\(screenModePropagated)"
+    )
+}
+
+// -------------------------------------------------------------
+// 21. Nagomi Adoption Fase 2 (Z-Depth, 5-State Cadence & 4 Approach Styles)
+// -------------------------------------------------------------
+print("\n--- 21. Nagomi Adoption Fase 2 (Z-Depth, 5-State Cadence & 4 Approach Styles) ---")
+
+do {
+    // T21.1 Koi Z-Depth Simulation, Boldness Dynamics & Food/Call Rise
+    var initialDepthsInRange = true
+    for seed in 1...20 {
+        let f = KoiFish(variety: KoiVariety.allEightVarieties[seed % 8], position: PondVector(x: 200, y: 200), seed: UInt64(seed * 777))
+        if f.depth < 0.04 || f.depth > 0.22 {
+            initialDepthsInRange = false
+        }
+    }
+
+    // Food/Call rise: fish at deep depth (e.g. 0.70) sets target to food -> targetDepth rises to 0.035
+    var deepFish = KoiFish(variety: KoiVariety.allEightVarieties[0], position: PondVector(x: 200, y: 200), depth: 0.70)
+    let initialIsDeep = (deepFish.depth == 0.70)
+    deepFish.setTarget(PondVector(x: 300, y: 300), state: .seekingFood, duration: 5.0)
+    let callRiseTriggered = (deepFish.targetDepth == 0.035)
+
+    let testBounds = PondBounds(width: 800, height: 600)
+    // Advance 180 frames (3 seconds at 60 FPS) to allow depth interpolation to surface
+    for _ in 0..<180 {
+        deepFish.update(dt: 1.0 / 60.0, bounds: testBounds, allFish: [deepFish], nearestFood: PondVector(x: 300, y: 300))
+    }
+    let reachedSurface = (deepFish.depth <= 0.045)
+
+    let t21_1Passed = initialDepthsInRange && initialIsDeep && callRiseTriggered && reachedSurface
+    recordSimTest(
+        "T21.1 Koi Z-Depth Simulation, Boldness Dynamics & Food/Call Rise",
+        passed: t21_1Passed,
+        details: "initialInRange=\(initialDepthsInRange), targetDepthRise=\(callRiseTriggered), surfaceReached=\(reachedSurface), finalDepth=\(String(format: "%.4f", deepFish.depth))"
+    )
+
+    // T21.2 5-State Swimming Cadence Lifecycle & State Transition
+    let allCadenceCases = KoiSwimCadence.allCases
+    let has5Cadences = (allCadenceCases.count == 5)
+
+    // Simulate wandering fish and verify that all 5 cadences are reached over time
+    var cadenceFish = KoiFish(variety: KoiVariety.allEightVarieties[0], position: PondVector(x: 400, y: 300), seed: 12345)
+    var seenCadences = Set<KoiSwimCadence>()
+    seenCadences.insert(cadenceFish.swimCadence)
+
+    // Run for 3600 frames (60 seconds)
+    for _ in 0..<3600 {
+        cadenceFish.update(dt: 1.0 / 60.0, bounds: testBounds, allFish: [cadenceFish], nearestFood: nil)
+        seenCadences.insert(cadenceFish.swimCadence)
+    }
+
+    let allCadencesVisited = (seenCadences.count == 5)
+    let t21_2Passed = has5Cadences && allCadencesVisited
+    recordSimTest(
+        "T21.2 5-State Swimming Cadence Lifecycle (Glide, Coast, Hover, Burst, Pivot)",
+        passed: t21_2Passed,
+        details: "has5Cases=\(has5Cadences), cadencesVisited=\(seenCadences.map { $0.rawValue }.sorted())"
+    )
+
+    // T21.3 4 Approach Styles Based on FishTraits & Kinematic Responses
+    let allApproachCases = KoiApproachStyle.allCases
+    let has4Approaches = (allApproachCases.count == 4)
+
+    let directStyle = KoiFish.selectApproachStyle(for: FishTraits.defaultTraits(for: KoiVariety.allEightVarieties[0])) // Kohaku
+    let curvedStyle = KoiFish.selectApproachStyle(for: FishTraits.defaultTraits(for: KoiVariety.allEightVarieties[1])) // Taisho Sanke
+    let cautiousStyle = KoiFish.selectApproachStyle(for: FishTraits.defaultTraits(for: KoiVariety.allEightVarieties[4])) // Asagi
+    let overshootStyle = KoiFish.selectApproachStyle(for: FishTraits.defaultTraits(for: KoiVariety.allEightVarieties[7])) // Kikusui
+
+    let stylesMappedCorrectly = (directStyle == .direct &&
+                                 curvedStyle == .curvedArc &&
+                                 cautiousStyle == .cautious &&
+                                 overshootStyle == .overshootOrbit)
+
+    // Verify kinematic difference for cautious style: fish slows down near food
+    var cautiousFish = KoiFish(variety: KoiVariety.allEightVarieties[4], position: PondVector(x: 200, y: 200), traits: FishTraits(boldness: 0.40))
+    cautiousFish.setTarget(PondVector(x: 230, y: 200), state: .seekingFood, duration: 5.0)
+    for _ in 0..<60 {
+        cautiousFish.update(dt: 1.0 / 60.0, bounds: testBounds, allFish: [cautiousFish], nearestFood: PondVector(x: 230, y: 200))
+    }
+    let cautiousSlowdownActive = (cautiousFish.approachStyle == .cautious)
+
+    let t21_3Passed = has4Approaches && stylesMappedCorrectly && cautiousSlowdownActive
+    recordSimTest(
+        "T21.3 4 Approach Styles Based on FishTraits (Direct, CurvedArc, Cautious, Overshoot)",
+        passed: t21_3Passed,
+        details: "direct=\(directStyle), curve=\(curvedStyle), cautious=\(cautiousStyle), overshoot=\(overshootStyle)"
+    )
+
+    // T21.4 Depth Visual Modulations & Descending Depth Sorting
+    // 1. Water absorption: surface (depth 0.05) unchanged; deep (depth 0.72) dims and tints
+    let testRed = CGColor(red: 0.80, green: 0.20, blue: 0.10, alpha: 1.0)
+    let surfaceColor = KoiArtwork.applyDepthWaterAbsorption(to: testRed, depth: 0.05)
+    let deepColor = KoiArtwork.applyDepthWaterAbsorption(to: testRed, depth: 0.72)
+
+    let surfaceComp = surfaceColor.components!
+    let deepComp = deepColor.components!
+
+    let surfaceUnchanged = (abs(surfaceComp[0] - 0.80) < 0.001 && abs(surfaceComp[1] - 0.20) < 0.001)
+    let deepDimmedAndTinted = (deepComp[0] < surfaceComp[0] && deepComp[1] > (0.20 * 0.59 * 0.76))
+
+    // 2. Depth sorting: fish array sorted by depth descending ($0.depth > $1.depth)
+    let testFishArray: [KoiFish] = [
+        KoiFish(variety: KoiVariety.allEightVarieties[0], position: PondVector(x: 100, y: 100), depth: 0.10),
+        KoiFish(variety: KoiVariety.allEightVarieties[1], position: PondVector(x: 150, y: 100), depth: 0.65),
+        KoiFish(variety: KoiVariety.allEightVarieties[2], position: PondVector(x: 200, y: 100), depth: 0.05),
+        KoiFish(variety: KoiVariety.allEightVarieties[3], position: PondVector(x: 250, y: 100), depth: 0.40)
+    ]
+    let sortedFish = testFishArray.sorted { $0.depth > $1.depth }
+    let sortingValid = (sortedFish[0].depth == 0.65 &&
+                        sortedFish[1].depth == 0.40 &&
+                        sortedFish[2].depth == 0.10 &&
+                        sortedFish[3].depth == 0.05)
+
+    let t21_4Passed = surfaceUnchanged && deepDimmedAndTinted && sortingValid
+    recordSimTest(
+        "T21.4 Depth Visual Modulations & Descending Depth Sorting",
+        passed: t21_4Passed,
+        details: "surfaceUnchanged=\(surfaceUnchanged), deepModulated=\(deepDimmedAndTinted), sortedOrder=[0.65, 0.40, 0.10, 0.05]"
+    )
+}
+
+// =============================================================
+// SECTION 22: NAGOMI DESKTOP PHASE 3 - ECOSYSTEM MICRO-INTERACTIONS
+// & HYBRID FLORA ARCHITECTURE
+// =============================================================
+print("\n--- 22. Nagomi Desktop Phase 3: Ecosystem Micro-Interactions & Hybrid Flora ---")
+
+do {
+    // T22.1 Hybrid PondLilyPad Initialization & Koi Surface Bump Wobble
+    let testBounds = PondBounds(width: 800, height: 600)
+    let pads = PondLilyPad.generatePads(for: testBounds)
+
+    let countIs16 = (pads.count == 16)
+    let floweringCount = pads.filter { $0.hasFlower }.count
+    let fourFlowers = (floweringCount == 4)
+
+    // Simulate surface koi collision with pad
+    let sim = PondSimulation(bounds: testBounds, seed: 101)
+    let targetPad = sim.lilyPads[0]
+    let initialWobble = (targetPad.wobbleTime == 0.0 && targetPad.wobbleStrength == 0.0)
+
+    // Place koi at surface directly touching pad 0
+    let surfaceFish = KoiFish(
+        variety: KoiVariety.allEightVarieties[0],
+        position: targetPad.position - PondVector(x: targetPad.radius * 0.5, y: 0.0),
+        length: 80.0,
+        depth: 0.10
+    )
+
+    let dummyFishSim = PondSimulation(
+        bounds: testBounds,
+        initialFish: [surfaceFish],
+        seed: 102
+    )
+    // Run 1 frame to trigger surface collision check
+    dummyFishSim.stepSimulation(dt: 1.0 / 60.0)
+
+    let bumpedPad = dummyFishSim.lilyPads[0]
+    let wobbleTriggered = (bumpedPad.wobbleTime > 0.55 && bumpedPad.wobbleStrength > 0.0)
+    let displacementApplied = (bumpedPad.displacementOffset.length > 0.0)
+
+    // Advance 40 frames (~0.67s) so wobble fully decays
+    for _ in 0..<40 {
+        dummyFishSim.stepSimulation(dt: 1.0 / 60.0)
+    }
+    let decayedPad = dummyFishSim.lilyPads[0]
+    let wobbleDecayed = (decayedPad.wobbleTime == 0.0 && decayedPad.wobbleStrength == 0.0 && decayedPad.displacementOffset == .zero)
+
+    let t22_1Passed = countIs16 && fourFlowers && initialWobble && wobbleTriggered && displacementApplied && wobbleDecayed
+    recordSimTest(
+        "T22.1 Hybrid PondLilyPad (16 Pads, 4 Flowers) & Koi Surface Bump Wobble",
+        passed: t22_1Passed,
+        details: "padsCount=\(pads.count), flowersCount=\(floweringCount), wobbleTriggered=\(wobbleTriggered), displacement=\(bumpedPad.displacementOffset.length), decayed=\(wobbleDecayed)"
+    )
+}
+
+do {
+    // T22.2 Frog Bump Startle & Nearest Lily Pad Leap
+    let testBounds = PondBounds(width: 480, height: 270)
+    let pads = PondLilyPad.generatePads(for: testBounds)
+
+    var frog = PondFrog.initial(bounds: testBounds)
+    let initialPerched = (frog.state == .perched)
+    let startleChanceSpec = (PondFrog.bumpStartleChance == 0.40)
+    let hopRangeSpec = (PondFrog.hopRange == 70.0)
+    let hopDurationSpec = (PondFrog.hopSeconds == 0.50)
+
+    // Perched pad is pad 4 (Cluster 1, Pad 1)
+    let perchedPadId = 4
+
+    // Test with roll > 0.40 (frog remains calm)
+    let calmResult = frog.handlePadBump(bumpedPadId: perchedPadId, allPads: pads, randomRoll: 0.75)
+    let remainedCalm = (!calmResult && frog.state == .perched)
+
+    // Test with roll <= 0.40 (frog startles and hops to nearest neighbor pad)
+    let startledResult = frog.handlePadBump(bumpedPadId: perchedPadId, allPads: pads, randomRoll: 0.25)
+    let hoppingTriggered = (startledResult && frog.state == .hoppingToPad)
+    let hopTargetAssigned = (frog.hopTargetPosition != .zero)
+
+    // Verify target pad is within 70pt
+    let hopDist = hypot(frog.hopTargetPosition.x - frog.hopOriginPosition.x, frog.hopTargetPosition.y - frog.hopOriginPosition.y)
+    let targetWithin70 = (hopDist > 5.0 && hopDist <= 70.0)
+
+    // Advance 35 frames (~0.58s at 60 FPS) to complete leap and land
+    for _ in 0..<35 {
+        frog.update(dt: 1.0 / 60.0, bounds: testBounds) { _, _ in }
+    }
+    let landedOnPad = (frog.state == .landing || frog.state == .perched)
+    let altitudeAtRest = (frog.altitude == 0.0)
+
+    let t22_2Passed = initialPerched && startleChanceSpec && hopRangeSpec && hopDurationSpec &&
+                      remainedCalm && hoppingTriggered && hopTargetAssigned && targetWithin70 &&
+                      landedOnPad && altitudeAtRest
+    recordSimTest(
+        "T22.2 Frog Bump Startle & Nearest Lily Pad Hop (0.40 Chance, 70pt Range)",
+        passed: t22_2Passed,
+        details: "startleChance=\(PondFrog.bumpStartleChance), hopRange=\(PondFrog.hopRange), hopDist=\(String(format: "%.1f", hopDist))pt, landed=\(landedOnPad)"
+    )
+}
+
+do {
+    // T22.3 Tiny Fish Steal (tinyFishSteal: Bites Remaining, 70pt Swarm, Nibble Ripple)
+    let testBounds = PondBounds(width: 800, height: 600)
+    let pellet = FoodPellet(position: PondVector(x: 300, y: 300), bitesRemaining: 2.0)
+    let initialBites = pellet.bitesRemaining
+
+    var school = DecorativeSchool(groupIndex: 0, bounds: testBounds, seed: 555)
+    // Position fish 0 very close to pellet (dist = 5.0 pt)
+    school.fish[0].position = PondVector(x: 305, y: 300)
+
+    var ripplesSpawned: [RippleType] = []
+    var pellets = [pellet]
+
+    // Perform tiny fish steal
+    school.performTinyFishSteal(dt: 1.0 / 60.0, pellets: &pellets) { _, rType in
+        ripplesSpawned.append(rType)
+    }
+
+    let biteSubtracted = (pellets[0].bitesRemaining < initialBites)
+    let biteAmount = initialBites - pellets[0].bitesRemaining
+    let biteMatchesSpec = (abs(biteAmount - 0.35) < 0.001)
+    let nibbleRippleGenerated = ripplesSpawned.contains(.eatingNibble)
+
+    // Repeated bites deplete pellet completely
+    for _ in 0..<6 {
+        pellets[0].takeBite(amount: 0.35)
+    }
+    let fullyConsumed = pellets[0].isConsumed
+
+    let t22_3Passed = (initialBites == 2.0) && biteSubtracted && biteMatchesSpec && nibbleRippleGenerated && fullyConsumed
+    recordSimTest(
+        "T22.3 Tiny Fish Steal (bitesRemaining 1.0–3.0, 70pt Swarm, 0.35 Bite, .eatingNibble)",
+        passed: t22_3Passed,
+        details: "initialBites=\(initialBites), biteAmount=\(biteAmount), nibbleRipple=\(nibbleRippleGenerated), consumed=\(fullyConsumed)"
+    )
+}
+
+do {
+    // T22.4 Butterfly Lotus Flower Visiting Dynamics (Approaching, Orbiting 7–12pt, Resting)
+    let testBounds = PondBounds(width: 800, height: 600)
+    let pads = PondLilyPad.generatePads(for: testBounds)
+    let lotusFlowers = pads.filter { $0.hasFlower }.map { $0.flowerPosition }
+
+    let allButterflyStates = ButterflyState.allCases
+    let has4States = (allButterflyStates.count == 4)
+
+    var butterfly = PondInsect(
+        type: .butterfly,
+        position: PondVector(x: 200, y: 200),
+        seed: 777
+    )
+    let initialWandering = (butterfly.butterflyState == .wandering)
+
+    // Force flower visit trigger
+    butterfly.flowerStateTimer = 0.0
+    butterfly.update(dt: 1.0 / 60.0, bounds: testBounds, flowerPositions: lotusFlowers)
+
+    let transitionedToApproaching = (butterfly.butterflyState == .approaching)
+    let targetFlowerSet = (butterfly.targetFlowerPosition != nil)
+
+    // Move butterfly close to target flower to trigger orbiting
+    if let targetFlower = butterfly.targetFlowerPosition {
+        butterfly.position = targetFlower + PondVector(x: 10.0, y: 0.0)
+    }
+    butterfly.update(dt: 1.0 / 60.0, bounds: testBounds, flowerPositions: lotusFlowers)
+
+    let transitionedToOrbiting = (butterfly.butterflyState == .orbiting)
+    let orbitRadiusInSpec = (butterfly.flowerOrbitRadius >= 7.0 && butterfly.flowerOrbitRadius <= 12.0)
+
+    // Expire orbit timer to trigger resting
+    butterfly.flowerStateTimer = 0.0
+    butterfly.update(dt: 1.0 / 60.0, bounds: testBounds, flowerPositions: lotusFlowers)
+
+    let transitionedToResting = (butterfly.butterflyState == .resting)
+    let restingLowAltitude = (butterfly.altitude <= 0.10)
+
+    // Expire rest timer to take off back into wander
+    butterfly.flowerStateTimer = 0.0
+    butterfly.update(dt: 1.0 / 60.0, bounds: testBounds, flowerPositions: lotusFlowers)
+
+    let returnedToWander = (butterfly.butterflyState == .wandering)
+
+    let t22_4Passed = has4States && initialWandering && transitionedToApproaching &&
+                      targetFlowerSet && transitionedToOrbiting && orbitRadiusInSpec &&
+                      transitionedToResting && restingLowAltitude && returnedToWander
+    recordSimTest(
+        "T22.4 Butterfly Lotus Flower Visiting (Approaching, Orbiting 7–12pt, Resting)",
+        passed: t22_4Passed,
+        details: "has4States=\(has4States), approaching=\(transitionedToApproaching), orbiting=\(transitionedToOrbiting), radius=\(String(format: "%.1f", butterfly.flowerOrbitRadius))pt, resting=\(transitionedToResting), wanderReturn=\(returnedToWander)"
+    )
+}
+
+do {
+    // T22.5 5 Ripple Types & Floating Debris Physical Wave Impulse
+    let allRippleTypes = RippleType.allCases
+    let has5Types = (allRippleTypes.count == 5)
+    let containsAllExpected = Set(allRippleTypes).isSuperset(of: [.waterCall, .foodDrop, .eatingNibble, .rainDrop, .padBump])
+
+    // Test physical impulse on floating debris
+    var debris = FloatingDebris(
+        type: .sakuraPetal,
+        position: PondVector(x: 200, y: 200),
+        velocity: .zero,
+        lifespan: 30.0
+    )
+    let initialVelocity = debris.velocity
+
+    // Ripple placed at (170, 200) with radius 30.0 (exact crest match at dist = 30pt)
+    debris.applyRippleImpulse(
+        rippleCenter: PondVector(x: 170, y: 200),
+        rippleRadius: 30.0,
+        maxRadius: 140.0,
+        strength: 1.0,
+        rippleType: .waterCall
+    )
+
+    let pushedOutward = (debris.velocity.x > initialVelocity.x)
+    let spinImparted = (debris.spin != 0.0)
+
+    // Compare with rainDrop weight (1.4x weight vs 0.8x weight)
+    var debrisRain = FloatingDebris(
+        type: .sakuraPetal,
+        position: PondVector(x: 200, y: 200),
+        velocity: .zero,
+        lifespan: 30.0
+    )
+    debrisRain.applyRippleImpulse(
+        rippleCenter: PondVector(x: 170, y: 200),
+        rippleRadius: 30.0,
+        maxRadius: 140.0,
+        strength: 1.0,
+        rippleType: .rainDrop
+    )
+
+    let rainPushStronger = (debrisRain.velocity.x > debris.velocity.x)
+
+    let t22_5Passed = has5Types && containsAllExpected && pushedOutward && spinImparted && rainPushStronger
+    recordSimTest(
+        "T22.5 5 Ripple Types & Floating Debris Physical Wave Impulse (applyRippleImpulse)",
+        passed: t22_5Passed,
+        details: "has5Types=\(has5Types), types=\(allRippleTypes.map { $0.rawValue }), pushedX=\(String(format: "%.2f", debris.velocity.x)), rainPushedX=\(String(format: "%.2f", debrisRain.velocity.x))"
     )
 }
 

@@ -12,6 +12,8 @@ public struct FoodPellet: Identifiable, Equatable, Sendable {
     public private(set) var consumerFishId: UUID?
     public let radius: Double
     public var bobbingPhase: Double
+    /// Remaining bites for this pellet (1.0 to 3.0). Small fish nibble away portions (0.35 each).
+    public var bitesRemaining: Double
 
     public init(
         id: UUID = UUID(),
@@ -20,7 +22,8 @@ public struct FoodPellet: Identifiable, Equatable, Sendable {
         age: Double = 0.0,
         lifetime: Double = 25.0,
         radius: Double = 3.5,
-        bobbingPhase: Double = 0.0
+        bobbingPhase: Double = 0.0,
+        bitesRemaining: Double = 2.0
     ) {
         self.id = id
         self.position = position
@@ -31,6 +34,7 @@ public struct FoodPellet: Identifiable, Equatable, Sendable {
         self.consumerFishId = nil
         self.radius = radius
         self.bobbingPhase = bobbingPhase
+        self.bitesRemaining = bitesRemaining
     }
 
     public var isExpired: Bool {
@@ -53,6 +57,21 @@ public struct FoodPellet: Identifiable, Equatable, Sendable {
         guard !isConsumed else { return false }
         isConsumed = true
         consumerFishId = fishId
+        bitesRemaining = 0.0
         return true
+    }
+
+    /// Subtracts a portion when tiny decorative fish nibble at the pellet (Nagomi tinyFishSteal).
+    /// Returns true if the pellet was completely consumed by the bite.
+    @discardableResult
+    public mutating func takeBite(amount: Double = 0.35) -> Bool {
+        guard !isConsumed else { return false }
+        bitesRemaining -= amount
+        if bitesRemaining <= 0.05 {
+            bitesRemaining = 0.0
+            isConsumed = true
+            return true
+        }
+        return false
     }
 }

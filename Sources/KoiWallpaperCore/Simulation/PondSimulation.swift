@@ -19,6 +19,7 @@ public final class PondSimulation: @unchecked Sendable {
     public private(set) var insects: [PondInsect] = []
     public private(set) var decorativeSchools: [DecorativeSchool] = []
     public private(set) var floatingDebris: [FloatingDebris] = []
+    public private(set) var lilyPads: [PondLilyPad] = []
     public var frog: PondFrog
     public var turtle: PondTurtle
 
@@ -144,6 +145,7 @@ public final class PondSimulation: @unchecked Sendable {
         if let customDebris = initialDebris {
             self.floatingDebris = customDebris
         }
+        self.lilyPads = PondLilyPad.generatePads(for: bounds)
         initializeDecorativeSchools()
     }
 
@@ -215,6 +217,7 @@ public final class PondSimulation: @unchecked Sendable {
             : nil
         initializeInsects(for: currentTheme)
         initializeEightKoi()
+        self.lilyPads = PondLilyPad.generatePads(for: bounds)
         initializeDecorativeSchools()
     }
 
@@ -251,6 +254,7 @@ public final class PondSimulation: @unchecked Sendable {
         for i in 0..<decorativeSchools.count {
             decorativeSchools[i].resize(oldBounds: oldBounds, newBounds: bounds)
         }
+        self.lilyPads = PondLilyPad.generatePads(for: bounds)
         frog.updateLocations(bounds: bounds)
         turtle.position = CGPoint(x: turtle.position.x * scaleX, y: turtle.position.y * scaleY)
         turtle.clampToBounds(bounds: bounds)
@@ -797,6 +801,30 @@ public final class PondSimulation: @unchecked Sendable {
             pellets[i].update(dt: dt, bounds: bounds)
         }
 
+        // 1b. Update Lily Pads and Koi Surface Bumping (depth < 0.25)
+        for i in 0..<lilyPads.count {
+            lilyPads[i].update(dt: dt)
+        }
+
+        for k in fish where k.depth < 0.25 {
+            for pIdx in 0..<lilyPads.count {
+                let dist = k.position.distance(to: lilyPads[pIdx].position)
+                let mouthDist = k.mouthPosition.distance(to: lilyPads[pIdx].position)
+                let collisionThreshold = lilyPads[pIdx].radius + k.physicalRadius * 0.5
+                if dist <= collisionThreshold || mouthDist <= (lilyPads[pIdx].radius + 8.0) {
+                    if lilyPads[pIdx].wobbleTime <= 0.08 {
+                        lilyPads[pIdx].triggerBump(from: k.position, strength: 1.0, duration: PondLilyPad.bumpWobbleSeconds)
+                        if ripples.count < maxRipples {
+                            ripples.append(WaterRipple(center: lilyPads[pIdx].position, type: .padBump))
+                        }
+                        // 40% chance startles frog if perched on this pad to nearest neighbor pad within 70pt
+                        let effectiveHopRange = max(PondFrog.hopRange, PondFrog.hopRange * (min(bounds.width, bounds.height) / 270.0))
+                        frog.handlePadBump(bumpedPadId: lilyPads[pIdx].id, allPads: lilyPads, maxRange: effectiveHopRange, rng: &rng)
+                    }
+                }
+            }
+        }
+
         // 2. Update Koi Fish & Check Food Consumption
         let currentFish = fish
         let activePellets = pellets.filter { !$0.isConsumed && !$0.isExpired }
@@ -1060,8 +1088,9 @@ public final class PondSimulation: @unchecked Sendable {
         }
 
         // 6. Update Insects & Koi Curiosity Interaction
+        let lotusFlowers = lilyPads.filter { $0.hasFlower }.map { $0.flowerPosition }
         for i in 0..<insects.count {
-            insects[i].update(dt: dt, bounds: bounds)
+            insects[i].update(dt: dt, bounds: bounds, flowerPositions: lotusFlowers)
         }
         // Purge fully faded out insects
         insects.removeAll { $0.targetOpacity == 0.0 && $0.opacity <= 0.001 }
@@ -1172,6 +1201,18 @@ public final class PondSimulation: @unchecked Sendable {
             )
         }
 
+        // Tiny fish steal floating food pellets (tinyFishSteal)
+        if !pellets.isEmpty {
+            for i in 0..<decorativeSchools.count {
+                decorativeSchools[i].performTinyFishSteal(dt: dt, pellets: &pellets) { [weak self] pos, rType in
+                    guard let self = self else { return }
+                    if self.ripples.count < self.maxRipples {
+                        self.ripples.append(WaterRipple(center: pos, type: rType))
+                    }
+                }
+            }
+        }
+
         // Soft inter-school pairwise fish separation (prevents cross-school bunching)
         let crossSchoolComfort = 30.0
         for sA in 0..<decorativeSchools.count {
@@ -1203,14 +1244,16 @@ public final class PondSimulation: @unchecked Sendable {
             }
         }
 
-        // Apply physical outward ripple impulses to floating debris
+        // Apply physical outward ripple impulses to floating debris (Nagomi duckweed ripple response)
         if !ripples.isEmpty && !floatingDebris.isEmpty {
             for r in ripples {
                 for dIdx in 0..<floatingDebris.count {
-                    floatingDebris[dIdx].receiveRippleImpulse(
+                    floatingDebris[dIdx].applyRippleImpulse(
                         rippleCenter: r.center,
                         rippleRadius: r.radius,
-                        maxRadius: r.maxRadius
+                        maxRadius: r.maxRadius,
+                        strength: r.alpha,
+                        rippleType: r.type
                     )
                 }
             }
@@ -1359,8 +1402,8 @@ public final class PondSimulation: @unchecked Sendable {
     public func resolveFishSeparation(safetyMargin: Double = 0.5) {
         guard fish.count > 1 else { return }
 
-        // Perform 2 relaxation passes per sub-step for multi-body stability
-        for _ in 0..<2 {
+        // Perform 3 relaxation passes per sub-step for multi-body stability
+        for _ in 0..<3 {
             var allCapsules: [[KoiBodyCapsule]] = []
             allCapsules.reserveCapacity(fish.count)
             for f in fish {

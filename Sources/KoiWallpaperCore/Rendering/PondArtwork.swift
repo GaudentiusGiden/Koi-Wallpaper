@@ -848,6 +848,24 @@ public enum PondArtwork {
                 )
             ]
 
+        case .padBump:
+            // Organic lily pad contact wake wave with soft green-cyan crest
+            let bumpPath = CGMutablePath()
+            let rx = radius * 1.04
+            let ry = radius * 0.96
+            bumpPath.addEllipse(in: CGRect(x: center.x - rx, y: center.y - ry, width: rx * 2.0, height: ry * 2.0))
+            if radius >= 12.0 {
+                let rInner = radius * 0.58
+                bumpPath.addEllipse(in: CGRect(x: center.x - rInner, y: center.y - rInner, width: rInner * 2.0, height: rInner * 2.0))
+            }
+            return [
+                PondStroke(
+                    path: bumpPath,
+                    color: palette.specular.cgColor(alpha: alpha * 0.80),
+                    width: 1.3
+                )
+            ]
+
         case .rainDrop:
             // High-contrast sparkling silver capillary rings & impact pearl flash
             let rx = radius * 1.03

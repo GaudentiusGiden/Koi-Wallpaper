@@ -15,6 +15,14 @@ public enum PondInsectType: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Flight and resting behavior states for butterflies visiting lotus flowers.
+public enum ButterflyState: String, Codable, CaseIterable, Sendable {
+    case wandering
+    case approaching
+    case orbiting
+    case resting
+}
+
 /// Represents an atmospheric pond insect (dragonfly, butterfly, or firefly)
 /// with characteristic flight kinetics, altitude, and smooth transition fading.
 public struct PondInsect: Identifiable, Sendable {
@@ -36,6 +44,15 @@ public struct PondInsect: Identifiable, Sendable {
     public var dartTimer: Double
     public var isDarting: Bool
     public var dartDurationRemaining: Double
+
+    // Butterfly lotus flower visiting dynamics
+    public var butterflyState: ButterflyState = .wandering
+    public var targetFlowerIndex: Int? = nil
+    public var targetFlowerPosition: PondVector? = nil
+    public var flowerStateTimer: Double = 5.0
+    public var flowerOrbitRadius: Double = 9.5 // [7, 12] pt
+    public var flowerOrbitAngle: Double = 0.0
+    public var flowerOrbitSpeed: Double = 1.2 // [0.9, 1.5] rad/s
 
     public var isFlyingLow: Bool {
         altitude <= 0.45
@@ -83,6 +100,9 @@ public struct PondInsect: Identifiable, Sendable {
             self.velocity = PondVector.fromAngle(heading, length: defaultSpeed)
             self.altitude = altitude ?? Double.random(in: 0.30...0.65, using: &self.rng)
             self.dartTimer = 0.0
+            self.flowerStateTimer = Double.random(in: 2.5...5.5, using: &self.rng)
+            self.flowerOrbitRadius = Double.random(in: 7.0...12.0, using: &self.rng)
+            self.flowerOrbitSpeed = Double.random(in: 0.9...1.5, using: &self.rng)
 
         case .firefly:
             let defaultSpeed = speed ?? 15.0
@@ -94,7 +114,7 @@ public struct PondInsect: Identifiable, Sendable {
     }
 
     /// Advances the insect physics and flight kinetics by a discrete time step.
-    public mutating func update(dt: Double, bounds: PondBounds) {
+    public mutating func update(dt: Double, bounds: PondBounds, flowerPositions: [PondVector] = []) {
         // Smoothly interpolate opacity towards targetOpacity
         if abs(opacity - targetOpacity) > 0.001 {
             let fadeRate = 1.8 // Fades over ~0.55s to 1.8s
@@ -112,7 +132,7 @@ public struct PondInsect: Identifiable, Sendable {
         case .dragonfly:
             updateDragonfly(dt: dt, bounds: bounds)
         case .butterfly:
-            updateButterfly(dt: dt, bounds: bounds)
+            updateButterfly(dt: dt, bounds: bounds, flowerPositions: flowerPositions)
         case .firefly:
             updateFirefly(dt: dt, bounds: bounds)
         }
@@ -165,34 +185,130 @@ public struct PondInsect: Identifiable, Sendable {
         position += velocity * dt
     }
 
-    /// Butterfly: gentle fluttering flight with soft sinusoidal curves.
-    private mutating func updateButterfly(dt: Double, bounds: PondBounds) {
-        phase += 8.5 * dt // Gentle wing flapping (~4.2 Hz)
-        if phase > 2.0 * .pi { phase -= 2.0 * .pi }
+    /// Butterfly: gentle fluttering flight visiting lotus flowers (approaching, orbiting 7–12pt, and resting).
+    private mutating func updateButterfly(dt: Double, bounds: PondBounds, flowerPositions: [PondVector]) {
+        switch butterflyState {
+        case .wandering:
+            phase += 8.5 * dt // Gentle wing flapping (~4.2 Hz)
+            if phase > 2.0 * .pi { phase -= 2.0 * .pi }
 
-        // Altitude sways smoothly
-        altitude = 0.42 + 0.28 * sin(phase * 0.5 + Double(colorVariant) * 1.5)
+            // Altitude sways smoothly
+            altitude = 0.42 + 0.28 * sin(phase * 0.5 + Double(colorVariant) * 1.5)
 
-        // Fluttery heading steering: organic wander + sinusoidal wing flutter
-        wanderAngle += Double.random(in: -0.3...0.3, using: &rng) * dt * 1.8
-        wanderAngle = normalizeAngle(wanderAngle)
+            // Fluttery heading steering: organic wander + sinusoidal wing flutter
+            wanderAngle += Double.random(in: -0.3...0.3, using: &rng) * dt * 1.8
+            wanderAngle = normalizeAngle(wanderAngle)
 
-        let flutterWave = sin(phase * 2.2) * 0.22
-        var desiredHeading = normalizeAngle(wanderAngle + flutterWave)
+            let flutterWave = sin(phase * 2.2) * 0.22
+            var desiredHeading = normalizeAngle(wanderAngle + flutterWave)
 
-        // Soft boundary avoidance
-        let margin = 50.0
-        let avoidance = bounds.boundaryAvoidanceForce(for: position, heading: heading, strength: 3.5, marginOverride: margin)
-        if avoidance.lengthSquared > 0.01 {
-            desiredHeading = avoidance.angle
+            // Soft boundary avoidance
+            let margin = 50.0
+            let avoidance = bounds.boundaryAvoidanceForce(for: position, heading: heading, strength: 3.5, marginOverride: margin)
+            if avoidance.lengthSquared > 0.01 {
+                desiredHeading = avoidance.angle
+            }
+
+            let diff = normalizeAngle(desiredHeading - heading)
+            heading = normalizeAngle(heading + diff * min(1.0, 4.0 * dt))
+
+            speed = 30.0 + 8.0 * sin(phase * 1.5)
+            velocity = PondVector.fromAngle(heading, length: speed)
+            position += velocity * dt
+
+            flowerStateTimer -= dt
+            if flowerStateTimer <= 0.0 && !flowerPositions.isEmpty {
+                // 92% chance to visit a lotus flower (flowerVisitChance = 0.92)
+                let roll = Double.random(in: 0...1, using: &rng)
+                if roll <= 0.92 {
+                    let flowerIdx = Int.random(in: 0..<flowerPositions.count, using: &rng)
+                    targetFlowerIndex = flowerIdx
+                    targetFlowerPosition = flowerPositions[flowerIdx]
+                    butterflyState = .approaching
+                    speed = 18.0
+                } else {
+                    flowerStateTimer = Double.random(in: 3.8...7.4, using: &rng)
+                }
+            }
+
+        case .approaching:
+            phase += 8.5 * dt
+            if phase > 2.0 * .pi { phase -= 2.0 * .pi }
+
+            guard let flowerPos = targetFlowerPosition else {
+                butterflyState = .wandering
+                flowerStateTimer = Double.random(in: 3.8...7.4, using: &rng)
+                return
+            }
+
+            altitude = max(0.18, altitude - 0.20 * dt)
+            let toFlower = flowerPos - position
+            let dist = toFlower.length
+
+            if dist <= 12.0 {
+                // Arrived at flower! Transition to orbiting [7, 12] pt
+                butterflyState = .orbiting
+                flowerOrbitRadius = Double.random(in: 7.0...12.0, using: &rng)
+                flowerOrbitSpeed = Double.random(in: 0.9...1.5, using: &rng)
+                flowerOrbitAngle = atan2(position.y - flowerPos.y, position.x - flowerPos.x)
+                flowerStateTimer = Double.random(in: 2.2...4.6, using: &rng)
+            } else {
+                let desired = toFlower.angle
+                let diff = normalizeAngle(desired - heading)
+                heading = normalizeAngle(heading + diff * min(1.0, 5.0 * dt))
+                speed = 18.0
+                velocity = PondVector.fromAngle(heading, length: speed)
+                position += velocity * dt
+            }
+
+        case .orbiting:
+            phase += 8.5 * dt
+            if phase > 2.0 * .pi { phase -= 2.0 * .pi }
+            altitude = 0.14 + 0.04 * sin(phase)
+
+            guard let flowerPos = targetFlowerPosition else {
+                butterflyState = .wandering
+                flowerStateTimer = Double.random(in: 3.8...7.4, using: &rng)
+                return
+            }
+
+            flowerOrbitAngle += flowerOrbitSpeed * dt
+            let targetX = flowerPos.x + cos(flowerOrbitAngle) * flowerOrbitRadius
+            let targetY = flowerPos.y + sin(flowerOrbitAngle) * flowerOrbitRadius
+            position = PondVector(x: targetX, y: targetY)
+            heading = normalizeAngle(flowerOrbitAngle + .pi * 0.5)
+
+            flowerStateTimer -= dt
+            if flowerStateTimer <= 0.0 {
+                // Settle down to rest directly on lotus flower
+                butterflyState = .resting
+                altitude = 0.06
+                if let flowerPos = targetFlowerPosition {
+                    position = flowerPos
+                }
+                flowerStateTimer = Double.random(in: 0.8...1.8, using: &rng)
+            }
+
+        case .resting:
+            if let flowerPos = targetFlowerPosition {
+                position = flowerPos
+            }
+            altitude = 0.06 // Resting low right on flower petals
+            phase += 1.8 * dt // Gentle breathing wing flutter
+            speed = 0.0
+            velocity = .zero
+
+            flowerStateTimer -= dt
+            if flowerStateTimer <= 0.0 {
+                // Take off back into wander
+                butterflyState = .wandering
+                flowerStateTimer = Double.random(in: 3.8...7.4, using: &rng)
+                altitude = 0.38
+                heading = Double.random(in: -Double.pi...Double.pi, using: &rng)
+                targetFlowerPosition = nil
+                targetFlowerIndex = nil
+            }
         }
-
-        let diff = normalizeAngle(desiredHeading - heading)
-        heading = normalizeAngle(heading + diff * min(1.0, 4.0 * dt))
-
-        speed = 30.0 + 8.0 * sin(phase * 1.5)
-        velocity = PondVector.fromAngle(heading, length: speed)
-        position += velocity * dt
     }
 
     // MARK: - Lowbias32 Pseudo-Random Hashing (Nagomi 12-fireflies.wgsl)

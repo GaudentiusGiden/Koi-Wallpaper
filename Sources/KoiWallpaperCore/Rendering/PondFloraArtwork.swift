@@ -12,7 +12,7 @@ enum PondFloraArtwork {
     static func localBounds(shortSide: CGFloat) -> CGRect {
         CGRect(x: -shortSide * 0.30, y: -shortSide * 0.34, width: shortSide * 0.60, height: shortSide * 0.68)
     }
-    static func drawCluster(_ index: Int, in context: CGContext, shortSide: CGFloat, theme: PondTheme = .day) {
+    static func drawCluster(_ index: Int, in context: CGContext, shortSide: CGFloat, theme: PondTheme = .day, padsState: [PondLilyPad]? = nil) {
         context.saveGState()
         context.scaleBy(x: shortSide * 1.3, y: shortSide * 1.3)
         let mirror: CGFloat = index == 2 || index == 3 ? -1 : 1
@@ -60,9 +60,22 @@ enum PondFloraArtwork {
         default: pads = [(-0.055, 0.005, 0.076), (0.070, -0.020, 0.055)]
         }
         for (i, p) in pads.enumerated() {
+            var padWobbleOffset = CGPoint.zero
+            var padWobbleAngle: CGFloat = 0.0
+            if let activePads = padsState,
+               let match = activePads.first(where: { $0.clusterIndex == index && $0.padIndex == i }),
+               match.wobbleTime > 0.0 {
+                padWobbleAngle = CGFloat(match.currentWobbleAngle)
+                let localScale = shortSide * 1.3
+                padWobbleOffset = CGPoint(
+                    x: CGFloat(match.displacementOffset.x) / localScale,
+                    y: CGFloat(match.displacementOffset.y) / localScale
+                )
+            }
             drawPad(in: context, center: CGPoint(x: p.0, y: p.1), radius: p.2,
                     angle: CGFloat(index) * 1.3 + CGFloat(i) * 2.1, variant: index + i,
-                    flower: i == 1 && index < 4, mirror: mirror, theme: theme)
+                    flower: i == 1 && index < 4, mirror: mirror, theme: theme,
+                    wobbleOffset: padWobbleOffset, wobbleAngle: padWobbleAngle)
         }
         context.restoreGState()
     }
@@ -71,12 +84,13 @@ enum PondFloraArtwork {
         drawCluster(index, in: context, shortSide: shortSide, theme: phase.theme)
     }
 
-    private static func drawPad(in context: CGContext, center: CGPoint, radius: CGFloat,
-                                angle: CGFloat, variant: Int, flower: Bool, mirror: CGFloat, theme: PondTheme = .day) {
+    public static func drawPad(in context: CGContext, center: CGPoint, radius: CGFloat,
+                               angle: CGFloat, variant: Int, flower: Bool, mirror: CGFloat, theme: PondTheme = .day,
+                               wobbleOffset: CGPoint = .zero, wobbleAngle: CGFloat = 0.0) {
         let palette = theme.renderPalette
         context.saveGState()
-        context.translateBy(x: center.x, y: center.y)
-        context.rotate(by: angle)
+        context.translateBy(x: center.x + wobbleOffset.x, y: center.y + wobbleOffset.y)
+        context.rotate(by: angle + wobbleAngle)
         context.scaleBy(x: 1, y: 0.92)
         let leaf = CGMutablePath()
         leaf.move(to: .zero)

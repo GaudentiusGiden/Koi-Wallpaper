@@ -8,9 +8,26 @@ public enum KoiBehaviorState: String, Sendable {
     case followingInsect = "Following Insect"
 }
 
+/// 5-state swimming cadence cycle (Nagomi desktop physics).
+public enum KoiSwimCadence: String, CaseIterable, Sendable {
+    case glide = "Glide"
+    case coast = "Coast"
+    case hover = "Hover"
+    case burst = "Burst"
+    case pivot = "Pivot"
+}
+
+/// 4 approach styles towards food or water splash stimuli based on FishTraits.
+public enum KoiApproachStyle: String, CaseIterable, Sendable {
+    case direct = "Direct"
+    case curvedArc = "Curved Arc"
+    case cautious = "Cautious"
+    case overshootOrbit = "Overshoot & Orbit"
+}
+
 /// Represents an individual koi fish with natural swimming physics,
 /// autonomous steering (wandering, boundary avoidance, separation),
-/// and sinusoidal spine articulation.
+/// sinusoidal spine articulation, 3D Z-depth, and organic cadence cycles.
 public struct KoiFish: Identifiable, Sendable {
     public let id: UUID
     public let variety: KoiVariety
@@ -38,6 +55,21 @@ public struct KoiFish: Identifiable, Sendable {
     public private(set) var targetInsectId: UUID?
     public var traits: FishTraits
 
+    // MARK: - Z-Depth Simulation (0.0 = surface, 1.0 = bottom pond bed)
+    public var depth: Double
+    public var targetDepth: Double
+    public var depthStateTimer: Double
+    public var depthTransitionDuration: Double
+
+    // MARK: - 5-State Swimming Cadence
+    public private(set) var swimCadence: KoiSwimCadence
+    public private(set) var cadenceTimer: Double
+
+    // MARK: - 4 Approach Styles
+    public private(set) var approachStyle: KoiApproachStyle
+    public private(set) var approachTimer: Double
+    public private(set) var approachSinPhase: Double
+
     public init(
         id: UUID = UUID(),
         variety: KoiVariety,
@@ -49,7 +81,8 @@ public struct KoiFish: Identifiable, Sendable {
         maxTurnRate: Double = 2.4,
         seed: UInt64? = nil,
         bodyWidthRatio: Double = 0.28,
-        traits: FishTraits? = nil
+        traits: FishTraits? = nil,
+        depth: Double? = nil
     ) {
         self.id = id
         self.variety = variety
@@ -62,7 +95,8 @@ public struct KoiFish: Identifiable, Sendable {
         self.velocity = PondVector.fromAngle(heading, length: baseSpeed)
         self.length = length
         self.bodyWidthRatio = min(0.4, max(0.2, bodyWidthRatio))
-        self.traits = traits ?? FishTraits.defaultTraits(for: variety)
+        let resolvedTraits = traits ?? FishTraits.defaultTraits(for: variety)
+        self.traits = resolvedTraits
 
         let initialSeed = seed ?? UInt64(truncatingIfNeeded: id.hashValue)
         var prng = SeededRandomNumberGenerator(seed: initialSeed)
@@ -70,6 +104,26 @@ public struct KoiFish: Identifiable, Sendable {
         self.wiggleFrequency = 6.0
         self.spineCurvature = 0.0
         self.wanderAngle = Double.random(in: -Double.pi...Double.pi, using: &prng)
+
+        // Initialize Z-Depth: default initial range [0.05, 0.18] from Nagomi koi/default.json
+        let initialDepth = depth ?? Double.random(in: 0.05...0.18, using: &prng)
+        self.depth = min(1.0, max(0.0, initialDepth))
+        self.targetDepth = self.depth
+        let isBold = resolvedTraits.boldness >= 0.60
+        self.depthStateTimer = isBold
+            ? Double.random(in: 8.0...22.0, using: &prng)
+            : Double.random(in: 4.0...10.0, using: &prng)
+        self.depthTransitionDuration = Double.random(in: 2.0...5.0, using: &prng)
+
+        // Initialize Cadence: start with .glide for initial frame-rate stability
+        self.swimCadence = .glide
+        self.cadenceTimer = Double.random(in: 1.7...5.2, using: &prng)
+
+        // Initialize Approach Style
+        self.approachStyle = KoiFish.selectApproachStyle(for: resolvedTraits)
+        self.approachTimer = 0.0
+        self.approachSinPhase = Double.random(in: 0...(2 * .pi), using: &prng)
+
         self.rng = prng
 
         self.state = .wandering
@@ -77,6 +131,19 @@ public struct KoiFish: Identifiable, Sendable {
         self.targetDurationRemaining = 0.0
         self.targetVisitorId = nil
         self.targetInsectId = nil
+    }
+
+    /// Selects an approach style based on the fish's traits.
+    public static func selectApproachStyle(for traits: FishTraits) -> KoiApproachStyle {
+        if traits.feedingEagerness >= 0.80 {
+            return .direct
+        } else if traits.boldness < 0.55 {
+            return .cautious
+        } else if traits.agility >= 1.10 {
+            return .overshootOrbit
+        } else {
+            return .curvedArc
+        }
     }
 
     /// The coordinate of the koi's mouth (front of head).
@@ -193,12 +260,30 @@ public struct KoiFish: Identifiable, Sendable {
     }
 
     /// Sets a temporary attraction target (e.g. water ripple, food pellet, surface visitor, or insect).
-    public mutating func setTarget(_ target: PondVector, state: KoiBehaviorState, duration: Double, visitorId: UUID? = nil, insectId: UUID? = nil) {
+    public mutating func setTarget(
+        _ target: PondVector,
+        state: KoiBehaviorState,
+        duration: Double,
+        visitorId: UUID? = nil,
+        insectId: UUID? = nil,
+        customApproachStyle: KoiApproachStyle? = nil
+    ) {
         self.currentTarget = target
         self.state = state
         self.targetDurationRemaining = duration
         self.targetVisitorId = visitorId
         self.targetInsectId = insectId
+
+        // Select approach style based on FishTraits
+        self.approachStyle = customApproachStyle ?? KoiFish.selectApproachStyle(for: traits)
+        self.approachTimer = 0.0
+        self.approachSinPhase = Double.random(in: 0...(2 * .pi), using: &rng)
+
+        // Rise to surface when summoned or seeking food (Nagomi callRiseDepth = 0.035, callRiseSeconds = 2.4s)
+        if state == .seekingFood || state == .investigatingClick {
+            self.targetDepth = 0.035
+            self.depthTransitionDuration = 2.4
+        }
     }
 
     /// Smoothly updates a dynamic target position (e.g. flying insect or swimming swan) without resetting duration.
@@ -212,6 +297,7 @@ public struct KoiFish: Identifiable, Sendable {
         self.targetDurationRemaining = 0.0
         self.targetVisitorId = nil
         self.targetInsectId = nil
+        self.approachTimer = 0.0
     }
 
     /// Main physics and steering step for the koi fish.
@@ -228,6 +314,8 @@ public struct KoiFish: Identifiable, Sendable {
                 // Update target coordinate to the assigned food pellet
                 self.currentTarget = food
                 self.targetDurationRemaining = 4.0
+                self.targetDepth = 0.035
+                self.depthTransitionDuration = 2.4
             } else {
                 // No food remaining, immediately return to wandering
                 clearTarget()
@@ -251,6 +339,91 @@ public struct KoiFish: Identifiable, Sendable {
             }
         }
 
+        // 1.5 5-State Swimming Cadence Transitions (when wandering)
+        if state == .wandering {
+            cadenceTimer -= dt
+            if cadenceTimer <= 0.0 {
+                let isPlayful = (mood == .playful)
+                let roll = Double.random(in: 0...1, using: &rng)
+                let burstChance = (isPlayful ? 0.35 : 0.15) * traits.agility
+                let pivotChance = (isPlayful ? 0.30 : 0.15) * traits.agility
+                let hoverChance = (isPlayful ? 0.05 : 0.20) * (1.2 - min(1.0, traits.agility * 0.5))
+                let coastChance = 0.25
+
+                let nextCadence: KoiSwimCadence
+                switch swimCadence {
+                case .glide:
+                    if roll < burstChance {
+                        nextCadence = .burst
+                    } else if roll < burstChance + pivotChance {
+                        nextCadence = .pivot
+                    } else if roll < burstChance + pivotChance + coastChance {
+                        nextCadence = .coast
+                    } else if roll < burstChance + pivotChance + coastChance + hoverChance {
+                        nextCadence = .hover
+                    } else {
+                        nextCadence = .glide
+                    }
+                case .coast:
+                    nextCadence = (roll < 0.40) ? .hover : .glide
+                case .hover:
+                    nextCadence = (roll < burstChance * 1.5) ? .burst : .glide
+                case .burst:
+                    nextCadence = (roll < 0.50) ? .coast : .glide
+                case .pivot:
+                    nextCadence = (roll < 0.35) ? .burst : .glide
+                }
+                swimCadence = nextCadence
+
+                let duration: Double
+                switch nextCadence {
+                case .glide:
+                    duration = Double.random(in: 1.7...5.2, using: &rng)
+                case .coast:
+                    duration = Double.random(in: 0.7...2.1, using: &rng)
+                case .hover:
+                    duration = Double.random(in: 0.65...3.1, using: &rng)
+                case .burst:
+                    duration = Double.random(in: 0.32...0.92, using: &rng)
+                case .pivot:
+                    duration = isPlayful
+                        ? Double.random(in: 0.3...0.78, using: &rng)
+                        : Double.random(in: 0.5...1.1, using: &rng)
+                }
+                cadenceTimer = duration
+            }
+        } else {
+            swimCadence = .glide
+        }
+
+        // 1.6 Z-Depth Progression & Boldness-Based Diving Cycles
+        let depthDiff = targetDepth - depth
+        if abs(depthDiff) > 0.0001 {
+            let rate = max(0.5, depthTransitionDuration)
+            let maxDepthStep = (1.0 / rate) * dt
+            let depthStep = min(max(depthDiff, -maxDepthStep), maxDepthStep)
+            depth = min(1.0, max(0.0, depth + depthStep))
+        }
+
+        if state == .wandering {
+            depthStateTimer -= dt
+            if depthStateTimer <= 0.0 {
+                let isBold = (traits.boldness >= 0.60)
+                let roll = Double.random(in: 0...1, using: &rng)
+                let shallowChance = isBold ? 0.75 : 0.35
+                if roll < shallowChance {
+                    // Shallow surface range [0.04...0.22] for [8...22 s]
+                    targetDepth = Double.random(in: 0.04...0.22, using: &rng)
+                    depthStateTimer = Double.random(in: 8.0...22.0, using: &rng)
+                } else {
+                    // Deep pond bed range [0.45...0.75] for [4...10 s]
+                    targetDepth = Double.random(in: 0.45...0.75, using: &rng)
+                    depthStateTimer = Double.random(in: 4.0...10.0, using: &rng)
+                }
+                depthTransitionDuration = Double.random(in: 2.0...5.0, using: &rng)
+            }
+        }
+
         // 2. Compute Steering Forces
         var steeringForce = PondVector.zero
 
@@ -262,9 +435,11 @@ public struct KoiFish: Identifiable, Sendable {
         let wanderForce = (wanderCircleCenter + wanderDisplacement - position).normalized() * 0.75
         steeringForce += wanderForce
 
-        // B. Target Seeking Force (if active)
+        // B. Target Seeking Force (with 4 Approach Styles)
         var targetPull = PondVector.zero
         if let target = currentTarget {
+            approachTimer += dt
+            approachSinPhase += dt * 3.0
             let toTarget = (target - position)
             let dist = toTarget.length
             if dist > 0.001 {
@@ -277,7 +452,38 @@ public struct KoiFish: Identifiable, Sendable {
                 case .followingInsect: baseSeek = 1.8
                 case .wandering: baseSeek = 1.5
                 }
-                targetPull = toTarget.normalized() * (baseSeek * arrivalRamp)
+
+                var seekTarget = target
+                var styleSeekMultiplier = 1.0
+
+                switch approachStyle {
+                case .direct:
+                    styleSeekMultiplier = 1.0
+                case .curvedArc:
+                    if dist > mouthRadius + 12.0 {
+                        let lateralDir = PondVector(x: -toTarget.y, y: toTarget.x).normalized()
+                        let lateralWave = sin(approachSinPhase) * min(24.0, dist * 0.35)
+                        seekTarget = target + lateralDir * lateralWave
+                    }
+                case .cautious:
+                    if dist < 65.0 && dist > mouthRadius + 8.0 {
+                        styleSeekMultiplier = 0.65
+                    }
+                case .overshootOrbit:
+                    if dist > 45.0 {
+                        let forward = PondVector.fromAngle(heading, length: 18.0)
+                        seekTarget = target + forward
+                    } else if dist > mouthRadius + 8.0 {
+                        let orbitDir = PondVector(x: -toTarget.y, y: toTarget.x).normalized()
+                        seekTarget = target + orbitDir * 20.0
+                        styleSeekMultiplier = 0.85
+                    }
+                }
+
+                let adjustedToTarget = (seekTarget - position)
+                if adjustedToTarget.length > 0.001 {
+                    targetPull = adjustedToTarget.normalized() * (baseSeek * arrivalRamp * styleSeekMultiplier)
+                }
             }
         }
 
@@ -359,7 +565,11 @@ public struct KoiFish: Identifiable, Sendable {
         let calmTurnRate = max(0.9, maxTurnRate * 0.50)
         let baseTurnRate = calmTurnRate + (maxTurnRate - calmTurnRate) * urgency
         let moodTurnFactor = (mood == .playful ? 1.15 : 1.0)
-        let effectiveTurnRate = baseTurnRate * traits.agility * moodTurnFactor
+        var cadenceTurnMultiplier = 1.0
+        if state == .wandering && swimCadence == .pivot && avoidanceUrgency < 0.3 {
+            cadenceTurnMultiplier = 1.4 // pivot turn multiplier during calm wandering
+        }
+        let effectiveTurnRate = baseTurnRate * traits.agility * moodTurnFactor * cadenceTurnMultiplier
 
         let maxTurnThisStep = effectiveTurnRate * dt
         let absDiff = abs(angleDiff)
@@ -373,22 +583,56 @@ public struct KoiFish: Identifiable, Sendable {
         let moodSpeedMultiplier = (mood == .playful ? 1.25 : 1.0)
         switch state {
         case .wandering:
-            targetSpeed = baseSpeed * moodSpeedMultiplier
+            var cadenceSpeedFactor = 1.0
+            switch swimCadence {
+            case .glide:
+                cadenceSpeedFactor = 1.0
+            case .coast:
+                cadenceSpeedFactor = 0.30 // coastSpeedFraction
+            case .hover:
+                cadenceSpeedFactor = 0.08 // almost stopped
+            case .burst:
+                // If neighbors are close, yield burst to prevent charging into personal space
+                cadenceSpeedFactor = (closestNeighborDist < socialRadius) ? 1.10 : 1.55
+            case .pivot:
+                cadenceSpeedFactor = 0.55 // pivotSpeedFraction
+            }
+            targetSpeed = baseSpeed * moodSpeedMultiplier * cadenceSpeedFactor
         case .seekingFood:
             let eagernessBonus = 0.90 + traits.boldness * 0.20
             targetSpeed = maxSpeed * moodSpeedMultiplier * eagernessBonus
+            if approachStyle == .cautious, let target = currentTarget {
+                let dist = position.distance(to: target)
+                if dist < 65.0 && dist > mouthRadius + 8.0 {
+                    targetSpeed *= 0.75 // cautiousSpeed
+                }
+            } else if approachStyle == .overshootOrbit, let target = currentTarget {
+                let dist = position.distance(to: target)
+                if dist > 45.0 {
+                    targetSpeed *= 1.10 // overshootSpeed
+                }
+            }
         case .investigatingClick:
             targetSpeed = baseSpeed * 1.35 * moodSpeedMultiplier
+            if approachStyle == .cautious, let target = currentTarget {
+                let dist = position.distance(to: target)
+                if dist < 65.0 && dist > mouthRadius + 8.0 {
+                    targetSpeed *= 0.75
+                }
+            }
         case .investigatingVisitor:
             targetSpeed = baseSpeed * 1.25 * moodSpeedMultiplier
         case .followingInsect:
             targetSpeed = baseSpeed * 1.30 * moodSpeedMultiplier
         }
 
-        // Smoothly yield and decelerate if another fish is directly ahead in our path
+        // Smoothly yield and decelerate if another fish is directly ahead in our path or within physical barrier
         if forwardObstacleCloseness > 0.001 {
             let slowdownFactor = 1.0 - (forwardObstacleCloseness * 0.60)
             targetSpeed = min(targetSpeed, baseSpeed * slowdownFactor)
+        }
+        if closestNeighborDist < physicalBarrier {
+            targetSpeed = min(targetSpeed, baseSpeed * 0.65)
         }
 
         let speedChangeRate = (targetSpeed > speed) ? 50.0 : 35.0
@@ -406,8 +650,18 @@ public struct KoiFish: Identifiable, Sendable {
         position = bounds.clamped(position, inset: inset)
 
         // 6. Sinusoidal Swimming Wiggle & Smooth Spine Curvature
+        var cadenceWiggleMultiplier = 1.0
+        if state == .wandering {
+            switch swimCadence {
+            case .glide: cadenceWiggleMultiplier = 1.0
+            case .coast: cadenceWiggleMultiplier = 0.50
+            case .hover: cadenceWiggleMultiplier = 0.45 // idleBeatRate
+            case .burst: cadenceWiggleMultiplier = 1.50
+            case .pivot: cadenceWiggleMultiplier = 1.20
+            }
+        }
         let wiggleMoodFactor = (mood == .playful ? 1.20 : 1.0)
-        let wiggleRate = (speed / baseSpeed) * wiggleFrequency * wiggleMoodFactor
+        let wiggleRate = (speed / baseSpeed) * wiggleFrequency * wiggleMoodFactor * cadenceWiggleMultiplier
         wigglePhase += wiggleRate * dt
         if wigglePhase > 2.0 * .pi {
             wigglePhase -= 2.0 * .pi

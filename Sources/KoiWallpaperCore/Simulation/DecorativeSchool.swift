@@ -84,6 +84,11 @@ public struct DecorativeSchool: Sendable {
     public var modeTimer: Double
     public var dispersionFactor: Double
 
+    // MARK: - Tiny Fish Steal (Nagomi Food Swarm)
+    public static let tinyFishStealRadius: Double = 70.0
+    public static let tinyFishStealChance: Double = 0.55
+    public static let tinyFishBite: Double = 0.35
+
     public init(groupIndex: Int, bounds: PondBounds, seed: UInt64? = nil) {
         self.groupIndex = groupIndex
         let initialSeed = seed ?? UInt64(700 + groupIndex * 443)
@@ -521,6 +526,58 @@ public struct DecorativeSchool: Sendable {
                         fish[a].velocity += push * 1.2
                         fish[b].velocity -= push * 1.2
                     }
+                }
+            }
+        }
+    }
+
+    /// Checks if floating food pellets are within steal radius (70pt).
+    /// With 55% chance, small fish swarm the pellet, reducing bitesRemaining by 0.35
+    /// and spawning delicate .eatingNibble ripples (Nagomi tinyFishSteal).
+    public mutating func performTinyFishSteal(
+        dt: Double,
+        pellets: inout [FoodPellet],
+        spawnRipple: (PondVector, RippleType) -> Void
+    ) {
+        guard !pellets.isEmpty else { return }
+
+        for pIdx in 0..<pellets.count {
+            guard !pellets[pIdx].isConsumed else { continue }
+            let pelletPos = pellets[pIdx].position
+
+            var swarmingFishIndices: [Int] = []
+            for i in 0..<fish.count {
+                guard fish[i].panicTimer <= 0.0 else { continue }
+                let dist = fish[i].position.distance(to: pelletPos)
+                if dist <= Self.tinyFishStealRadius {
+                    swarmingFishIndices.append(i)
+                }
+            }
+
+            guard !swarmingFishIndices.isEmpty else { continue }
+
+            let roll = Double.random(in: 0.0...1.0, using: &rng)
+            guard roll <= Self.tinyFishStealChance else { continue }
+
+            for i in swarmingFishIndices {
+                let toPellet = pelletPos - fish[i].position
+                let dist = toPellet.length
+
+                if dist <= 12.0 {
+                    let wasConsumed = pellets[pIdx].takeBite(amount: Self.tinyFishBite)
+                    spawnRipple(pelletPos, .eatingNibble)
+
+                    fish[i].swimPhase += 3.0
+                    fish[i].velocity = PondVector.fromAngle(Double.random(in: -Double.pi...Double.pi, using: &rng), length: 45.0)
+
+                    if wasConsumed {
+                        break
+                    }
+                } else if dist > 0.001 {
+                    let rushSpeed = 62.0 + Double(i % 3) * 8.0
+                    let rushVel = (toPellet / dist) * rushSpeed
+                    fish[i].velocity = fish[i].velocity.lerp(to: rushVel, t: min(1.0, dt * 5.5))
+                    fish[i].swimPhase += dt * 6.5
                 }
             }
         }

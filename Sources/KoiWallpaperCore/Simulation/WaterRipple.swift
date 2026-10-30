@@ -1,10 +1,11 @@
 import Foundation
 
-public enum RippleType: Sendable, Equatable {
-    case waterCall   // Regular click (cyan splash)
-    case foodDrop    // Option-click (orange food splash)
-    case eatingNibble // Koi eating pellet (small white/cyan delicate ring)
-    case rainDrop    // Atmospheric raindrop ripple (delicate silver-cyan ring)
+public enum RippleType: String, Sendable, Equatable, CaseIterable {
+    case waterCall    // Regular click / touch (cyan splash)
+    case foodDrop     // Option-click (orange food splash)
+    case eatingNibble // Koi eating pellet or small fish steal nibble (small white/cyan delicate ring)
+    case rainDrop     // Atmospheric raindrop ripple (delicate silver-cyan ring)
+    case padBump      // Koi bumping into water lily pad (organic emerald-cyan wave)
 }
 
 /// Represents an expanding concentric water surface ripple.
@@ -52,6 +53,11 @@ public struct WaterRipple: Identifiable, Equatable, Sendable {
             self.maxRadius = maxR
             self.growthRate = max(0.0, (maxR - initialRadius) / 0.95)
             self.fadeRate = max(0.0, initialAlpha / 1.05)
+        case .padBump:
+            let maxR = maxRadius ?? 48.0
+            self.maxRadius = maxR
+            self.growthRate = max(0.0, (maxR - initialRadius) / 1.2)
+            self.fadeRate = max(0.0, initialAlpha / 1.2)
         }
     }
 

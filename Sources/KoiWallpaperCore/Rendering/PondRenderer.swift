@@ -463,7 +463,11 @@ public final class PondRenderer {
                 customShadowStyle: shadowStyle,
                 isEcoMode: isBatteryEcoMode
             )
-            for fish in simulation.fish {
+            // Z-Depth Sorting: fish with greater depth (deep pond bed) render first,
+            // fish swimming near the surface (depth near 0.0) render on top.
+            let sortedFish = simulation.fish.sorted { $0.depth > $1.depth }
+
+            for fish in sortedFish {
                 KoiArtwork.draw(
                     fish,
                     in: bitmap,
@@ -484,7 +488,7 @@ public final class PondRenderer {
                 )
             }
             PondTurtleArtwork.drawShadow(simulation.turtle, in: bitmap, shadowStyle: shadowStyle)
-            for fish in simulation.fish {
+            for fish in sortedFish {
                 KoiArtwork.draw(
                     fish,
                     in: bitmap,
@@ -564,11 +568,18 @@ public final class PondRenderer {
                 let dy = (CGFloat(cos(t * 0.15 + Double(index) * 1.3)) * short * 0.0018 * scale).rounded() / scale
                 let rawAngle = CGFloat(sin(t * 0.16 + Double(index))) * 0.005
                 let angle = (rawAngle * 1000).rounded() / 1000
+
+                // Add dynamic bump wobble translation and rotation from koi collision
+                let wobblingPads = simulation.lilyPads.filter { $0.clusterIndex == index && $0.wobbleTime > 0.0 }
+                let wobbleDx = wobblingPads.map { CGFloat($0.displacementOffset.x) }.reduce(0, +)
+                let wobbleDy = wobblingPads.map { CGFloat($0.displacementOffset.y) }.reduce(0, +)
+                let wobbleAngle = wobblingPads.map { CGFloat($0.currentWobbleAngle) }.reduce(0, +)
+
                 return PondImagePlacement(
                     image: source.image,
-                    rect: source.rect.offsetBy(dx: dx, dy: dy),
+                    rect: source.rect.offsetBy(dx: dx + wobbleDx, dy: dy + wobbleDy),
                     pixelated: true,
-                    angle: angle
+                    angle: angle + wobbleAngle
                 )
             }
         }
