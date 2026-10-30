@@ -26,6 +26,7 @@ public final class PondSimulation: @unchecked Sendable {
     public var mood: PondMood = .calm
     public var isRainActive: Bool = false
     public var isFloatingDebrisEnabled: Bool = true
+    public var koiPaletteMode: KoiPaletteMode = .classic
     public var season: PondSeason = .spring
     public var seasonMode: SeasonMode = .autoCalendar
     public private(set) var currentTheme: PondTheme = .day
@@ -47,6 +48,8 @@ public final class PondSimulation: @unchecked Sendable {
 
     // Production wallpaper swans enter from an edge, cross the pond, then return after a pause.
     public private(set) var isAutomaticSwanEnabled = false
+    public var isVisitorRotationEnabled = false
+    private var nextAutonomousType: PondVisitorType = .duck
     private var automaticSwanArrivalCountdown: Double?
 
     // Timing and frame-rate stability
@@ -297,6 +300,19 @@ public final class PondSimulation: @unchecked Sendable {
             turtle.triggerStartle(awayFrom: CGPoint(x: point.x, y: point.y))
         }
 
+        // Startle swimming duck if click is nearby (splash burst panic)
+        for i in 0..<visitors.count {
+            if visitors[i].type == .duck {
+                let duckDist = hypot(point.x - visitors[i].position.x, point.y - visitors[i].position.y)
+                if duckDist < 68.0 {
+                    visitors[i].triggerStartle(awayFrom: point)
+                    if ripples.count < maxRipples {
+                        ripples.append(WaterRipple(center: visitors[i].position, type: .waterCall))
+                    }
+                }
+            }
+        }
+
         // Spawn ripple (cyan)
         if ripples.count < maxRipples {
             ripples.append(WaterRipple(center: point, type: .waterCall))
@@ -411,9 +427,9 @@ public final class PondSimulation: @unchecked Sendable {
         isAutomaticSwanEnabled = enabled
 
         if enabled {
-            let swanAlreadyPresent = visitors.contains { $0.type == .swan }
+            let birdAlreadyPresent = visitors.contains { $0.type == .swan || $0.type == .duck }
             automaticSwanArrivalCountdown = nil
-            if !swanAlreadyPresent {
+            if !birdAlreadyPresent {
                 createAutomaticSwan()
             }
         } else {
@@ -428,8 +444,8 @@ public final class PondSimulation: @unchecked Sendable {
     private func updateAutomaticSwan(dt: Double) {
         guard isAutomaticSwanEnabled else { return }
 
-        // A manually created swan also prevents a second swan from overlapping it.
-        if visitors.contains(where: { $0.type == .swan }) {
+        // A manually created swan or duck also prevents a second bird from overlapping it.
+        if visitors.contains(where: { $0.type == .swan || $0.type == .duck }) {
             automaticSwanArrivalCountdown = nil
             return
         }
@@ -445,7 +461,19 @@ public final class PondSimulation: @unchecked Sendable {
     }
 
     private func createAutomaticSwan() {
-        let radius = 53.0
+        let visitorType: PondVisitorType
+        let duckVar: DuckPaletteVariant
+
+        if isVisitorRotationEnabled {
+            visitorType = nextAutonomousType
+            duckVar = Bool.random(using: &rng) ? .mandarin : .whitePekin
+            nextAutonomousType = (nextAutonomousType == .swan) ? .duck : .swan
+        } else {
+            visitorType = .swan
+            duckVar = .mandarin
+        }
+
+        let radius = (visitorType == .swan) ? 53.0 : 42.0
         let insetX = min(radius + 52.0, bounds.width * 0.30)
         let insetY = min(radius + 52.0, bounds.height * 0.30)
         let position = PondVector(
@@ -453,10 +481,19 @@ public final class PondSimulation: @unchecked Sendable {
             y: Double.random(in: insetY...(bounds.height - insetY), using: &rng)
         )
         let heading = Double.random(in: -Double.pi...Double.pi, using: &rng)
-        let speed = Double.random(in: 34.0...44.0, using: &rng)
+        let speed = (visitorType == .swan)
+            ? Double.random(in: 34.0...44.0, using: &rng)
+            : Double.random(in: 32.0...42.0, using: &rng)
         let seed = rng.next()
-        let visitor = PondVisitor(type: .swan, position: position, heading: heading,
-                                  speed: speed, isAutonomous: true, seed: seed)
+        let visitor = PondVisitor(
+            type: visitorType,
+            duckVariant: duckVar,
+            position: position,
+            heading: heading,
+            speed: speed,
+            isAutonomous: true,
+            seed: seed
+        )
         addVisitor(visitor)
         automaticSwanArrivalCountdown = nil
     }
@@ -467,10 +504,11 @@ public final class PondSimulation: @unchecked Sendable {
         visitors.append(visitor)
     }
 
-    /// Spawns a surface visitor (such as an elegant swan or floating temari ball) in the pond.
+    /// Spawns a surface visitor (such as an elegant swan, nagomi duck, or floating temari ball) in the pond.
     @discardableResult
     public func spawnVisitor(
         type: PondVisitorType,
+        duckVariant: DuckPaletteVariant = .mandarin,
         at point: PondVector? = nil,
         lifetime: Double? = nil
     ) -> PondVisitor {
@@ -499,6 +537,7 @@ public final class PondSimulation: @unchecked Sendable {
         let seed = rng.next()
         let visitor = PondVisitor(
             type: type,
+            duckVariant: duckVariant,
             position: spawnPos,
             heading: heading,
             lifetime: lifetime,
@@ -858,6 +897,49 @@ public final class PondSimulation: @unchecked Sendable {
             visitors[i].update(dt: dt, bounds: bounds)
         }
 
+        // Visitors (Ducks & Swans) feed on nearby food pellets
+        if !pellets.isEmpty {
+            for i in 0..<visitors.count {
+                guard visitors[i].type == .duck || visitors[i].type == .swan else { continue }
+                if visitors[i].type == .duck && (visitors[i].isStartled || visitors[i].isDabbling) { continue }
+
+                var closestIdx: Int? = nil
+                var minD = visitors[i].interactionRadius
+                for pIdx in 0..<pellets.count {
+                    let d = pellets[pIdx].position.distance(to: visitors[i].position)
+                    if d < minD {
+                        minD = d
+                        closestIdx = pIdx
+                    }
+                }
+
+                if let pIdx = closestIdx {
+                    let targetPellet = pellets[pIdx]
+                    visitors[i].targetPelletId = targetPellet.id
+                    let diff = targetPellet.position - visitors[i].position
+                    let targetAngle = diff.angle
+                    let diffAngle = normalizeAngle(targetAngle - visitors[i].heading)
+                    let maxTurn = (visitors[i].type == .duck ? 2.4 : 1.2) * dt
+                    visitors[i].heading = normalizeAngle(visitors[i].heading + min(max(diffAngle, -maxTurn), maxTurn))
+                    visitors[i].velocity = PondVector.fromAngle(visitors[i].heading, length: visitors[i].speed)
+
+                    let eatDist = (visitors[i].type == .duck) ? 18.0 : 26.0
+                    if minD < eatDist {
+                        pellets.remove(at: pIdx)
+                        if ripples.count < maxRipples {
+                            ripples.append(WaterRipple(center: targetPellet.position, type: .eatingNibble))
+                        }
+                        if visitors[i].type == .duck {
+                            visitors[i].triggerDabble(duration: Double.random(in: 2.0...3.2, using: &rng))
+                        }
+                        visitors[i].targetPelletId = nil
+                    }
+                } else {
+                    visitors[i].targetPelletId = nil
+                }
+            }
+        }
+
         // Purge expired or fully departed visitors and clear any koi targets for them.
         let departedVisitors = visitors.filter { $0.isExpired || $0.hasCompletelyExited(bounds) }
         if !departedVisitors.isEmpty {
@@ -878,7 +960,7 @@ public final class PondSimulation: @unchecked Sendable {
                 if let vid = fish[i].targetVisitorId, let activeVisitor = visitors.first(where: { $0.id == vid }) {
                     // Update target point to current visitor position (or escort offset)
                     let escortOffset: PondVector
-                    if activeVisitor.type == .swan {
+                    if activeVisitor.type == .swan || activeVisitor.type == .duck {
                         let angle = activeVisitor.heading + .pi * 0.75
                         escortOffset = PondVector.fromAngle(angle, length: activeVisitor.radius + 18.0)
                     } else {
@@ -904,7 +986,7 @@ public final class PondSimulation: @unchecked Sendable {
                         let curiosityThreshold = (mood == .playful) ? 0.35 : 0.55
                         if fish[i].traits.curiosity >= curiosityThreshold {
                             let escortOffset: PondVector
-                            if visitor.type == .swan {
+                            if visitor.type == .swan || visitor.type == .duck {
                                 let angle = visitor.heading + .pi * 0.75
                                 escortOffset = PondVector.fromAngle(angle, length: visitor.radius + 18.0)
                             } else {

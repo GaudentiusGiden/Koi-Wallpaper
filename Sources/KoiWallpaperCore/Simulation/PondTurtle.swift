@@ -26,7 +26,7 @@ public struct PondTurtle: Sendable {
     public var position: CGPoint = .zero
     public var heading: Double = 0.35 // Facing angle in radians
     public var speed: Double = 20.0   // Current swimming speed (pt/s)
-    public var length: CGFloat = 78.0 // Turtle length in pt (~50% adult koi, prominent & clearly readable)
+    public var length: CGFloat = 84.0 // Turtle length in pt (~84pt, proportional alongside koi & duck)
 
     // MARK: - Animation & Kinetics
 

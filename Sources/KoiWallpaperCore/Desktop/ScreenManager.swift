@@ -40,6 +40,7 @@ public final class ScreenManager {
     public private(set) var currentSeasonMode: SeasonMode = .autoCalendar
     public private(set) var currentManualSeason: PondSeason = .spring
     public private(set) var currentIsFloatingDebrisEnabled: Bool = true
+    public private(set) var currentKoiPaletteMode: KoiPaletteMode = .classic
     public weak var inputCoordinator: InputCoordinator?
 
     public var onControllersChanged: (([DesktopWindowController]) -> Void)?
@@ -139,6 +140,7 @@ public final class ScreenManager {
 
     private func createController(for screen: NSScreen) -> DesktopWindowController {
         let controller = controllerFactory?(screen) ?? DesktopWindowController(screen: screen)
+        controller.wallpaperView.simulation.isVisitorRotationEnabled = true
         controller.wallpaperView.simulation.setAutomaticSwanEnabled(true)
         controller.wallpaperView.inputCoordinator = inputCoordinator
         controller.wallpaperView.theme = currentTheme
@@ -149,6 +151,7 @@ public final class ScreenManager {
         controller.applySeason(currentManualSeason)
         controller.applySeasonMode(currentSeasonMode)
         controller.applyFloatingDebris(currentIsFloatingDebrisEnabled)
+        controller.applyKoiPaletteMode(currentKoiPaletteMode)
         controller.applyInteractionMode(currentMode)
         controller.setGloballyPaused(isGloballyPaused)
         if !isGloballyPaused {
@@ -259,6 +262,13 @@ public final class ScreenManager {
         self.currentIsFloatingDebrisEnabled = enabled
         for controller in controllers {
             controller.applyFloatingDebris(enabled)
+        }
+    }
+
+    public func applyKoiPaletteMode(_ mode: KoiPaletteMode) {
+        self.currentKoiPaletteMode = mode
+        for controller in controllers {
+            controller.applyKoiPaletteMode(mode)
         }
     }
 

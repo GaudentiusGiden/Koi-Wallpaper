@@ -46,7 +46,7 @@ public enum DecorativeFishArtwork {
                 let length = CGFloat(Double.random(in: 0.015...0.025, using: &rng)) * short
                 let turn = heading + sin(time * 0.9 + Double(index)) * 0.14
                 let halfWidth = length * 0.18
-                let pal = palette(for: group, index: index)
+                let pal = palette(for: group, index: index, isNight: theme.isNight)
                 let px = center.x + offsetX + CGFloat(sin(time * 0.7 + Double(index))) * short * 0.004
                 let py = center.y + offsetY + CGFloat(cos(time * 0.6 + Double(index))) * short * 0.003
                 instances.append(SchoolFishInstance(x: px, y: py, turn: turn, length: length, halfWidth: halfWidth, palette: pal, index: index))
@@ -70,7 +70,7 @@ public enum DecorativeFishArtwork {
                 context.rotate(by: CGFloat(fish.turn))
                 drawPectoralFins(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, time: time, index: fish.index)
                 drawTailFin(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, time: time, index: fish.index)
-                drawTorso(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, index: fish.index, isEcoMode: isEcoMode)
+                drawTorso(in: context, length: fish.length, halfWidth: fish.halfWidth, palette: fish.palette, index: fish.index, isEcoMode: isEcoMode, isNight: theme.isNight)
                 drawEyes(in: context, length: fish.length, halfWidth: fish.halfWidth)
                 context.restoreGState()
             }
@@ -98,7 +98,7 @@ public enum DecorativeFishArtwork {
             instances.reserveCapacity(school.fish.count)
 
             for fish in school.fish {
-                let pal = palette(for: group, index: fish.index)
+                let pal = palette(for: group, index: fish.index, isNight: theme.isNight)
                 instances.append((fish: fish, palette: pal))
             }
 
@@ -151,7 +151,8 @@ public enum DecorativeFishArtwork {
                     halfWidth: CGFloat(fish.halfWidth),
                     palette: item.palette,
                     index: fish.index,
-                    isEcoMode: isEcoMode
+                    isEcoMode: isEcoMode,
+                    isNight: theme.isNight
                 )
                 drawEyes(
                     in: context,
@@ -177,7 +178,56 @@ public enum DecorativeFishArtwork {
         }
     }()
 
-    private static func palette(for group: Int, index: Int) -> FishPalette {
+    private static let cachedGlowPalettes: [FishPalette] = {
+        // From Nagomi presets/tiny-fish/glow.json:
+        // Palettes for night theme: they read as glowing bioluminescent flecks.
+        // 1. Cyan Glow (#5ff0ff, light #c8fbff, accent #2a8cff, fin #9ff6ff)
+        let p0 = FishPalette(
+            body: CGColor(red: 0.37, green: 0.94, blue: 1.00, alpha: 0.96),
+            belly: CGColor(red: 0.78, green: 0.98, blue: 1.00, alpha: 0.92),
+            bellyHighlight: CGColor(red: 0.78, green: 0.98, blue: 1.00, alpha: 0.40),
+            bellySheen: CGColor(red: 0.37, green: 0.94, blue: 1.00, alpha: 0.70),
+            pattern: CGColor(red: 0.16, green: 0.55, blue: 1.00, alpha: 0.95),
+            fin: CGColor(red: 0.62, green: 0.96, blue: 1.00, alpha: 0.75),
+            finAccent: CGColor(red: 0.78, green: 0.98, blue: 1.00, alpha: 0.90)
+        )
+        // 2. Gold Glow (#ffb23a, light #ffe39a, accent #ff6a1f, fin #ffc970)
+        let p1 = FishPalette(
+            body: CGColor(red: 1.00, green: 0.70, blue: 0.23, alpha: 0.96),
+            belly: CGColor(red: 1.00, green: 0.89, blue: 0.60, alpha: 0.92),
+            bellyHighlight: CGColor(red: 1.00, green: 0.89, blue: 0.60, alpha: 0.40),
+            bellySheen: CGColor(red: 1.00, green: 0.70, blue: 0.23, alpha: 0.70),
+            pattern: CGColor(red: 1.00, green: 0.42, blue: 0.12, alpha: 0.95),
+            fin: CGColor(red: 1.00, green: 0.79, blue: 0.44, alpha: 0.75),
+            finAccent: CGColor(red: 1.00, green: 0.89, blue: 0.60, alpha: 0.90)
+        )
+        // 3. Plum / Pink Glow (#ff7ad6, light #ffc4ee, accent #b04bff, fin #ffa3e4)
+        let p2 = FishPalette(
+            body: CGColor(red: 1.00, green: 0.48, blue: 0.84, alpha: 0.96),
+            belly: CGColor(red: 1.00, green: 0.77, blue: 0.93, alpha: 0.92),
+            bellyHighlight: CGColor(red: 1.00, green: 0.77, blue: 0.93, alpha: 0.40),
+            bellySheen: CGColor(red: 1.00, green: 0.48, blue: 0.84, alpha: 0.70),
+            pattern: CGColor(red: 0.69, green: 0.29, blue: 1.00, alpha: 0.95),
+            fin: CGColor(red: 1.00, green: 0.64, blue: 0.89, alpha: 0.75),
+            finAccent: CGColor(red: 1.00, green: 0.77, blue: 0.93, alpha: 0.90)
+        )
+        // 4. Ice Aqua Glow (#eaffff, light #ffffff, accent #7fe3ff, fin #d5f8ff)
+        let p3 = FishPalette(
+            body: CGColor(red: 0.92, green: 1.00, blue: 1.00, alpha: 0.96),
+            belly: CGColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.95),
+            bellyHighlight: CGColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.50),
+            bellySheen: CGColor(red: 0.92, green: 1.00, blue: 1.00, alpha: 0.80),
+            pattern: CGColor(red: 0.50, green: 0.89, blue: 1.00, alpha: 0.95),
+            fin: CGColor(red: 0.84, green: 0.97, blue: 1.00, alpha: 0.75),
+            finAccent: CGColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.90)
+        )
+        return [p0, p1, p2, p3]
+    }()
+
+    private static func palette(for group: Int, index: Int, isNight: Bool = false) -> FishPalette {
+        if isNight {
+            return cachedGlowPalettes[(group + index) % cachedGlowPalettes.count]
+        }
         let g = max(0, min(group, cachedPalettes.count - 1))
         let list = cachedPalettes[g]
         return list[index % list.count]
@@ -384,8 +434,22 @@ public enum DecorativeFishArtwork {
         halfWidth: CGFloat,
         palette: FishPalette,
         index: Int,
-        isEcoMode: Bool = false
+        isEcoMode: Bool = false,
+        isNight: Bool = false
     ) {
+        if isNight {
+            // Soft bioluminescent glow aura around small fish in dark waters
+            context.saveGState()
+            context.setFillColor(palette.body.copy(alpha: 0.22)!)
+            context.fillEllipse(in: CGRect(
+                x: -length * 0.44,
+                y: -halfWidth * 1.8,
+                width: length * 0.94,
+                height: halfWidth * 3.6
+            ))
+            context.restoreGState()
+        }
+
         let body = CGMutablePath()
         body.move(to: CGPoint(x: length * 0.50, y: 0))
         body.addQuadCurve(to: CGPoint(x: length * 0.12, y: halfWidth),

@@ -47,6 +47,7 @@ enum PondBitmap {
 /// One asset pipeline for both the CALayer host and deterministic offscreen review.
 /// Physics and input remain in points; only the artwork uses a coarse logical grid.
 public final class PondRenderer {
+    public var koiPaletteMode: KoiPaletteMode = .classic
     private var waterA = PondWaterSurface()
     private var waterB = PondWaterSurface()
     private var sceneContext: CGContext?
@@ -484,7 +485,13 @@ public final class PondRenderer {
             }
             PondTurtleArtwork.drawShadow(simulation.turtle, in: bitmap, shadowStyle: shadowStyle)
             for fish in simulation.fish {
-                KoiArtwork.draw(fish, in: bitmap, theme: toTheme, customFishAmbientStyle: fishAmbientStyle)
+                KoiArtwork.draw(
+                    fish,
+                    in: bitmap,
+                    theme: toTheme,
+                    customFishAmbientStyle: fishAmbientStyle,
+                    paletteMode: simulation.koiPaletteMode
+                )
             }
             PondArtwork.drawPellets(simulation.pellets, in: bitmap)
             for visitor in simulation.visitors {

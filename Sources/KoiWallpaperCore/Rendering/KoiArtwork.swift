@@ -24,7 +24,7 @@ public enum KoiArtwork {
     ]
 
     public static func draw(_ fish: KoiFish, in context: CGContext, drawShadowOnly: Bool = false, phase: TimeOfDayPhase) {
-        draw(fish, in: context, drawShadowOnly: drawShadowOnly, theme: phase.theme)
+        draw(fish, in: context, drawShadowOnly: drawShadowOnly, theme: phase.theme, paletteMode: .classic)
     }
 
     public static func draw(
@@ -33,7 +33,8 @@ public enum KoiArtwork {
         drawShadowOnly: Bool = false,
         theme: PondTheme = .day,
         customShadowStyle: PondLighting.ShadowStyle? = nil,
-        customFishAmbientStyle: PondLighting.FishAmbientStyle? = nil
+        customFishAmbientStyle: PondLighting.FishAmbientStyle? = nil,
+        paletteMode: KoiPaletteMode = .classic
     ) {
         context.saveGState()
         let length = CGFloat(fish.length)
@@ -78,22 +79,10 @@ public enum KoiArtwork {
             return
         }
 
-        let base: CGColor
-        let finColor: CGColor
-        switch fish.variety.type {
-        case .showa, .shiroUtsuri:
-            base = Self.ink
-            finColor = Self.inkFin
-        case .ogon:
-            base = Self.ogonBase
-            finColor = Self.ogonFin
-        case .asagi:
-            base = Self.asagiBase
-            finColor = Self.asagiFin
-        default:
-            base = Self.cream
-            finColor = Self.creamFin
-        }
+        let baseSim = fish.variety.bodyBaseColor(for: paletteMode)
+        let finSim = fish.variety.finColor(for: paletteMode)
+        let base = CGColor(red: CGFloat(baseSim.red), green: CGFloat(baseSim.green), blue: CGFloat(baseSim.blue), alpha: CGFloat(baseSim.alpha))
+        let finColor = CGColor(red: CGFloat(finSim.red), green: CGFloat(finSim.green), blue: CGFloat(finSim.blue), alpha: CGFloat(finSim.alpha))
 
         // Broad translucent fins with gentle swim stroke flutter and turn steering flare.
         context.setFillColor(finColor)
@@ -111,50 +100,61 @@ public enum KoiArtwork {
         context.saveGState()
         context.addPath(body)
         context.clip()
-        // Deliberately irregular islands of color, rather than circular vector spots.
-        func patch(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat, _ color: CGColor, _ variant: Int) {
-            let cy = spineY(at: x * length, spine: spine) + y * halfWidth
-            let center = CGPoint(x: x * length, y: cy)
-            let shape = Self.patchShapes[variant % 2]
-            let path = CGMutablePath()
-            for (i, p) in shape.enumerated() {
-                let point = CGPoint(x: center.x + p.x * width * length, y: center.y + p.y * height * halfWidth)
-                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+
+        let primarySim = fish.variety.primaryPatternColor(for: paletteMode)
+        let primaryColor = CGColor(red: CGFloat(primarySim.red), green: CGFloat(primarySim.green), blue: CGFloat(primarySim.blue), alpha: CGFloat(primarySim.alpha))
+        let secondarySim = fish.variety.secondaryPatternColor(for: paletteMode)
+        let secondaryColor = secondarySim.map { CGColor(red: CGFloat($0.red), green: CGFloat($0.green), blue: CGFloat($0.blue), alpha: CGFloat($0.alpha)) }
+
+        // 1. Draw mathematical pattern patches along spine
+        for (idx, p) in fish.variety.patterns.enumerated() {
+            let patchColor: CGColor
+            if p.isSecondaryMarking {
+                patchColor = secondaryColor ?? primaryColor
+            } else {
+                patchColor = primaryColor
             }
-            path.closeSubpath()
-            context.setFillColor(color)
-            context.addPath(path)
-            context.fillPath()
+
+            let xRel = 0.42 - CGFloat(p.position) * 0.86
+            let xCoord = xRel * length
+            let cy = spineY(at: xCoord, spine: spine)
+            let yCoord = cy + CGFloat(p.offset) * halfWidth
+
+            let pLen = CGFloat(p.length) * length * 2.2
+            let pWid = CGFloat(p.width) * halfWidth * 1.8
+
+            if fish.variety.type == .tancho {
+                let sunRect = CGRect(
+                    x: xCoord - pLen * 0.5,
+                    y: yCoord - pWid * 0.5,
+                    width: pLen,
+                    height: pWid
+                )
+                context.setFillColor(patchColor)
+                context.fillEllipse(in: sunRect)
+            } else {
+                let shape = Self.patchShapes[idx % Self.patchShapes.count]
+                let path = CGMutablePath()
+                for (i, pt) in shape.enumerated() {
+                    let point = CGPoint(
+                        x: xCoord + pt.x * pLen,
+                        y: yCoord + pt.y * pWid
+                    )
+                    if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                }
+                path.closeSubpath()
+                context.setFillColor(patchColor)
+                context.addPath(path)
+                context.fillPath()
+            }
         }
-        switch fish.variety.type {
-        case .kohaku, .sanke:
-            patch(0.27, 0.06, 0.20, 1.35, Self.red, 0)
-            patch(0.02, -0.16, 0.21, 1.65, Self.red, 1)
-            patch(-0.25, 0.10, 0.16, 1.1, Self.red, 0)
-            if fish.variety.type == .sanke {
-                patch(0.15, -0.52, 0.09, 0.7, Self.ink, 1)
-                patch(-0.08, 0.45, 0.10, 0.65, Self.ink, 0)
-                patch(-0.32, -0.18, 0.08, 0.50, Self.ink, 1)
-            }
-        case .showa:
-            patch(0.31, 0, 0.20, 1.6, Self.cream, 1)
-            patch(0.02, 0.4, 0.28, 1.5, Self.cream, 0)
-            patch(-0.28, -0.1, 0.20, 1.0, Self.cream, 1)
-            patch(0.23, -0.05, 0.14, 0.85, Self.red, 0)
-            patch(-0.08, 0.15, 0.20, 1.2, Self.red, 1)
-        case .shiroUtsuri:
-            patch(0.28, 0.1, 0.24, 1.5, Self.cream, 0)
-            patch(-0.03, -0.25, 0.24, 1.6, Self.cream, 1)
-            patch(-0.29, 0.05, 0.16, 0.9, Self.cream, 0)
-        case .tancho:
-            patch(0.31, 0, 0.16, 1.0, Self.red, 1)
-        case .kikusui:
-            patch(0.12, 0.53, 0.47, 0.90, Self.orange, 0)
-            patch(-0.04, -0.50, 0.42, 0.82, Self.orange, 1)
-        case .asagi:
-            patch(0.04, 0.78, 0.55, 0.60, Self.red, 1)
-            patch(-0.01, -0.82, 0.52, 0.60, Self.red, 0)
-            context.setStrokeColor(Self.asagiStroke)
+
+        // 2. Specialized variety accents (Asagi reticulation scale grid & Ogon luster)
+        if fish.variety.type == .asagi {
+            let strokeCol = (paletteMode == .neon)
+                ? CGColor(red: 0.05, green: 0.12, blue: 0.38, alpha: 0.70)
+                : Self.asagiStroke
+            context.setStrokeColor(strokeCol)
             context.setLineWidth(length * 0.018)
             for i in 0..<7 {
                 let x = length * (0.24 - CGFloat(i) * 0.075)
@@ -164,9 +164,24 @@ public enum KoiArtwork {
                 context.addLine(to: CGPoint(x: x + length * 0.025, y: y + halfWidth * 0.5))
             }
             context.strokePath()
-        case .ogon:
-            patch(0.07, 0.15, 0.50, 1.15, Self.ogonHighlight, 1)
+        } else if fish.variety.type == .ogon {
+            let lusterCol = (paletteMode == .neon)
+                ? CGColor(red: 1.0, green: 0.92, blue: 0.45, alpha: 0.95)
+                : Self.ogonHighlight
+            let xCoord = length * 0.07
+            let cy = spineY(at: xCoord, spine: spine) + halfWidth * 0.15
+            let shape = Self.patchShapes[1]
+            let path = CGMutablePath()
+            for (i, p) in shape.enumerated() {
+                let pt = CGPoint(x: xCoord + p.x * 0.50 * length, y: cy + p.y * 1.15 * halfWidth)
+                if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+            }
+            path.closeSubpath()
+            context.setFillColor(lusterCol)
+            context.addPath(path)
+            context.fillPath()
         }
+
         // Theme-colored reflections stay on the existing light and shade areas,
         // so the koi variety's base color and markings remain recognizable.
         let fishAmbient = customFishAmbientStyle ?? PondLighting.fishAmbientStyle(for: theme)
@@ -190,7 +205,10 @@ public enum KoiArtwork {
 
         // Small eyes and gill marks stay legible at the scene's logical resolution.
         let eyeSize = length * 0.035
-        context.setFillColor(ink)
+        let eyeColor = (paletteMode == .neon)
+            ? CGColor(red: 0.05, green: 0.12, blue: 0.38, alpha: 1.0)
+            : ink
+        context.setFillColor(eyeColor)
         for side: CGFloat in [-1, 1] {
             context.fill(CGRect(x: spine[1].x + length * 0.025, y: side * halfWidth * 0.59 - eyeSize / 2,
                                 width: eyeSize, height: eyeSize))

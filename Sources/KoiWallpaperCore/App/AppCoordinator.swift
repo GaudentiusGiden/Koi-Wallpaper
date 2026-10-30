@@ -100,6 +100,7 @@ public final class AppCoordinator: NSObject,
         screenManager.applySeason(initialSeason)
         screenManager.applySeasonMode(settingsManager.settings.seasonMode)
         screenManager.applyFloatingDebrisVisibility(settingsManager.settings.isFloatingDebrisEnabled)
+        screenManager.applyKoiPaletteMode(settingsManager.settings.koiPaletteMode)
         screenManager.applyGlobalPause(lifecyclePolicy.isPaused)
         screenManager.applyBatteryEcoMode(lifecyclePolicy.powerMonitor.isRunningOnBattery)
 
@@ -153,6 +154,7 @@ public final class AppCoordinator: NSObject,
         )
         statusController.updateMoodState(mood: settingsManager.settings.pondMood)
         statusController.updateRainState(isRainActive: settingsManager.settings.isRainActive)
+        statusController.updateKoiPaletteModeState(mode: settingsManager.settings.koiPaletteMode)
         statusController.updateSeasonState(
             mode: settingsManager.settings.seasonMode,
             manualSeason: settingsManager.settings.manualSeason,
@@ -285,6 +287,13 @@ public final class AppCoordinator: NSObject,
         statusBarController?.updateRainState(isRainActive: newRain)
     }
 
+    public func statusBarDidSelectKoiPaletteMode(_ controller: StatusBarController, mode: KoiPaletteMode) {
+        logger.info("User selected koi palette mode: \(mode.rawValue)")
+        settingsManager.updateSettings { $0.koiPaletteMode = mode }
+        screenManager.applyKoiPaletteMode(mode)
+        statusBarController?.updateKoiPaletteModeState(mode: mode)
+    }
+
     public func statusBarDidTogglePauseOnBattery(_ controller: StatusBarController) {
         let newPauseOnBattery = !settingsManager.settings.pauseOnBattery
         logger.info("User toggled pauseOnBattery to: \(newPauseOnBattery)")
@@ -392,10 +401,12 @@ public final class AppCoordinator: NSObject,
         screenManager.applySeason(defaultSeason)
         screenManager.applySeasonMode(defaults.seasonMode)
         screenManager.applyFloatingDebrisVisibility(defaults.isFloatingDebrisEnabled)
+        screenManager.applyKoiPaletteMode(defaults.koiPaletteMode)
 
         statusBarController?.updateInteractionMode(defaults.initialInteractionMode)
         statusBarController?.updateMoodState(mood: defaults.pondMood)
         statusBarController?.updateRainState(isRainActive: defaults.isRainActive)
+        statusBarController?.updateKoiPaletteModeState(mode: defaults.koiPaletteMode)
         statusBarController?.updateSeasonState(
             mode: defaults.seasonMode,
             manualSeason: defaults.manualSeason,

@@ -20,6 +20,7 @@ public protocol StatusBarControllerDelegate: AnyObject {
     func statusBarDidSelectSeasonMode(_ controller: StatusBarController, mode: SeasonMode)
     func statusBarDidSelectManualSeason(_ controller: StatusBarController, season: PondSeason)
     func statusBarDidToggleFloatingDebris(_ controller: StatusBarController)
+    func statusBarDidSelectKoiPaletteMode(_ controller: StatusBarController, mode: KoiPaletteMode)
 }
 
 extension StatusBarControllerDelegate {
@@ -38,6 +39,7 @@ extension StatusBarControllerDelegate {
     public func statusBarDidSelectSeasonMode(_ controller: StatusBarController, mode: SeasonMode) {}
     public func statusBarDidSelectManualSeason(_ controller: StatusBarController, season: PondSeason) {}
     public func statusBarDidToggleFloatingDebris(_ controller: StatusBarController) {}
+    public func statusBarDidSelectKoiPaletteMode(_ controller: StatusBarController, mode: KoiPaletteMode) {}
 }
 
 public final class StatusBarController {
@@ -112,10 +114,18 @@ public final class StatusBarController {
         keyEquivalent: ""
     )
 
+    // Palette submenu
+    private let paletteMenuItem = NSMenuItem(title: "Palet Ikan Koi (Palette)", action: nil, keyEquivalent: "")
+    private let paletteMenu = NSMenu(title: "Palet Koi")
+    private let classicPaletteItem = NSMenuItem(title: "Classic (Autentik Jepang)", action: #selector(classicPaletteSelected), keyEquivalent: "")
+    private let neonPaletteItem = NSMenuItem(title: "Neon (Bioluminescent)", action: #selector(neonPaletteSelected), keyEquivalent: "")
+
     // Visitors submenu
     private let visitorsMenuItem = NSMenuItem(title: "Pengunjung Kolam (Visitors)", action: nil, keyEquivalent: "")
     private let visitorsMenu = NSMenu(title: "Pengunjung")
-    private let automaticSwanInfoItem = NSMenuItem(title: "Angsa melintas otomatis", action: nil, keyEquivalent: "")
+    private let automaticSwanInfoItem = NSMenuItem(title: "Rotasi otomatis: Angsa & Bebek", action: nil, keyEquivalent: "")
+    private let spawnDuckItem = NSMenuItem(title: "Lepas Bebek Nagomi (Duck)", action: #selector(spawnDuckClicked), keyEquivalent: "")
+    private let spawnSwanItem = NSMenuItem(title: "Lepas Angsa Megah (Swan)", action: #selector(spawnSwanClicked), keyEquivalent: "")
     private let spawnBallItem = NSMenuItem(title: "Lepas Bola Temari (Ball)", action: #selector(spawnBallClicked), keyEquivalent: "")
     private let clearVisitorsItem = NSMenuItem(title: "Bersihkan Pengunjung (Clear)", action: #selector(clearVisitorsClicked), keyEquivalent: "")
     private let visitorsStatusItem = NSMenuItem(title: "Pengunjung manual aktif: 0", action: nil, keyEquivalent: "")
@@ -187,6 +197,8 @@ public final class StatusBarController {
         pauseToggleItem.target = self
         interactionToggleItem.target = self
         fullscreenToggleItem.target = self
+        classicPaletteItem.target = self
+        neonPaletteItem.target = self
         autoTimeItem.target = self
         systemThemeItem.target = self
         dawnItem.target = self
@@ -205,6 +217,8 @@ public final class StatusBarController {
         calmMoodItem.target = self
         playfulMoodItem.target = self
         rainToggleItem.target = self
+        spawnDuckItem.target = self
+        spawnSwanItem.target = self
         spawnBallItem.target = self
         clearVisitorsItem.target = self
         launchAtLoginItem.target = self
@@ -257,8 +271,15 @@ public final class StatusBarController {
         moodMenu.addItem(playfulMoodItem)
         moodMenuItem.submenu = moodMenu
 
+        // Build Palette submenu
+        paletteMenu.addItem(classicPaletteItem)
+        paletteMenu.addItem(neonPaletteItem)
+        paletteMenuItem.submenu = paletteMenu
+
         // Build Visitors submenu
         visitorsMenu.addItem(automaticSwanInfoItem)
+        visitorsMenu.addItem(spawnDuckItem)
+        visitorsMenu.addItem(spawnSwanItem)
         visitorsMenu.addItem(spawnBallItem)
         visitorsMenu.addItem(NSMenuItem.separator())
         visitorsMenu.addItem(clearVisitorsItem)
@@ -287,6 +308,7 @@ public final class StatusBarController {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(timeOfDayMenuItem)
         menu.addItem(seasonMenuItem)
+        menu.addItem(paletteMenuItem)
         menu.addItem(moodMenuItem)
         menu.addItem(rainToggleItem)
         menu.addItem(visitorsMenuItem)
@@ -395,6 +417,11 @@ public final class StatusBarController {
 
     public func updateRainState(isRainActive: Bool) {
         rainToggleItem.state = isRainActive ? .on : .off
+    }
+
+    public func updateKoiPaletteModeState(mode: KoiPaletteMode) {
+        classicPaletteItem.state = (mode == .classic) ? .on : .off
+        neonPaletteItem.state = (mode == .neon) ? .on : .off
     }
 
     public func updateSeasonState(mode: SeasonMode, manualSeason: PondSeason, currentSeason: PondSeason, isDebrisEnabled: Bool) {
@@ -594,6 +621,14 @@ public final class StatusBarController {
         delegate?.statusBarDidToggleRain(self)
     }
 
+    @objc private func classicPaletteSelected() {
+        delegate?.statusBarDidSelectKoiPaletteMode(self, mode: .classic)
+    }
+
+    @objc private func neonPaletteSelected() {
+        delegate?.statusBarDidSelectKoiPaletteMode(self, mode: .neon)
+    }
+
     @objc private func autoSeasonSelected() {
         delegate?.statusBarDidSelectSeasonMode(self, mode: .autoCalendar)
     }
@@ -620,6 +655,14 @@ public final class StatusBarController {
 
     @objc private func fullscreenToggled() {
         delegate?.statusBarDidToggleFullscreen(self)
+    }
+
+    @objc private func spawnDuckClicked() {
+        delegate?.statusBarDidRequestSpawnVisitor(self, type: .duck)
+    }
+
+    @objc private func spawnSwanClicked() {
+        delegate?.statusBarDidRequestSpawnVisitor(self, type: .swan)
     }
 
     @objc private func spawnBallClicked() {

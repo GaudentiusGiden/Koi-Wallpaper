@@ -1711,6 +1711,267 @@ do {
 }
 
 // -------------------------------------------------------------
+// 19. Pond Duck & Upgraded Swan Lifecycle Dynamics
+// -------------------------------------------------------------
+print("\n--- 19. Pond Duck & Upgraded Swan Lifecycle Dynamics ---")
+
+do {
+    // T19.1 Duck Kinematics & Paddle Progression
+    let testBounds = PondBounds(width: 800.0, height: 600.0)
+    let duckSim = PondSimulation(bounds: testBounds, seed: 101)
+    let duck = duckSim.spawnVisitor(type: .duck, duckVariant: .mandarin, at: PondVector(x: 300, y: 300))
+    let initialPaddle = duck.paddlePhase
+    var duckAdvanced = false
+    var duckStayedInBounds = true
+
+    for _ in 0..<120 {
+        duckSim.advance(deltaTime: 1.0 / 60.0)
+        if let d = duckSim.visitors.first(where: { $0.id == duck.id }) {
+            if abs(d.paddlePhase - initialPaddle) > 0.5 { duckAdvanced = true }
+            if !testBounds.contains(d.position) { duckStayedInBounds = false }
+        }
+    }
+
+    let t19_1Passed = duck.radius == 42.0 && duck.speed > 0 && duckAdvanced && duckStayedInBounds
+    recordSimTest(
+        "T19.1 Duck Kinematics, Paddle Progression & Confinement",
+        passed: t19_1Passed,
+        details: "radius=\(duck.radius)pt, speed=\(duck.speed)pt/s, paddleAdvanced=\(duckAdvanced), inBounds=\(duckStayedInBounds)"
+    )
+}
+
+do {
+    // T19.2 Duck Click Startle Reaction
+    let testBounds = PondBounds(width: 800.0, height: 600.0)
+    let duckSim = PondSimulation(bounds: testBounds, seed: 202)
+    let duck = duckSim.spawnVisitor(type: .duck, duckVariant: .whitePekin, at: PondVector(x: 400, y: 300))
+
+    // Distant click should be ignored
+    duckSim.handleWaterClick(at: PondVector(x: 100, y: 100))
+    let distantIgnored = !(duckSim.visitors.first(where: { $0.id == duck.id })?.isStartled ?? true)
+
+    // Close click should startle duck
+    duckSim.handleWaterClick(at: PondVector(x: 415, y: 310))
+    let closeStartled = duckSim.visitors.first(where: { $0.id == duck.id })?.isStartled ?? false
+
+    // Run until startle calms back
+    var calmedBack = false
+    for _ in 0..<240 {
+        duckSim.advance(deltaTime: 1.0 / 60.0)
+        if let d = duckSim.visitors.first(where: { $0.id == duck.id }), !d.isStartled {
+            calmedBack = true
+            break
+        }
+    }
+
+    let t19_2Passed = distantIgnored && closeStartled && calmedBack
+    recordSimTest(
+        "T19.2 Duck Interactive Click Startle & Recovery",
+        passed: t19_2Passed,
+        details: "distantIgnored=\(distantIgnored), closeStartled=\(closeStartled), calmedBack=\(calmedBack)"
+    )
+}
+
+do {
+    // T19.3 Duck Food Pellet Attraction & Dabble Feeding
+    let testBounds = PondBounds(width: 800.0, height: 600.0)
+    let duckSim = PondSimulation(bounds: testBounds, seed: 303)
+    let duck = duckSim.spawnVisitor(type: .duck, duckVariant: .mandarin, at: PondVector(x: 350, y: 300))
+    // Drop food pellet right ahead of duck
+    duckSim.handleFoodDrop(at: PondVector(x: 375, y: 300), pelletCount: 1, scatterRadius: 0.0)
+    let pelletDropped = duckSim.pellets.count == 1
+
+    var sawDabbling = false
+    var pelletConsumed = false
+
+    for _ in 0..<180 {
+        duckSim.advance(deltaTime: 1.0 / 60.0)
+        if let d = duckSim.visitors.first(where: { $0.id == duck.id }) {
+            if d.isDabbling { sawDabbling = true }
+        }
+        if duckSim.pellets.isEmpty {
+            pelletConsumed = true
+        }
+    }
+
+    let t19_3Passed = pelletDropped && (sawDabbling || pelletConsumed)
+    recordSimTest(
+        "T19.3 Duck Food Attraction & Dabble Feeding",
+        passed: t19_3Passed,
+        details: "pelletDropped=\(pelletDropped), sawDabbling=\(sawDabbling), pelletConsumed=\(pelletConsumed)"
+    )
+}
+
+do {
+    // T19.4 Swan Food Attraction & Zen Neutral Click Behavior
+    let testBounds = PondBounds(width: 800.0, height: 600.0)
+    let swanSim = PondSimulation(bounds: testBounds, seed: 404)
+    let swan = swanSim.spawnVisitor(type: .swan, at: PondVector(x: 400, y: 300))
+
+    // Click near swan: swan stays Zen Neutral (never startled)
+    swanSim.handleWaterClick(at: PondVector(x: 410, y: 305))
+    let swanZenNeutral = !(swanSim.visitors.first(where: { $0.id == swan.id })?.isStartled ?? true)
+
+    // Drop food pellet near swan
+    swanSim.handleFoodDrop(at: PondVector(x: 430, y: 300), pelletCount: 1, scatterRadius: 0.0)
+    var swanAte = false
+    for _ in 0..<180 {
+        swanSim.advance(deltaTime: 1.0 / 60.0)
+        if swanSim.pellets.isEmpty {
+            swanAte = true
+            break
+        }
+    }
+
+    let t19_4Passed = swanZenNeutral && swanAte
+    recordSimTest(
+        "T19.4 Swan Food Feeding & Zen Neutral Click Behavior",
+        passed: t19_4Passed,
+        details: "swanZenNeutral=\(swanZenNeutral), swanAte=\(swanAte)"
+    )
+}
+
+do {
+    // T19.5 Automatic Visitor Rotation Cycle (Swan & Duck)
+    let testBounds = PondBounds(width: 800.0, height: 600.0)
+    let sim = PondSimulation(bounds: testBounds, seed: 505)
+    sim.isVisitorRotationEnabled = true
+    sim.setAutomaticSwanEnabled(true)
+
+    // First visitor should be spawned
+    let firstType = sim.visitors.first?.type
+    if let firstId = sim.visitors.first?.id {
+        sim.removeVisitor(id: firstId)
+    }
+
+    // Run until arrival countdown triggers next visitor
+    for _ in 0..<700 {
+        sim.advance(deltaTime: 1.0 / 60.0)
+        if !sim.visitors.isEmpty { break }
+    }
+    let secondType = sim.visitors.first?.type
+
+    let t19_5Passed = (firstType != nil) && (secondType != nil) && (firstType != secondType)
+    recordSimTest(
+        "T19.5 Automatic Visitor Alternation Cycle (Swan & Duck)",
+        passed: t19_5Passed,
+        details: "firstType=\(String(describing: firstType)), secondType=\(String(describing: secondType)), rotated=\(firstType != secondType)"
+    )
+}
+
+// -------------------------------------------------------------
+// 20. Nagomi Adoption Fase 1 (Palette Modes, Spine Patterns & Fireflies)
+// -------------------------------------------------------------
+print("\n--- 20. Nagomi Adoption Fase 1 (Palette Modes, Spine Patterns & Fireflies) ---")
+
+do {
+    // T20.1 Classic & Neon Calibrated Palettes for all 8 Varieties
+    let varieties = KoiVariety.allEightVarieties
+    var allPalettesValid = (varieties.count == 8)
+    var colorDetails: [String] = []
+
+    for v in varieties {
+        let classicBase = v.bodyBaseColor(for: .classic)
+        let neonBase = v.bodyBaseColor(for: .neon)
+        let classicFin = v.finColor(for: .classic)
+        let neonFin = v.finColor(for: .neon)
+
+        let validClassic = (classicBase.alpha > 0.0 && classicFin.alpha > 0.0)
+        let validNeon = (neonBase.alpha > 0.0 && neonFin.alpha > 0.0)
+        if !validClassic || !validNeon {
+            allPalettesValid = false
+        }
+        colorDetails.append("\(v.type.rawValue)")
+    }
+
+    recordSimTest(
+        "T20.1 Classic & Neon Palettes for 8 Varieties",
+        passed: allPalettesValid,
+        details: "varietiesCount=\(varieties.count), allValidAlpha=true, checked=[\(colorDetails.joined(separator: ", "))]"
+    )
+
+    // T20.2 Mathematical Spine Pattern Patches
+    var patternSpecsValid = true
+    var patternDetails: [String] = []
+
+    for v in varieties {
+        let patches = v.patterns
+        for p in patches {
+            if p.position < 0.0 || p.position > 1.0 || p.length <= 0.0 || p.length > 1.0 || p.width <= 0.0 || p.width > 1.0 || abs(p.offset) > 1.0 {
+                patternSpecsValid = false
+            }
+        }
+        if v.type == .tancho {
+            let hasForeheadSun = patches.count == 1 && patches[0].position <= 0.25 && patches[0].offset == 0.0
+            if !hasForeheadSun { patternSpecsValid = false }
+            patternDetails.append("Tancho:foreheadSun=\(hasForeheadSun)")
+        } else if v.type == .ogon {
+            let isCleanMetallic = patches.isEmpty
+            if !isCleanMetallic { patternSpecsValid = false }
+            patternDetails.append("Ogon:patches=0")
+        } else {
+            patternDetails.append("\(v.type.rawValue):patches=\(patches.count)")
+        }
+    }
+
+    recordSimTest(
+        "T20.2 Mathematical Spine Pattern Patches",
+        passed: patternSpecsValid,
+        details: patternDetails.joined(separator: ", ")
+    )
+
+    // T20.3 Firefly Lowbias32 Drift & Sway Kinematics
+    let h1 = PondInsect.lowbias32(12345)
+    let h2 = PondInsect.lowbias32(12345)
+    let h3 = PondInsect.lowbias32(67890)
+    let isDeterministic = (h1 == h2 && h1 != h3)
+
+    let testBounds = PondBounds(width: 400, height: 300, margin: 20)
+    var firefly = PondInsect(type: .firefly, position: PondVector(x: 200, y: 150), heading: 0.0, seed: 42)
+    var inBoundsDuringFlight = true
+    var flashesPositive = true
+
+    for step in 0..<300 {
+        firefly.update(dt: 1.0 / 60.0, bounds: testBounds)
+        if !testBounds.contains(firefly.position, inset: 10.0) {
+            inBoundsDuringFlight = false
+        }
+        let flash = PondInsect.fireflyFlash(seed: 42, time: Double(step) * (1.0 / 60.0), life: 18.0)
+        if flash < 0.0 || flash > 1.0 {
+            flashesPositive = false
+        }
+    }
+
+    let t20_3Passed = isDeterministic && inBoundsDuringFlight && flashesPositive
+    recordSimTest(
+        "T20.3 Firefly Lowbias32 Drift & Sway Kinematics",
+        passed: t20_3Passed,
+        details: "deterministic=\(isDeterministic), inBounds=\(inBoundsDuringFlight), flashRangeValid=\(flashesPositive)"
+    )
+
+    // T20.4 WallpaperSettings & ScreenManager KoiPaletteMode Persistence
+    var settings = WallpaperSettings()
+    let initialMode = settings.koiPaletteMode
+    settings.koiPaletteMode = .neon
+
+    let encoder = JSONEncoder()
+    let data = try encoder.encode(settings)
+    let decoder = JSONDecoder()
+    let decoded = try decoder.decode(WallpaperSettings.self, from: data)
+
+    let screenMgr = ScreenManager()
+    screenMgr.applyKoiPaletteMode(.neon)
+    let screenModePropagated = (screenMgr.currentKoiPaletteMode == .neon)
+
+    let t20_4Passed = (initialMode == .classic && decoded.koiPaletteMode == .neon && screenModePropagated)
+    recordSimTest(
+        "T20.4 WallpaperSettings & ScreenManager KoiPaletteMode Persistence",
+        passed: t20_4Passed,
+        details: "initial=\(initialMode), decoded=\(decoded.koiPaletteMode), screenMgrPropagated=\(screenModePropagated)"
+    )
+}
+
+// -------------------------------------------------------------
 // SUMMARY & RESULTS
 // -------------------------------------------------------------
 print("\n=======================================================")

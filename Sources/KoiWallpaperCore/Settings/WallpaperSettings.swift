@@ -92,6 +92,19 @@ public enum PondMood: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Color palette styling for koi fish varieties.
+public enum KoiPaletteMode: String, Codable, CaseIterable, Sendable {
+    case classic = "classic"
+    case neon = "neon"
+
+    public var displayName: String {
+        switch self {
+        case .classic: return "Classic (Autentik)"
+        case .neon: return "Neon (Bioluminescent)"
+        }
+    }
+}
+
 /// Persistent user configuration for the koi wallpaper.
 public struct WallpaperSettings: Codable, Equatable, Sendable {
     public var timeOfDayMode: TimeOfDayMode
@@ -120,6 +133,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
     public var seasonMode: SeasonMode
     public var manualSeason: PondSeason
     public var isFloatingDebrisEnabled: Bool
+    public var koiPaletteMode: KoiPaletteMode
 
     public init(
         timeOfDayMode: TimeOfDayMode = .auto,
@@ -135,7 +149,8 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         launchAtLogin: Bool = false,
         seasonMode: SeasonMode = .autoCalendar,
         manualSeason: PondSeason = .spring,
-        isFloatingDebrisEnabled: Bool = true
+        isFloatingDebrisEnabled: Bool = true,
+        koiPaletteMode: KoiPaletteMode = .classic
     ) {
         self.timeOfDayMode = timeOfDayMode
         let resolvedTheme = manualTheme ?? manualTimePhase.theme
@@ -152,6 +167,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         self.seasonMode = seasonMode
         self.manualSeason = manualSeason
         self.isFloatingDebrisEnabled = isFloatingDebrisEnabled
+        self.koiPaletteMode = koiPaletteMode
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -169,6 +185,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         case seasonMode
         case manualSeason
         case isFloatingDebrisEnabled
+        case koiPaletteMode
     }
 
     public init(from decoder: Decoder) throws {
@@ -189,6 +206,7 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         seasonMode = try container.decodeIfPresent(SeasonMode.self, forKey: .seasonMode) ?? .autoCalendar
         manualSeason = try container.decodeIfPresent(PondSeason.self, forKey: .manualSeason) ?? .spring
         isFloatingDebrisEnabled = try container.decodeIfPresent(Bool.self, forKey: .isFloatingDebrisEnabled) ?? true
+        koiPaletteMode = try container.decodeIfPresent(KoiPaletteMode.self, forKey: .koiPaletteMode) ?? .classic
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -207,5 +225,6 @@ public struct WallpaperSettings: Codable, Equatable, Sendable {
         try container.encode(seasonMode, forKey: .seasonMode)
         try container.encode(manualSeason, forKey: .manualSeason)
         try container.encode(isFloatingDebrisEnabled, forKey: .isFloatingDebrisEnabled)
+        try container.encode(koiPaletteMode, forKey: .koiPaletteMode)
     }
 }

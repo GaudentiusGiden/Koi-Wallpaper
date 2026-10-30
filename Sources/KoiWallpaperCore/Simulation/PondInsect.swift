@@ -195,9 +195,38 @@ public struct PondInsect: Identifiable, Sendable {
         position += velocity * dt
     }
 
-    /// Firefly: slow, lazy drifting motion with soft glowing pulse.
+    // MARK: - Lowbias32 Pseudo-Random Hashing (Nagomi 12-fireflies.wgsl)
+
+    public static func lowbias32(_ seed: UInt32) -> UInt32 {
+        var x = seed
+        x ^= x >> 16
+        x &*= 0x7feb352d
+        x ^= x >> 15
+        x &*= 0x846ca68b
+        x ^= x >> 16
+        return x
+    }
+
+    public static func fireflyRandom(seed: UInt32, key: UInt32) -> Double {
+        let h = lowbias32(seed ^ (key &* 0x9e3779b9))
+        return Double(h >> 8) / 16777216.0
+    }
+
+    /// Evaluates the Nagomi periodic flash pulse envelope for a given life duration.
+    public static func fireflyFlash(seed: UInt32, time: Double, life: Double = 18.0) -> Double {
+        let shown = life * 0.8
+        let fadeIn = min(1.0, max(0.0, time / 1.2))
+        let fadeOut = 1.0 - min(1.0, max(0.0, (time - (shown - 1.5)) / 1.5))
+        let envelope = (fadeIn * fadeIn * (3.0 - 2.0 * fadeIn)) * (fadeOut * fadeOut * (3.0 - 2.0 * fadeOut))
+        let period = 2.2 + 2.6 * fireflyRandom(seed: seed, key: 30)
+        let phase = ((time / period + fireflyRandom(seed: seed, key: 31)).truncatingRemainder(dividingBy: 1.0)) * period
+        let pulse = exp(-pow((phase - 0.3) / 0.16, 2.0))
+        return max(0.0, min(1.0, envelope * (0.3 + 0.7 * pulse)))
+    }
+
+    /// Firefly: slow, lazy wandering sway and multi-frequency drift from Nagomi 12-fireflies.wgsl
     private mutating func updateFirefly(dt: Double, bounds: PondBounds) {
-        // Glowing pulse frequency (gentle breathing cycle)
+        // Glowing pulse frequency (gentle breathing cycle + flash envelope)
         let pulseRate = 1.9 + Double(colorVariant) * 0.45
         phase += pulseRate * dt
         if phase > 2.0 * .pi { phase -= 2.0 * .pi }
@@ -205,8 +234,14 @@ public struct PondInsect: Identifiable, Sendable {
         // Low-to-mid hovering altitude
         altitude = 0.22 + 0.16 * sin(phase * 0.7 + Double(colorVariant))
 
-        // Gentle wandering drift
-        wanderAngle += Double.random(in: -0.25...0.25, using: &rng) * dt * 1.0
+        // 3-frequency lazy wandering sway (frequencies: ~0.35 rad/s, ~0.85 rad/s, ~1.85 rad/s)
+        let t = phase
+        let sway1 = sin(t * 0.35 + Double(colorVariant)) * 0.18
+        let sway2 = cos(t * 0.85 + 1.2) * 0.14
+        let sway3 = sin(t * 1.85 + 2.4) * 0.08
+        let compositeSway = sway1 + sway2 + sway3
+
+        wanderAngle += Double.random(in: -0.2...0.2, using: &rng) * dt + compositeSway * dt
         wanderAngle = normalizeAngle(wanderAngle)
 
         var desiredHeading = wanderAngle
@@ -219,7 +254,7 @@ public struct PondInsect: Identifiable, Sendable {
         let diff = normalizeAngle(desiredHeading - heading)
         heading = normalizeAngle(heading + diff * min(1.0, 2.5 * dt))
 
-        speed = 13.0 + 4.0 * sin(phase * 0.8)
+        speed = 12.0 + 5.0 * sin(phase * 0.8)
         velocity = PondVector.fromAngle(heading, length: speed)
         position += velocity * dt
     }

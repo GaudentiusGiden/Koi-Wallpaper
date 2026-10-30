@@ -100,6 +100,13 @@ public final class DesktopWindowController {
         wallpaperView.needsDisplay = true
     }
 
+    public func applyKoiPaletteMode(_ mode: KoiPaletteMode) {
+        wallpaperView.simulation.koiPaletteMode = mode
+        wallpaperView.renderer.koiPaletteMode = mode
+        wallpaperView.showBannerMessage("Palet Koi: \(mode.displayName)", duration: 3.0)
+        wallpaperView.needsDisplay = true
+    }
+
     // MARK: - Display & Geometry Updates
 
     /// Updates this host to match a reconfigured screen geometry or display scale factor.
