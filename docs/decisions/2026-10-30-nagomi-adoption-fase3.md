@@ -1,15 +1,15 @@
 # Catatan Keputusan Arsitektur: Adopsi Nagomi Desktop Fase 3 (Micro-Interactions Ekosistem & Arsitektur Hybrid Flora)
 
 **Tanggal**: 30 Oktober 2026  
-**Status**: Disetujui & Diimplementasikan Penuh  
-**Cakupan**: Hybrid [`PondLilyPad.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/PondLilyPad.swift) & Dynamic Bump Wobble, Katak Kaget & Melompat Antar-Teratai ([`PondFrog.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/PondFrog.swift)), Ikan Kecil Mencuri Makanan / `tinyFishSteal` ([`FoodPellet.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/FoodPellet.swift) & [`DecorativeSchool.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/DecorativeSchool.swift)), Kupu-Kupu Mengorbit & Hinggap di Bunga Teratai ([`PondInsect.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/PondInsect.swift)), serta 5 Tipe Riak Lengkap & Gelombang Dorong Partikel Apung ([`WaterRipple.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/WaterRipple.swift) & [`FloatingDebris.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/FloatingDebris.swift)).
+**Status**: Disetujui & Diimplementasikan Penuh (dengan Amandemen Daun Teratai Statis)  
+**Cakupan**: Hybrid [`PondLilyPad.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/PondLilyPad.swift) & Arsitektur Teratai Statis, Katak Kaget & Melompat Antar-Teratai ([`PondFrog.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/PondFrog.swift)), Ikan Kecil Mencuri Makanan / `tinyFishSteal` ([`FoodPellet.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/FoodPellet.swift) & [`DecorativeSchool.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/DecorativeSchool.swift)), Kupu-Kupu Mengorbit & Hinggap di Bunga Teratai ([`PondInsect.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/PondInsect.swift)), serta 5 Tipe Riak Lengkap & Gelombang Dorong Partikel Apung ([`WaterRipple.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/WaterRipple.swift) & [`FloatingDebris.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/FloatingDebris.swift)).
 
 ---
 
 ## 1. Konteks & Masalah
 
 Setelah menyelesaikan Fase 1 (palet, pola spine, dan kunang-kunang) serta Fase 2 (Z-Depth 3D, siklus 5 cadence, dan 4 gaya renang), kolam telah memiliki kedalaman optik dan renang yang luwes. Namun, elemen ekosistem lainnya masih berjalan secara independen tanpa mikro-interaksi organik:
-1. Daun teratai (*water lily pads*) bersifat statis dalam tekstur kanvas tanpa interaksi fisik saat koi melintas di dekat permukaan.
+1. Daun teratai (*water lily pads*) belum terpetakan dalam model data spasial mandiri sehingga sulit dijadikan acuan koordinat bagi lompatan katak dan hinggapan serangga.
 2. Katak pohon (*Nihon Amagaeru*) yang hinggap di daun teratai hanya memiliki satu lokasi hinggap tetap dan siklus lompat tunggal ke air.
 3. Ikan kecil dekoratif (*medaka*) mengabaikan pelet makanan yang jatuh, meskipun di aplikasi referensi Nagomi terdapat dinamika serbuan ikan kecil (`tinyFishSteal`).
 4. Kupu-kupu hanya berkeliaran di udara tanpa pernah mendekati, mengorbit, atau hinggap di 4 bunga teratai merah muda.
@@ -19,16 +19,16 @@ Setelah menyelesaikan Fase 1 (palet, pola spine, dan kunang-kunang) serta Fase 2
 
 ## 2. Keputusan Arsitektur & Implementasi
 
-### 2.1 Arsitektur Hybrid `PondLilyPad` & Goyangan Daun Teratai
+### 2.1 Arsitektur Hybrid `PondLilyPad` & Daun Teratai Statis
+- **Keputusan Estetika & Stabilitas (Amandemen Pengguna)**: Goyangan daun teratai (*wobble/displacement*) dihilangkan agar daun teratai tetap statis seperti sebelumnya. Hal ini menjaga estetika zen kolam yang tenang, mencegah distorsi bitmap kluster flora, dan memastikan daun teratai tetap terjangkar kokoh di garis pantai.
 - **Model Simulasi Spasial**: Dibuat [`PondLilyPad.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Simulation/PondLilyPad.swift) yang merepresentasikan ke-16 daun teratai kolam (4 di antaranya membawa bunga teratai mekar):
   - Memetakan koordinat dunia `(x, y)` dan radius daun secara proporsional terhadap ukuran kolam sesuai geometri [`PondFloraArtwork.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Rendering/PondFloraArtwork.swift).
-  - Menyimpan state goyangan fisik: `wobbleTime: Double`, `wobbleDuration: Double` (`bumpWobbleSeconds = 0.6s`), `wobbleStrength: Double`, dan `displacementOffset: PondVector`.
-- **Deteksi Benturan Permukaan (`PondSimulation.swift`)**:
-  - Saat koi berenang di dekat permukaan air (`depth < 0.25`), kontak fisik moncong/tubuh dengan daun teratai memicu goyangan impuls (`triggerBump(from:strength:duration:)`).
-  - Menghasilkan vektor perpindahan lateral `displacementOffset` yang teredam eksponensial dan osilasi rotasi teredam frekuensi tinggi (~28 rad/s) selama 0.6 detik.
-- **Rendering Terpadu**:
-  - Pada [`PondRenderer.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Rendering/PondRenderer.swift), fungsi `animateFlora` mengintegrasikan translasi impuls goyang dan rotasi daun `currentWobbleAngle` ke dalam komposit CALayer GPU.
-  - [`PondFloraArtwork.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Rendering/PondFloraArtwork.swift) mendukung parameter translasi dan rotasi daun `drawPad(..., wobbleOffset:wobbleAngle:)`.
+  - Mengimplementasikan `contactCooldown: Double` (`contactCooldownSeconds = 0.6s`) untuk men-debounce kontak benturan tanpa menggeser posisi fisik daun (`displacementOffset == .zero`, `currentWobbleAngle == 0.0`).
+- **Deteksi Kontak Permukaan (`PondSimulation.swift`)**:
+  - Saat koi berenang di dekat permukaan air (`depth < 0.25`), kontak fisik moncong/tubuh dengan daun teratai memicu riak `.padBump` dan peluang katak kaget melalui `contactCooldown`. Daun teratai itu sendiri tetap diam dan stabil tak bergerak.
+- **Rendering Bersih**:
+  - Pada [`PondRenderer.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Rendering/PondRenderer.swift), fungsi `animateFlora` mempertahankan gerak ayunan angin alami yang sangat halus tanpa translasi sentakan benturan koi.
+  - [`PondFloraArtwork.swift`](file:///Users/gaudentiusgiden/dev/explore-dev/koi-wallpaper/Sources/KoiWallpaperCore/Rendering/PondFloraArtwork.swift) menggambar daun teratai secara statis dan elegan.
 
 ### 2.2 Katak Kaget & Melompat Antar-Teratai (`PondFrog.swift`)
 - Ditambahkan state `.hoppingToPad` pada `PondFrogState`.
@@ -70,7 +70,7 @@ Setelah menyelesaikan Fase 1 (palet, pola spine, dan kunang-kunang) serta Fase 2
 
 1. **Uji Simulasi In-Process (`KoiWallpaperSimTest`)**:
    - Seluruh **71/71 pengujian lulus 100%**:
-     - `T22.1`: Inisialisasi 16 pad, 4 bunga, pemicuan goyang senggolan koi permukaan, dan peluruhan displacement.
+     - `T22.1`: Inisialisasi 16 pad, 4 bunga, garansi kestabilan teratai statis tanpa translasi/rotasi, dan debouncing kontak.
      - `T22.2`: Katak kaget senggolan teratai (peluang 40%), deteksi tetangga radius 70pt, lompatan parabolik, dan pendaratan.
      - `T22.3`: Dinamika pelet `bitesRemaining`, serbuan ikan kecil radius 70pt (peluang 55%), pengurangan gigitan 0.35, dan riak `.eatingNibble`.
      - `T22.4`: Siklus 4-state kupu-kupu (`wandering`, `approaching`, `orbiting 7–12pt`, `resting`).
@@ -80,4 +80,4 @@ Setelah menyelesaikan Fase 1 (palet, pola spine, dan kunang-kunang) serta Fase 2
    - Seluruh **68/68 assertion in-process lulus 100%**.
    - Total pengujian otomatis: **139/139 test passed**.
 3. **Status Runtime Aplikasi Desktop**:
-   - App Release berhasil di-build (`build/KoiWallpaper.app`) dan berjalan aktif di latar belakang (PID 51090).
+   - App Release berhasil di-build (`build/KoiWallpaper.app`) dan berjalan aktif di latar belakang.

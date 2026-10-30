@@ -1,9 +1,9 @@
 import Foundation
 import CoreGraphics
 
-/// Represents a single water lily pad (daun teratai) in the pond ecosystem.
-/// Stores physical position, radius, flowering state, and dynamic wobble physics
-/// triggered by koi fish collisions or frog jumps.
+/// Represents a static water lily pad (daun teratai) in the pond ecosystem.
+/// Stores fixed physical position, radius, flowering state, and flower anchor
+/// for the perched frog and visiting butterflies. Position is static without wobble.
 public struct PondLilyPad: Identifiable, Sendable {
     public let id: Int // 0..<16
     public let clusterIndex: Int // 0..<6
@@ -15,17 +15,18 @@ public struct PondLilyPad: Identifiable, Sendable {
     public let hasFlower: Bool
     public var flowerPosition: PondVector
 
-    // MARK: - Dynamic Wobble Physics
-    public static let bumpWobbleSeconds: Double = 0.6
+    // MARK: - Static Shoreline Anchor & Contact Debounce
+    public static let contactCooldownSeconds: Double = 0.6
+    public static let bumpWobbleSeconds: Double = contactCooldownSeconds
 
-    /// Remaining time for the current wobble oscillation in seconds.
-    public var wobbleTime: Double = 0.0
-    /// Duration of the active wobble animation.
-    public var wobbleDuration: Double = bumpWobbleSeconds
-    /// Normalized strength of the wobble [0.0...1.0].
-    public var wobbleStrength: Double = 0.0
-    /// Physical displacement vector offset caused by the collision impulse.
-    public var displacementOffset: PondVector = .zero
+    /// Contact cooldown timer to debounce rippling and frog reaction.
+    public var contactCooldown: Double = 0.0
+
+    /// Static guarantees: pads remain completely stationary without wobble
+    public var displacementOffset: PondVector { .zero }
+    public var currentWobbleAngle: Double { 0.0 }
+    public var wobbleTime: Double { contactCooldown }
+    public var wobbleStrength: Double { 0.0 }
 
     public init(
         id: Int,
@@ -37,10 +38,7 @@ public struct PondLilyPad: Identifiable, Sendable {
         variant: Int,
         hasFlower: Bool,
         flowerPosition: PondVector? = nil,
-        wobbleTime: Double = 0.0,
-        wobbleDuration: Double = bumpWobbleSeconds,
-        wobbleStrength: Double = 0.0,
-        displacementOffset: PondVector = .zero
+        contactCooldown: Double = 0.0
     ) {
         self.id = id
         self.clusterIndex = clusterIndex
@@ -51,46 +49,24 @@ public struct PondLilyPad: Identifiable, Sendable {
         self.variant = variant
         self.hasFlower = hasFlower
         self.flowerPosition = flowerPosition ?? position
-        self.wobbleTime = wobbleTime
-        self.wobbleDuration = wobbleDuration
-        self.wobbleStrength = wobbleStrength
-        self.displacementOffset = displacementOffset
+        self.contactCooldown = contactCooldown
     }
 
-    /// Current rotational wobble angle (radians) computed from active oscillation.
-    public var currentWobbleAngle: Double {
-        guard wobbleTime > 0.0, wobbleDuration > 0.0 else { return 0.0 }
-        let progress = wobbleTime / wobbleDuration
-        // High frequency damped oscillation (~28 rad/s)
-        return sin((wobbleDuration - wobbleTime) * 28.0) * wobbleStrength * progress * 0.12
+    /// Triggers contact cooldown when a creature brushes against this pad.
+    /// The pad position remains completely static.
+    public mutating func triggerContact(duration: Double = contactCooldownSeconds) {
+        self.contactCooldown = max(0.05, duration)
     }
 
-    /// Triggers a wobble reaction when a koi or creature bumps into this lily pad.
-    public mutating func triggerBump(from source: PondVector, strength: Double = 1.0, duration: Double = bumpWobbleSeconds) {
-        self.wobbleDuration = max(0.05, duration)
-        self.wobbleTime = duration
-        self.wobbleStrength = min(1.0, max(0.1, strength))
-
-        let diff = position - source
-        let dist = diff.length
-        let pushDir = dist > 0.001 ? (diff / dist) : PondVector(x: 1.0, y: 0.0)
-        let pushMagnitude = min(5.0, 3.5 * self.wobbleStrength)
-        self.displacementOffset = pushDir * pushMagnitude
+    /// Backward compatibility for triggerBump. Does not wobble the pad.
+    public mutating func triggerBump(from source: PondVector? = nil, strength: Double = 1.0, duration: Double = bumpWobbleSeconds) {
+        triggerContact(duration: duration)
     }
 
-    /// Advances the wobble physics by discrete time step.
+    /// Advances the contact timer.
     public mutating func update(dt: Double) {
-        if wobbleTime > 0.0 {
-            wobbleTime = max(0.0, wobbleTime - dt)
-            if wobbleTime <= 0.0 {
-                wobbleStrength = 0.0
-                displacementOffset = .zero
-            } else {
-                // Exponential decay of displacement offset
-                let decay = exp(-6.0 * dt)
-                displacementOffset = displacementOffset * decay
-                wobbleStrength = max(0.0, wobbleStrength - dt / wobbleDuration)
-            }
+        if contactCooldown > 0.0 {
+            contactCooldown = max(0.0, contactCooldown - dt)
         }
     }
 

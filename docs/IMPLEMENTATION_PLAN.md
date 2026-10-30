@@ -6,10 +6,11 @@ Rencana ini mengikuti [analisis referensi](REA.md) dan [hasil REA CLI](REA_FINDI
 
 Implementasi Fase 3 dari [Rencana Adopsi Fitur & Visual Nagomi Desktop](decisions/2026-10-30-nagomi-adoption-fase3.md) telah selesai dan terverifikasi penuh:
 
-- **Hybrid PondLilyPad & Goyangan Daun Teratai**:
-  - Dibuat `PondLilyPad.swift` menyimpan 16 daun teratai mandiri (4 teratai memiliki bunga mekar), dengan radius, status bunga, dan state goyangan (`wobbleTime`, `wobbleStrength`, `displacementOffset`, `currentWobbleAngle`).
-  - Saat koi berenang di permukaan (`depth < 0.25`) menyenggol daun, daun terdorong menjauh dan bergetar sinusoidal selama `bumpWobbleSeconds = 0.6s`, memicu riak `.padBump`.
-  - Terintegrasi langsung dengan `PondFloraArtwork` dan `PondRenderer`.
+- **Hybrid PondLilyPad & Daun Teratai Statis**:
+  - Dibuat `PondLilyPad.swift` menyimpan 16 daun teratai mandiri (4 teratai memiliki bunga mekar), dengan radius, status bunga, dan jangkar posisi bunga.
+  - Sesuai keputusan estetika visual dan ketenangan zen kolam, goyangan daun teratai dihilangkan sehingga daun teratai tetap statis seperti sebelumnya.
+  - Kontak koi di permukaan (`depth < 0.25`) didebounce melalui `contactCooldown` untuk memicu riak sentuhan `.padBump` dan peluang katak kaget tanpa menggeser daun teratai.
+  - `PondFloraArtwork` dan `PondRenderer` mempertahankan render flora statis yang bersih dan tenang.
 - **Katak Kaget & Melompat Antar-Teratai**:
   - State mesin `PondFrog` diperluas dengan `.hoppingToPad` (`hopSeconds = 0.50s`).
   - Saat daun teratai tempat bertengger disenggol koi, katak memiliki peluang 40% (`bumpStartleChance = 0.40`) kaget dan melompat ke daun tetangga terdekat dalam radius jangkauan efektif ($\le 70$ pt referensi).

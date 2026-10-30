@@ -801,7 +801,7 @@ public final class PondSimulation: @unchecked Sendable {
             pellets[i].update(dt: dt, bounds: bounds)
         }
 
-        // 1b. Update Lily Pads and Koi Surface Bumping (depth < 0.25)
+        // 1b. Update Lily Pads and Koi Surface Contact (depth < 0.25)
         for i in 0..<lilyPads.count {
             lilyPads[i].update(dt: dt)
         }
@@ -812,8 +812,8 @@ public final class PondSimulation: @unchecked Sendable {
                 let mouthDist = k.mouthPosition.distance(to: lilyPads[pIdx].position)
                 let collisionThreshold = lilyPads[pIdx].radius + k.physicalRadius * 0.5
                 if dist <= collisionThreshold || mouthDist <= (lilyPads[pIdx].radius + 8.0) {
-                    if lilyPads[pIdx].wobbleTime <= 0.08 {
-                        lilyPads[pIdx].triggerBump(from: k.position, strength: 1.0, duration: PondLilyPad.bumpWobbleSeconds)
+                    if lilyPads[pIdx].contactCooldown <= 0.08 {
+                        lilyPads[pIdx].triggerContact(duration: PondLilyPad.contactCooldownSeconds)
                         if ripples.count < maxRipples {
                             ripples.append(WaterRipple(center: lilyPads[pIdx].position, type: .padBump))
                         }

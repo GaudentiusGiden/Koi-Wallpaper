@@ -2099,7 +2099,7 @@ do {
 print("\n--- 22. Nagomi Desktop Phase 3: Ecosystem Micro-Interactions & Hybrid Flora ---")
 
 do {
-    // T22.1 Hybrid PondLilyPad Initialization & Koi Surface Bump Wobble
+    // T22.1 Hybrid PondLilyPad Initialization & Static Anchor Integrity
     let testBounds = PondBounds(width: 800, height: 600)
     let pads = PondLilyPad.generatePads(for: testBounds)
 
@@ -2110,7 +2110,7 @@ do {
     // Simulate surface koi collision with pad
     let sim = PondSimulation(bounds: testBounds, seed: 101)
     let targetPad = sim.lilyPads[0]
-    let initialWobble = (targetPad.wobbleTime == 0.0 && targetPad.wobbleStrength == 0.0)
+    let initialStatic = (targetPad.displacementOffset == .zero && targetPad.currentWobbleAngle == 0.0)
 
     // Place koi at surface directly touching pad 0
     let surfaceFish = KoiFish(
@@ -2128,22 +2128,23 @@ do {
     // Run 1 frame to trigger surface collision check
     dummyFishSim.stepSimulation(dt: 1.0 / 60.0)
 
-    let bumpedPad = dummyFishSim.lilyPads[0]
-    let wobbleTriggered = (bumpedPad.wobbleTime > 0.55 && bumpedPad.wobbleStrength > 0.0)
-    let displacementApplied = (bumpedPad.displacementOffset.length > 0.0)
+    let touchedPad = dummyFishSim.lilyPads[0]
+    // Static lily pad guarantee: pad position and angle remain completely static (no wobble displacement)
+    let remainsStatic = (touchedPad.displacementOffset == .zero && touchedPad.currentWobbleAngle == 0.0)
+    let contactDebounced = (touchedPad.contactCooldown > 0.50)
 
-    // Advance 40 frames (~0.67s) so wobble fully decays
+    // Advance 40 frames (~0.67s) so contact cooldown decays
     for _ in 0..<40 {
         dummyFishSim.stepSimulation(dt: 1.0 / 60.0)
     }
-    let decayedPad = dummyFishSim.lilyPads[0]
-    let wobbleDecayed = (decayedPad.wobbleTime == 0.0 && decayedPad.wobbleStrength == 0.0 && decayedPad.displacementOffset == .zero)
+    let postPad = dummyFishSim.lilyPads[0]
+    let fullyStatic = (postPad.displacementOffset == .zero && postPad.currentWobbleAngle == 0.0 && postPad.contactCooldown == 0.0)
 
-    let t22_1Passed = countIs16 && fourFlowers && initialWobble && wobbleTriggered && displacementApplied && wobbleDecayed
+    let t22_1Passed = countIs16 && fourFlowers && initialStatic && remainsStatic && contactDebounced && fullyStatic
     recordSimTest(
-        "T22.1 Hybrid PondLilyPad (16 Pads, 4 Flowers) & Koi Surface Bump Wobble",
+        "T22.1 Hybrid PondLilyPad (16 Pads, 4 Flowers) & Static Anchor Integrity",
         passed: t22_1Passed,
-        details: "padsCount=\(pads.count), flowersCount=\(floweringCount), wobbleTriggered=\(wobbleTriggered), displacement=\(bumpedPad.displacementOffset.length), decayed=\(wobbleDecayed)"
+        details: "padsCount=\(pads.count), flowersCount=\(floweringCount), remainsStatic=\(remainsStatic), contactDebounced=\(contactDebounced), fullyStatic=\(fullyStatic)"
     )
 }
 
