@@ -3,15 +3,29 @@
 .AppleDouble
 .LSOverride
 
-# Swift Package Manager
+# Swift Package Manager & Xcode
 .build/
+.swiftpm/
 Packages/
-
-# Local build artifacts
-build/
 DerivedData/
-
-# Xcode user data
 xcuserdata/
 *.xcscmblueprint
 *.xccheckout
+*.xcodeproj
+
+# Local build & packaging artifacts
+build/
+*.app
+*.dmg
+*.saver
+*.icns
+*.iconset/
+*.mov
+
+# Local analysis, references, session handoffs & visual test reports
+analysis/
+reference/
+reports/
+docs/handoff_*.md
+docs/*_handoff.md
+docs/decisions/assets/

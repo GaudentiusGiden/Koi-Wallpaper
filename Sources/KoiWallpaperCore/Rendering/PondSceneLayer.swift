@@ -18,6 +18,7 @@ public final class PondSceneLayer: CALayer {
     private let floraLayersA = (0..<6).map { _ in CALayer() }
     private let floraLayersB = (0..<6).map { _ in CALayer() }
     private let insectLayer = CALayer()
+    private let weatherLayer = CALayer()
     private let tintLayer = CALayer()
 
     public init(renderer: PondRenderer) {
@@ -47,6 +48,8 @@ public final class PondSceneLayer: CALayer {
         for layer in floraLayersB { addSublayer(layer) }
         insectLayer.name = "insects"
         addSublayer(insectLayer)
+        weatherLayer.name = "weather"
+        addSublayer(weatherLayer)
         addSublayer(tintLayer)
 
         bedLayerB.isHidden = true
@@ -220,6 +223,15 @@ public final class PondSceneLayer: CALayer {
         } else {
             insectLayer.isHidden = true
             insectLayer.contents = nil
+        }
+
+        // Cached atmospheric weather pass (directional light beam, cloud drift, corner vignette)
+        if let weather = frame.weather {
+            weatherLayer.isHidden = false
+            apply(weather, to: weatherLayer)
+        } else {
+            weatherLayer.isHidden = true
+            weatherLayer.contents = nil
         }
 
         // Atmospheric tint

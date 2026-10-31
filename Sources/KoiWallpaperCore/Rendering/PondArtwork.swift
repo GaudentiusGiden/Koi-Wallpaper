@@ -156,10 +156,10 @@ public enum PondArtwork {
         // 1. Cloud Shadow Wave Modulation (from 10-weather-pass.wgsl)
         if grade.cloudStrength > 0.005 {
             let cloudAlpha = grade.cloudStrength * CGFloat(0.08 + 0.05 * sin(time * 0.035))
-            let cloudShiftX = CGFloat(fmod(time * 6.0, Double(w)))
-            let cloudShiftY = CGFloat(fmod(time * 3.5, Double(h)))
+            let cloudShiftX = CGFloat(fmod(time * 0.005, 1.0)) * w
+            let cloudShiftY = CGFloat(fmod(time * 0.004, 1.0)) * h
             context.saveGState()
-            context.setBlendMode(.multiply)
+            context.setBlendMode(.normal)
             let cloudGradientColors = [
                 CGColor(red: 0.12, green: 0.18, blue: 0.22, alpha: cloudAlpha * 0.8),
                 CGColor(red: 0.20, green: 0.25, blue: 0.28, alpha: cloudAlpha * 0.3),
@@ -179,14 +179,14 @@ public enum PondArtwork {
         // 2. Directional Sunlight / Moonlight Beam (from 10-weather-pass.wgsl)
         if grade.lightStrength > 0.01 {
             context.saveGState()
-            context.setBlendMode(.plusLighter)
+            context.setBlendMode(.screen)
             let dirX = CGFloat(grade.lightDirection.0)
             let dirY = CGFloat(grade.lightDirection.1)
             let dirLen = max(0.001, hypot(dirX, dirY))
             let normDirX = dirX / dirLen
             let normDirY = dirY / dirLen
 
-            let beamAlpha = grade.lightStrength * 0.45
+            let beamAlpha = grade.lightStrength * 0.35
             let lightColors = [
                 CGColor(red: grade.lightColor.0, green: grade.lightColor.1, blue: grade.lightColor.2, alpha: 0.0),
                 CGColor(red: grade.lightColor.0, green: grade.lightColor.1, blue: grade.lightColor.2, alpha: beamAlpha * 0.5),
@@ -203,8 +203,8 @@ public enum PondArtwork {
         // 3. Atmospheric Edge Vignette (from 10-weather-pass.wgsl)
         if grade.vignette > 0.01 {
             context.saveGState()
-            context.setBlendMode(.multiply)
-            let vigAlpha = grade.vignette * 0.50
+            context.setBlendMode(.normal)
+            let vigAlpha = grade.vignette * 0.45
             let vigColors = [
                 CGColor(red: 0.02, green: 0.04, blue: 0.06, alpha: 0.0),
                 CGColor(red: 0.02, green: 0.04, blue: 0.06, alpha: vigAlpha * 0.35),

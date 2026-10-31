@@ -220,7 +220,8 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
 // Suite Isolation: Ensure all simulations and views in KoiWallpaperVerify use in-memory stores by default,
-// preventing test fixtures from polluting UserDefaults.standard.
+// preventing test fixtures from polluting UserDefaults.standard or Application Support/settings.json.
+SettingsManager.defaultStoreProvider = { InMemorySettingsStore() }
 FeedingRoutineManager.defaultStoreProvider = { InMemoryFeedingStore() }
 DailyGreetingManager.defaultStoreProvider = { InMemoryGreetingStore() }
 
@@ -319,7 +320,10 @@ windowController.teardown()
 // (In-process coordinator state propagation)
 // -------------------------------------------------------------
 print("\n--- Section 2: Mode Switching & Coordinator Synchronization ---")
-let coordinator = AppCoordinator()
+let coordinator = AppCoordinator(
+    settingsManager: SettingsManager(store: InMemorySettingsStore()),
+    launchAtLoginManager: MockLaunchAtLoginManager(isEnabled: false)
+)
 coordinator.start()
 
 guard let activeWindowController = coordinator.desktopWindowController else {
@@ -2651,7 +2655,11 @@ recordTest(.m6StaticWallpaper, "T11.3 Shared File Settings Cross-Process Synchro
 var snapshotTimerPassed = false
 var snapshotTimerDetails = ""
 do {
-    let coordinator = AppCoordinator()
+    let coordinator = AppCoordinator(
+        settingsManager: SettingsManager(store: InMemorySettingsStore()),
+        launchAtLoginManager: MockLaunchAtLoginManager(isEnabled: false)
+    )
+    coordinator.start()
     let initialNoTimer = (coordinator.snapshotTimer == nil)
 
     if let statusController = coordinator.statusBarController {
@@ -3060,6 +3068,26 @@ do {
 }
 recordTest(.viewState, "T14.2 Native Compositor Turtle Rendering Stability in Swimming & Startled States",
            passed: t14_2_passed, details: t14_2_details)
+
+// T14.3 Release Status Bar Icon (Zen Arc Koi) & v1.0 Header Verification
+var t14_3_passed = false
+var t14_3_details = ""
+do {
+    let statusController = StatusBarController()
+    let headerValid = (statusController.headerTitle == "Koi Wallpaper v1.0")
+    let normalIcon = StatusBarController.makeStatusIcon(isInteractive: false, isPaused: false)
+    let pausedIcon = StatusBarController.makeStatusIcon(isInteractive: false, isPaused: true)
+    let interactiveIcon = StatusBarController.makeStatusIcon(isInteractive: true, isPaused: false)
+    let iconsValid = normalIcon.isTemplate &&
+                     normalIcon.size == NSSize(width: 18, height: 18) &&
+                     normalIcon.tiffRepresentation != nil &&
+                     pausedIcon.tiffRepresentation != nil &&
+                     interactiveIcon.tiffRepresentation != nil
+    t14_3_passed = headerValid && iconsValid
+    t14_3_details = "header='\(statusController.headerTitle)', iconsValid=\(iconsValid)"
+}
+recordTest(.viewState, "T14.3 Release Status Bar Icon (Zen Arc Koi) & v1.0 Header Verification",
+           passed: t14_3_passed, details: t14_3_details)
 
 // Worker process termination: Save metrics and exit cleanly.
 // T9.11, final summary, and post-process filesystem isolation verification

@@ -27,15 +27,24 @@ public protocol LaunchAtLoginManaging: AnyObject {
 public final class SystemLaunchAtLoginManager: LaunchAtLoginManaging {
     public init() {}
 
+    private var isAppBundle: Bool {
+        Bundle.main.bundleURL.pathExtension.lowercased() == "app"
+    }
+
     public var isEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
+        guard isAppBundle else { return false }
+        return SMAppService.mainApp.status == .enabled
     }
 
     public var requiresApproval: Bool {
-        SMAppService.mainApp.status == .requiresApproval
+        guard isAppBundle else { return false }
+        return SMAppService.mainApp.status == .requiresApproval
     }
 
     public var statusDescription: String {
+        guard isAppBundle else {
+            return "Tidak Ditemukan (Aplikasi belum terpasang sebagai bundle)"
+        }
         switch SMAppService.mainApp.status {
         case .enabled:
             return "Aktif"
@@ -51,6 +60,10 @@ public final class SystemLaunchAtLoginManager: LaunchAtLoginManaging {
     }
 
     public func setEnabled(_ enabled: Bool) throws {
+        guard isAppBundle else {
+            logger.warning("Skipping SMAppService \(enabled ? "registration" : "unregistration"): process is not running within a .app bundle.")
+            return
+        }
         if enabled {
             logger.info("Registering main application with SMAppService...")
             try SMAppService.mainApp.register()

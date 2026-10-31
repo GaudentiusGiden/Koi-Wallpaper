@@ -26,6 +26,7 @@ struct PondRenderFrame {
     let flora: [PondImagePlacement]
     let floraTarget: [PondImagePlacement]
     let insects: PondImagePlacement?
+    let weather: PondImagePlacement?
     let tint: CGColor?
     let weatherGrade: PondWeatherGrade?
     let transitionProgress: CGFloat
@@ -70,6 +71,15 @@ public final class PondRenderer {
     public var isBatteryEcoMode: Bool = false
     private var renderFrameIndex: UInt64 = 0
     private var lastInsectPlacement: PondImagePlacement?
+    private var lastInsectTimeStep: Int = Int.min
+    private var lastInsectRenderedPixels: CGSize = .zero
+    private var weatherContext: CGContext?
+    private var weatherPixels: CGSize = .zero
+    private var cachedWeatherImage: CGImage?
+    private var lastWeatherFromTheme: PondTheme?
+    private var lastWeatherToTheme: PondTheme?
+    private var lastWeatherProgressStep: Int = Int.min
+    private var lastWeatherTimeStep: Int = Int.min
     private var customSourceShadow: PondLighting.ShadowStyle?
     private var customSourceFishAmbientStyle: PondLighting.FishAmbientStyle?
     private var customSourceTint: CGColor?
@@ -252,8 +262,11 @@ public final class PondRenderer {
             scale: scale,
             fromTheme: fromTheme,
             toTheme: toTheme,
-            progress: progress
+            progress: progress,
+            includeInsectBitmap: false
         )
+        let short = min(rect.size.width, rect.size.height)
+        let pixelSize = max(1, (short * scale / 270).rounded()) / scale
         context.saveGState()
         context.clip(to: rect)
         context.translateBy(x: rect.minX, y: rect.minY)
@@ -277,8 +290,16 @@ public final class PondRenderer {
                 }
             }
             for placement in frame.flora { draw(placement, in: context) }
-            if let insects = frame.insects { draw(insects, in: context) }
-            if let grade = frame.weatherGrade {
+            if !simulation.insects.isEmpty || simulation.frog.isVisible {
+                context.saveGState()
+                context.setShouldAntialias(false)
+                PondFrogArtwork.draw(simulation.frog, in: context, time: simulation.elapsedTime)
+                PondInsectArtwork.drawInsects(simulation.insects, in: context, time: simulation.elapsedTime)
+                context.restoreGState()
+            }
+            if let weather = frame.weather {
+                draw(weather, in: context)
+            } else if let grade = frame.weatherGrade {
                 PondArtwork.drawWeatherAtmosphere(in: context, rect: CGRect(origin: .zero, size: rect.size), grade: grade, time: simulation.elapsedTime)
             }
             if let tint = frame.tint {
@@ -353,8 +374,16 @@ public final class PondRenderer {
                 draw(placement, in: context)
                 context.restoreGState()
             }
-            if let insects = frame.insects { draw(insects, in: context) }
-            if let grade = frame.weatherGrade {
+            if !simulation.insects.isEmpty || simulation.frog.isVisible {
+                context.saveGState()
+                context.setShouldAntialias(false)
+                PondFrogArtwork.draw(simulation.frog, in: context, time: simulation.elapsedTime)
+                PondInsectArtwork.drawInsects(simulation.insects, in: context, time: simulation.elapsedTime)
+                context.restoreGState()
+            }
+            if let weather = frame.weather {
+                draw(weather, in: context)
+            } else if let grade = frame.weatherGrade {
                 PondArtwork.drawWeatherAtmosphere(in: context, rect: CGRect(origin: .zero, size: rect.size), grade: grade, time: simulation.elapsedTime)
             }
             if let tint = frame.tint {
@@ -362,6 +391,7 @@ public final class PondRenderer {
                 context.fill(CGRect(origin: .zero, size: rect.size))
             }
         }
+        _ = pixelSize
         context.restoreGState()
     }
 
@@ -379,7 +409,8 @@ public final class PondRenderer {
         scale: CGFloat,
         fromTheme: PondTheme,
         toTheme: PondTheme,
-        progress: CGFloat
+        progress: CGFloat,
+        includeInsectBitmap: Bool = true
     ) -> PondRenderFrame {
         lastFromTheme = fromTheme
         lastToTheme = toTheme
@@ -602,9 +633,14 @@ public final class PondRenderer {
         }
 
         var insectPlacement: PondImagePlacement?
-        if !simulation.insects.isEmpty || simulation.frog.isVisible {
-            if isBatteryEcoMode, (renderFrameIndex % 2 != 0), let cached = lastInsectPlacement {
-                insectPlacement = cached
+        if includeInsectBitmap && (!simulation.insects.isEmpty || simulation.frog.isVisible) {
+            let insectCadence = isBatteryEcoMode ? 10.0 : 15.0
+            let insectTimeStep = Int((simulation.elapsedTime * insectCadence).rounded(.down))
+            let targetRect = CGRect(x: 0, y: 0, width: pixels.width * pixelSize, height: pixels.height * pixelSize)
+            if insectTimeStep == lastInsectTimeStep,
+               pixels == lastInsectRenderedPixels,
+               let cached = lastInsectPlacement {
+                insectPlacement = PondImagePlacement(image: cached.image, rect: targetRect, pixelated: true)
             } else {
                 if insectContext == nil || pixels != insectPixels {
                     insectPixels = pixels
@@ -624,11 +660,13 @@ public final class PondRenderer {
                     if let image = bitmap.makeImage() {
                         let placement = PondImagePlacement(
                             image: image,
-                            rect: CGRect(x: 0, y: 0, width: pixels.width * pixelSize, height: pixels.height * pixelSize),
+                            rect: targetRect,
                             pixelated: true
                         )
                         insectPlacement = placement
                         lastInsectPlacement = placement
+                        lastInsectTimeStep = insectTimeStep
+                        lastInsectRenderedPixels = pixels
                     }
                 }
             }
@@ -637,12 +675,63 @@ public final class PondRenderer {
                 insectContext = nil
                 insectPixels = .zero
                 lastInsectPlacement = nil
+                lastInsectTimeStep = Int.min
+                lastInsectRenderedPixels = .zero
             }
         }
 
         let gradeA = fromTheme.renderPalette.weather
         let gradeB = toTheme.renderPalette.weather
         let blendedWeatherGrade = isTransitioning ? PondWeatherGrade.lerp(from: gradeA, to: gradeB, t: clampedP) : gradeB
+
+        var weatherPlacement: PondImagePlacement?
+        if blendedWeatherGrade.cloudStrength > 0.02 || blendedWeatherGrade.lightStrength > 0.02 || blendedWeatherGrade.vignette > 0.02 {
+            let weatherTargetPixels = CGSize(width: 128, height: 80)
+            let weatherTimeStep = Int((simulation.elapsedTime * 2.0).rounded(.down))
+            let weatherProgressStep = isTransitioning ? Int((clampedP * 60.0).rounded()) : 60
+
+            if lastWeatherFromTheme != fromTheme ||
+               lastWeatherToTheme != toTheme ||
+               lastWeatherProgressStep != weatherProgressStep ||
+               lastWeatherTimeStep != weatherTimeStep ||
+               cachedWeatherImage == nil {
+                if weatherContext == nil || weatherPixels != weatherTargetPixels {
+                    weatherPixels = weatherTargetPixels
+                    weatherContext = CGContext(
+                        data: nil,
+                        width: Int(weatherTargetPixels.width),
+                        height: Int(weatherTargetPixels.height),
+                        bitsPerComponent: 8,
+                        bytesPerRow: 0,
+                        space: CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                    )
+                }
+                if let wCtx = weatherContext {
+                    let wRect = CGRect(origin: .zero, size: weatherTargetPixels)
+                    wCtx.clear(wRect)
+                    PondArtwork.drawWeatherAtmosphere(
+                        in: wCtx,
+                        rect: wRect,
+                        grade: blendedWeatherGrade,
+                        time: simulation.elapsedTime
+                    )
+                    cachedWeatherImage = wCtx.makeImage()
+                    lastWeatherFromTheme = fromTheme
+                    lastWeatherToTheme = toTheme
+                    lastWeatherProgressStep = weatherProgressStep
+                    lastWeatherTimeStep = weatherTimeStep
+                }
+            }
+
+            if let image = cachedWeatherImage {
+                weatherPlacement = PondImagePlacement(
+                    image: image,
+                    rect: CGRect(origin: .zero, size: size),
+                    pixelated: false
+                )
+            }
+        }
 
         return PondRenderFrame(
             size: size,
@@ -655,6 +744,7 @@ public final class PondRenderer {
             flora: floraA,
             floraTarget: floraB,
             insects: insectPlacement,
+            weather: weatherPlacement,
             tint: tintColor,
             weatherGrade: blendedWeatherGrade,
             transitionProgress: clampedP,

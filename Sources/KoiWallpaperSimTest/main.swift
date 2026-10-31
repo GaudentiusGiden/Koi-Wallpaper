@@ -16,7 +16,8 @@ func recordSimTest(_ name: String, passed: Bool, details: String) {
     print("\(status) \(name): \(details)")
 }
 
-// Suite Isolation: Ensure pure simulation tests do not write to UserDefaults.standard
+// Suite Isolation: Ensure pure simulation tests do not write to UserDefaults.standard or Application Support
+SettingsManager.defaultStoreProvider = { InMemorySettingsStore() }
 FeedingRoutineManager.defaultStoreProvider = { InMemoryFeedingStore() }
 DailyGreetingManager.defaultStoreProvider = { InMemoryGreetingStore() }
 

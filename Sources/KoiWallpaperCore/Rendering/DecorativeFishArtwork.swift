@@ -468,26 +468,21 @@ public enum DecorativeFishArtwork {
         context.addPath(body)
         context.fillPath()
 
-        if isEcoMode {
-            // Eco mode: draw dorsal highlight and motif directly without software clipping mask allocation
-            context.setStrokeColor(palette.bellyHighlight)
-            context.setLineWidth(max(0.6, length * 0.04))
-            context.move(to: CGPoint(x: length * 0.32, y: halfWidth * 0.10))
-            context.addLine(to: CGPoint(x: -length * 0.20, y: halfWidth * 0.05))
-            context.strokePath()
-
-            drawMotif(in: context, length: length, halfWidth: halfWidth, palette: palette, motif: index % 8)
-            return
+        if !isEcoMode {
+            // 1. Soft underside depth shade contoured to the lower torso (avoids software clip mask allocation)
+            let bottomShade = CGMutablePath()
+            bottomShade.move(to: CGPoint(x: length * 0.50, y: 0))
+            bottomShade.addLine(to: CGPoint(x: -length * 0.28, y: 0))
+            bottomShade.addLine(to: CGPoint(x: -length * 0.28, y: -halfWidth * 0.38))
+            bottomShade.addQuadCurve(to: CGPoint(x: length * 0.12, y: -halfWidth),
+                                     control: CGPoint(x: -length * 0.10, y: -halfWidth * 0.85))
+            bottomShade.addQuadCurve(to: CGPoint(x: length * 0.50, y: 0),
+                                     control: CGPoint(x: length * 0.36, y: -halfWidth * 0.85))
+            bottomShade.closeSubpath()
+            context.setFillColor(red: 0.04, green: 0.18, blue: 0.15, alpha: 0.22)
+            context.addPath(bottomShade)
+            context.fillPath()
         }
-
-        // Clip markings and depth layers to the body outline
-        context.saveGState()
-        context.addPath(body)
-        context.clip()
-
-        // 1. Soft underside depth shade (ambient aquatic shadow)
-        context.setFillColor(red: 0.04, green: 0.18, blue: 0.15, alpha: 0.22)
-        context.fill(CGRect(x: -length * 0.40, y: -halfWidth * 1.10, width: length * 0.95, height: halfWidth * 0.75))
 
         // 2. Subtle dorsal midline highlight catching overhead pond light
         context.setStrokeColor(palette.bellyHighlight)
@@ -496,10 +491,8 @@ public enum DecorativeFishArtwork {
         context.addLine(to: CGPoint(x: -length * 0.20, y: halfWidth * 0.05))
         context.strokePath()
 
-        // 3. Distinct organic motif per fish
+        // 3. Distinct organic motif per fish (contoured within torso bounds)
         drawMotif(in: context, length: length, halfWidth: halfWidth, palette: palette, motif: index % 8)
-
-        context.restoreGState()
     }
 
     private static func drawMotif(
@@ -514,12 +507,12 @@ public enum DecorativeFishArtwork {
             // Kohaku / Twin Saddle Patches
             context.setFillColor(palette.pattern)
             context.fillEllipse(in: CGRect(
-                x: length * 0.04, y: -halfWidth * 0.45,
-                width: length * 0.22, height: halfWidth * 1.25
+                x: length * 0.04, y: -halfWidth * 0.42,
+                width: length * 0.22, height: halfWidth * 0.88
             ))
             context.fillEllipse(in: CGRect(
-                x: -length * 0.22, y: -halfWidth * 0.55,
-                width: length * 0.16, height: halfWidth * 0.95
+                x: -length * 0.22, y: -halfWidth * 0.36,
+                width: length * 0.16, height: halfWidth * 0.72
             ))
 
         case 1:
@@ -556,14 +549,17 @@ public enum DecorativeFishArtwork {
             ))
 
         case 4:
-            // Countershaded Two-Tone Belly
+            // Countershaded Two-Tone Belly (contoured to lower torso)
             context.setFillColor(palette.belly)
             let bellyPath = CGMutablePath()
             bellyPath.move(to: CGPoint(x: length * 0.38, y: 0))
             bellyPath.addQuadCurve(to: CGPoint(x: -length * 0.25, y: 0),
                                    control: CGPoint(x: 0, y: -halfWidth * 0.35))
-            bellyPath.addLine(to: CGPoint(x: -length * 0.25, y: -halfWidth * 1.10))
-            bellyPath.addLine(to: CGPoint(x: length * 0.38, y: -halfWidth * 1.10))
+            bellyPath.addLine(to: CGPoint(x: -length * 0.25, y: -halfWidth * 0.38))
+            bellyPath.addQuadCurve(to: CGPoint(x: length * 0.12, y: -halfWidth * 0.92),
+                                   control: CGPoint(x: -length * 0.08, y: -halfWidth * 0.80))
+            bellyPath.addQuadCurve(to: CGPoint(x: length * 0.38, y: 0),
+                                   control: CGPoint(x: length * 0.30, y: -halfWidth * 0.72))
             bellyPath.closeSubpath()
             context.addPath(bellyPath)
             context.fillPath()
@@ -581,12 +577,16 @@ public enum DecorativeFishArtwork {
             ))
 
         case 6:
-            // Caudal Dip / Flame Tail
+            // Caudal Dip / Flame Tail (contoured to caudal peduncle)
             context.setFillColor(palette.pattern)
-            context.fill(CGRect(
-                x: -length * 0.26, y: -halfWidth,
-                width: length * 0.15, height: halfWidth * 2.0
-            ))
+            let caudalPath = CGMutablePath()
+            caudalPath.move(to: CGPoint(x: -length * 0.11, y: halfWidth * 0.56))
+            caudalPath.addLine(to: CGPoint(x: -length * 0.26, y: halfWidth * 0.38))
+            caudalPath.addLine(to: CGPoint(x: -length * 0.26, y: -halfWidth * 0.38))
+            caudalPath.addLine(to: CGPoint(x: -length * 0.11, y: -halfWidth * 0.56))
+            caudalPath.closeSubpath()
+            context.addPath(caudalPath)
+            context.fillPath()
 
         default:
             // Pearl Minimalist with Soft Dorsal Sheen

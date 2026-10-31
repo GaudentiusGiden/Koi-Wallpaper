@@ -130,6 +130,9 @@ public final class InMemorySettingsStore: SettingsStore {
 
 /// Coordinates configuration state and persists mutations across app launches.
 public final class SettingsManager {
+    /// Configurable default store factory (allows test suites to globally isolate settings in-memory).
+    public static var defaultStoreProvider: () -> SettingsStore = { SharedFileSettingsStore() }
+
     public let store: SettingsStore
 
     public private(set) var settings: WallpaperSettings {
@@ -141,7 +144,7 @@ public final class SettingsManager {
 
     public var onSettingsChanged: ((WallpaperSettings) -> Void)?
 
-    public init(store: SettingsStore = SharedFileSettingsStore()) {
+    public init(store: SettingsStore = SettingsManager.defaultStoreProvider()) {
         self.store = store
         self.settings = store.loadSettings() ?? WallpaperSettings()
     }
