@@ -236,6 +236,62 @@ private func renderSeasonsDesignPreview(to outputURL: URL) throws {
     try png.write(to: outputURL)
 }
 
+private func renderReadmePreview(to outputURL: URL) throws {
+    let size = CGSize(width: 1280, height: 720)
+    let bounds = PondBounds(width: Double(size.width), height: Double(size.height))
+    let simulation = PondSimulation(bounds: bounds, seed: 108)
+    simulation.setSeason(.spring)
+
+    // Advance simulation 160 steps so koi are naturally dispersed and articulated
+    for _ in 0..<160 {
+        simulation.stepSimulation(dt: 1.0 / 60.0)
+    }
+
+    // Add swan visitor
+    simulation.addVisitor(PondVisitor(
+        type: .swan,
+        position: PondVector(x: Double(size.width) * 0.76, y: Double(size.height) * 0.36),
+        heading: -2.25,
+        seed: 77
+    ))
+
+    // Add floating sakura petals
+    simulation.spawnSeasonalDebris(at: PondVector(x: Double(size.width) * 0.32, y: Double(size.height) * 0.28), type: .sakuraPetal)
+    simulation.spawnSeasonalDebris(at: PondVector(x: Double(size.width) * 0.58, y: Double(size.height) * 0.44), type: .sakuraPetal)
+    simulation.spawnSeasonalDebris(at: PondVector(x: Double(size.width) * 0.18, y: Double(size.height) * 0.68), type: .waterLilyPetal)
+    simulation.spawnSeasonalDebris(at: PondVector(x: Double(size.width) * 0.84, y: Double(size.height) * 0.76), type: .sakuraPetal)
+
+    // Position turtle swimming naturally
+    simulation.turtle.state = .swimming
+    simulation.turtle.position = CGPoint(x: size.width * 0.22, y: size.height * 0.42)
+    simulation.turtle.heading = 0.52
+    simulation.turtle.paddlePhase = 2.4
+    simulation.turtle.variant = .nagomi
+
+    guard let context = CGContext(
+        data: nil,
+        width: Int(size.width),
+        height: Int(size.height),
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not create preview bitmap context."])
+    }
+
+    context.setShouldAntialias(true)
+    PondRenderer().render(simulation: simulation, in: context, rect: CGRect(origin: .zero, size: size), theme: .day)
+
+    guard let cgImage = context.makeImage(),
+          let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else {
+        throw NSError(domain: "KoiWallpaperPreview", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not encode readme preview as PNG."])
+    }
+
+    try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try png.write(to: outputURL)
+}
+
 final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var previewView: KoiPondPreviewView?
@@ -669,7 +725,16 @@ final class PreviewAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-if let renderIndex = CommandLine.arguments.firstIndex(of: "--render-swan-design") {
+if let renderIndex = CommandLine.arguments.firstIndex(of: "--render-readme-preview") {
+    let outputPath = CommandLine.arguments.dropFirst(renderIndex + 1).first ?? "docs/assets/preview.png"
+    do {
+        let outputURL = URL(fileURLWithPath: outputPath, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        try renderReadmePreview(to: outputURL)
+        print("[KoiWallpaperPreview] README showcase preview rendered: \(outputURL.path)")
+    } catch {
+        fatalError("Could not render readme preview: \(error)")
+    }
+} else if let renderIndex = CommandLine.arguments.firstIndex(of: "--render-swan-design") {
     let outputPath = CommandLine.arguments.dropFirst(renderIndex + 1).first ?? "build/swan-design-preview.png"
     do {
         let outputURL = URL(fileURLWithPath: outputPath, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))

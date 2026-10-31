@@ -2,6 +2,8 @@
 
 An interactive living koi pond desktop wallpaper for macOS 14+ (Sonoma or later), built natively with Swift, AppKit, and CoreGraphics with zero external dependencies or internet access required.
 
+![Koi Wallpaper Preview](docs/assets/preview.png)
+
 Koi Wallpaper runs quietly on your desktop canvas below your Finder icons, operates with minimal battery impact, and brings a peaceful, responsive pond ecosystem to your Mac.
 
 ---
