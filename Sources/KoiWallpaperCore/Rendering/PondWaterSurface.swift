@@ -3,13 +3,15 @@ import Foundation
 
 /// Bounded, viewport-local water textures shared by the native layer host and
 /// offscreen renderer. No texture allocation or tessellation occurs on warm frames.
-final class PondWaterSurface {
+public final class PondWaterSurface {
     private var keySize: CGSize = .zero
     private var keyScale: CGFloat = 0
     private(set) var keyTheme: PondTheme?
     private(set) var bed: CGImage?
-    private(set) var networks: [CGImage] = []
+    public private(set) var networks: [CGImage] = []
     private var overscan: CGFloat = 48
+
+    public init() {}
 
     func clear() {
         bed = nil
@@ -41,19 +43,19 @@ final class PondWaterSurface {
     }
 
     var hasCompleteAssets: Bool {
-        bed != nil && networks.count == 2
+        bed != nil && networks.count == 3
     }
 
     func hasCompleteAssets(for size: CGSize, scale: CGFloat) -> Bool {
-        keySize == size && keyScale == scale && bed != nil && networks.count == 2
+        keySize == size && keyScale == scale && bed != nil && networks.count == 3
     }
 
     func isPrepared(size: CGSize, scale: CGFloat, theme: PondTheme) -> Bool {
         keyTheme == theme && hasCompleteAssets(for: size, scale: scale)
     }
 
-    func prepare(size: CGSize, scale: CGFloat, theme: PondTheme) {
-        guard size != keySize || scale != keyScale || theme != keyTheme || bed == nil || networks.count != 2 else { return }
+    public func prepare(size: CGSize, scale: CGFloat, theme: PondTheme) {
+        guard size != keySize || scale != keyScale || theme != keyTheme || bed == nil || networks.count != 3 else { return }
         keySize = size
         keyScale = scale
         keyTheme = theme
@@ -61,8 +63,8 @@ final class PondWaterSurface {
         let meshSize = CGSize(width: size.width + overscan * 2, height: size.height + overscan * 2)
         // Keep the water treatment softly stepped instead of rendering a full
         // Retina texture. Bounding all three caches also limits multi-monitor memory.
-        let rasterScale = min(scale, 0.85, 1536 / max(meshSize.width, meshSize.height), sqrt(2_250_000 / (meshSize.width * meshSize.height)))
-        guard let newBed = PondBitmap.makeImage(size: size, scale: rasterScale, draw: {
+        let bedRasterScale = min(scale, 0.50, 1024 / max(size.width, size.height), sqrt(800_000 / (size.width * size.height)))
+        guard let newBed = PondBitmap.makeImage(size: size, scale: bedRasterScale, draw: {
             PondArtwork.drawWater(in: $0, rect: CGRect(origin: .zero, size: size), theme: theme)
         }) else {
             bed = nil
@@ -70,12 +72,13 @@ final class PondWaterSurface {
             keyTheme = nil
             return
         }
-        let newNetworks = (0..<2).compactMap { layer in
-            PondBitmap.makeImage(size: meshSize, scale: rasterScale) { bitmap in
+        let meshRasterScale = min(scale * 0.45, 0.45, 800 / max(meshSize.width, meshSize.height), sqrt(500_000 / (meshSize.width * meshSize.height)))
+        let newNetworks = (0..<3).compactMap { layer in
+            PondBitmap.makeImage(size: meshSize, scale: meshRasterScale) { bitmap in
                 Self.drawVoronoi(in: bitmap, size: meshSize, layer: layer, theme: theme)
             }
         }
-        guard newNetworks.count == 2 else {
+        guard newNetworks.count == 3 else {
             bed = nil
             networks = []
             keyTheme = nil
@@ -92,7 +95,7 @@ final class PondWaterSurface {
     @discardableResult
     func snapshotBlend(with target: PondWaterSurface, progress: CGFloat) -> Bool {
         guard let bedA = self.bed, let bedB = target.bed,
-              self.networks.count == 2, target.networks.count == 2,
+              self.networks.count == 3, target.networks.count == 3,
               keySize.width > 0, keySize.height > 0 else {
             return false
         }
@@ -111,10 +114,10 @@ final class PondWaterSurface {
         }
 
         let meshSize = CGSize(width: keySize.width + overscan * 2, height: keySize.height + overscan * 2)
-        // Bound rasterScale by meshSize (including overscan) to ensure mesh textures never exceed 1536 px or 2.25M pixels
-        let meshRasterScale = min(keyScale > 0 ? keyScale : 1.0, 1536 / max(meshSize.width, meshSize.height), sqrt(2_250_000 / (meshSize.width * meshSize.height)))
+        // Bound meshRasterScale by meshSize (including overscan) to ensure mesh textures never exceed 800 px or 500k pixels
+        let meshRasterScale = min(keyScale > 0 ? keyScale * 0.45 : 0.45, 0.45, 800 / max(meshSize.width, meshSize.height), sqrt(500_000 / (meshSize.width * meshSize.height)))
 
-        let newNetworks: [CGImage] = (0..<2).compactMap { i in
+        let newNetworks: [CGImage] = (0..<3).compactMap { i in
             let netA = self.networks[i]
             let netB = target.networks[i]
             return PondBitmap.makeImage(size: meshSize, scale: meshRasterScale) { ctx in
@@ -128,7 +131,7 @@ final class PondWaterSurface {
             }
         }
 
-        guard newNetworks.count == 2 else { return false }
+        guard newNetworks.count == 3 else { return false }
 
         self.bed = newBed
         self.networks = newNetworks
@@ -138,19 +141,50 @@ final class PondWaterSurface {
 
     func placements(time: Double) -> [PondImagePlacement] {
         let short = min(keySize.width, keySize.height)
+        let dirA = PondWaterCurrent.waveDirectionA
+        let dirB = PondWaterCurrent.waveDirectionB
+        let dirC = PondWaterCurrent.waveDirectionC
+
         return networks.enumerated().map { index, image in
-            let speed = index == 0 ? 0.11 : -0.075
-            let x = (CGFloat(sin(time * speed + Double(index) * 2)) * short * 0.014 * keyScale).rounded() / keyScale
-            let y = (CGFloat(cos(time * speed * 0.8 + Double(index))) * short * 0.010 * keyScale).rounded() / keyScale
-            return PondImagePlacement(image: image,
-                rect: CGRect(x: -overscan + x, y: -overscan + y,
-                             width: keySize.width + overscan * 2, height: keySize.height + overscan * 2), pixelated: false)
+            let dx: CGFloat
+            let dy: CGFloat
+            if index == 0 {
+                // Layer 0: Large caustics (Wave Direction A)
+                let phase = time * 0.12 * PondWaterCurrent.waveSpeedA
+                dx = CGFloat(cos(phase) * dirA.x - sin(phase * 0.8) * dirA.y) * short * 0.018
+                dy = CGFloat(sin(phase) * dirA.y + cos(phase * 0.8) * dirA.x) * short * 0.014
+            } else if index == 1 {
+                // Layer 1: Secondary large caustics (Wave Direction B)
+                let phase = time * 0.16 * PondWaterCurrent.waveSpeedB + 1.2
+                dx = CGFloat(cos(phase) * dirB.x + sin(phase * 0.7) * 0.2) * short * 0.014
+                dy = CGFloat(sin(phase) * dirB.y - cos(phase * 0.7) * 0.2) * short * 0.014
+            } else {
+                // Layer 2: Detail sparkling caustics (Wave Direction C shimmer)
+                let phase = time * 0.38 + 2.7
+                dx = CGFloat(sin(phase) * dirC.x + cos(time * 0.55) * 0.22) * short * 0.010
+                dy = CGFloat(cos(phase) * dirC.y - sin(time * 0.55) * 0.22) * short * 0.010
+            }
+            let quantX = (dx * keyScale).rounded() / keyScale
+            let quantY = (dy * keyScale).rounded() / keyScale
+            return PondImagePlacement(
+                image: image,
+                rect: CGRect(x: -overscan + quantX, y: -overscan + quantY,
+                             width: keySize.width + overscan * 2, height: keySize.height + overscan * 2),
+                pixelated: false
+            )
         }
     }
 
     private static func drawVoronoi(in context: CGContext, size: CGSize, layer: Int, theme: PondTheme) {
         let short = min(size.width, size.height)
-        let spacing = short * (layer == 0 ? 0.105 : 0.047)
+        let spacing: CGFloat
+        if layer == 0 {
+            spacing = short * 0.120 // Large current layer
+        } else if layer == 1 {
+            spacing = short * 0.055 // Secondary large current layer
+        } else {
+            spacing = short * 0.028 // Detail current layer
+        }
         let cols = Int(ceil(size.width / spacing)) + 4
         let rows = Int(ceil(size.height / spacing)) + 4
         var rng = SeededRandomNumberGenerator(seed: UInt64(8191 + layer * 457))
@@ -172,6 +206,11 @@ final class PondWaterSurface {
 
         for row in 1..<(rows - 1) {
             for col in 1..<(cols - 1) {
+                if layer == 2 {
+                    // Match Nagomi detail_region: patchy organic distribution
+                    let detailRegion = (row * 19 + col * 37) % 11
+                    if detailRegion < 4 { continue }
+                }
                 let site = sites[row * cols + col]
                 var polygon = [CGPoint(x: site.x - spacing * 1.8, y: site.y - spacing * 1.8),
                                CGPoint(x: site.x + spacing * 1.8, y: site.y - spacing * 1.8),
@@ -214,29 +253,71 @@ final class PondWaterSurface {
         let faintColor = caustics.faint.components
         let phaseAlphaGain = caustics.alphaGain
 
+        let layerOpacity: CGFloat
+        let lineWidthOuter: CGFloat
+        let lineWidthMid: CGFloat
+        let lineWidthInner: CGFloat
+        let lineWidthFaint: CGFloat
+        let alphaOuterBase: CGFloat
+        let alphaMidBase: CGFloat
+        let alphaInnerBase: CGFloat
+        let alphaFaintBase: CGFloat
+
+        if layer == 0 {
+            layerOpacity = caustics.largeOpacity
+            lineWidthOuter = unit * 2.2
+            lineWidthMid = unit * 0.70
+            lineWidthInner = unit * 0.28
+            lineWidthFaint = unit * 0.20
+            alphaOuterBase = 0.038
+            alphaMidBase = 0.080
+            alphaInnerBase = 0.20
+            alphaFaintBase = 0.060
+        } else if layer == 1 {
+            layerOpacity = caustics.secondaryOpacity
+            lineWidthOuter = unit * 1.1
+            lineWidthMid = unit * 0.38
+            lineWidthInner = unit * 0.15
+            lineWidthFaint = unit * 0.12
+            alphaOuterBase = 0.020
+            alphaMidBase = 0.045
+            alphaInnerBase = 0.10
+            alphaFaintBase = 0.035
+        } else {
+            layerOpacity = caustics.detailOpacity
+            lineWidthOuter = unit * 0.60
+            lineWidthMid = unit * 0.24
+            lineWidthInner = unit * 0.10
+            lineWidthFaint = unit * 0.08
+            alphaOuterBase = 0.015
+            alphaMidBase = 0.035
+            alphaInnerBase = 0.075
+            alphaFaintBase = 0.025
+        }
+
         for band in 0..<4 {
-            let exposure = [0.30, 0.55, 0.95, 1.65][band] * phaseAlphaGain
+            let exposure = [0.30, 0.55, 0.95, 1.65][band] * phaseAlphaGain * layerOpacity
             context.setStrokeColor(red: outerColor.0, green: outerColor.1, blue: outerColor.2,
-                                   alpha: (layer == 0 ? 0.035 : 0.012) * exposure)
-            context.setLineWidth(unit * (layer == 0 ? 2.0 : 0.90))
+                                   alpha: alphaOuterBase * exposure)
+            context.setLineWidth(lineWidthOuter)
             context.addPath(luminous[band])
             context.strokePath()
 
             context.setStrokeColor(red: outerColor.0, green: outerColor.1, blue: outerColor.2,
-                                   alpha: (layer == 0 ? 0.075 : 0.030) * exposure)
-            context.setLineWidth(unit * (layer == 0 ? 0.65 : 0.30))
+                                   alpha: alphaMidBase * exposure)
+            context.setLineWidth(lineWidthMid)
             context.addPath(luminous[band])
             context.strokePath()
 
             context.setStrokeColor(red: innerColor.0, green: innerColor.1, blue: innerColor.2,
-                                   alpha: (layer == 0 ? 0.19 : 0.065) * exposure)
-            context.setLineWidth(unit * (layer == 0 ? 0.25 : 0.12))
+                                   alpha: alphaInnerBase * exposure)
+            context.setLineWidth(lineWidthInner)
             context.addPath(luminous[band])
             context.strokePath()
 
             context.setStrokeColor(red: faintColor.0, green: faintColor.1, blue: faintColor.2,
-                                   alpha: (layer == 0 ? 0.055 : 0.025) * exposure)
-            context.setLineWidth(unit * (layer == 0 ? 0.20 : 0.11))
+                                   alpha: alphaFaintBase * exposure)
+            context.setLineWidth(lineWidthFaint)
             context.addPath(faint[band])
             context.strokePath()
         }

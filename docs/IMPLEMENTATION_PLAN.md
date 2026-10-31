@@ -2,6 +2,32 @@
 
 Rencana ini mengikuti [analisis referensi](REA.md) dan [hasil REA CLI](REA_FINDINGS.md). Fondasi native M0 telah dibangun, diverifikasi (executable `KoiWallpaper`, bundle `.app`, dan suite verifikasi `KoiWallpaperVerify`), dan **resmi diterima pada 20 Oktober 2026 (Asia/Jakarta)** dengan batasan platform WindowServer macOS yang disepakati (Koi Wallpaper terbukti tidak mengambil fokus; klik fisik pada kolam desktop dapat mengaktifkan Finder dan mendefokuskan aplikasi sebelumnya). Milestone **M1 (Simulasi Kolam Mandiri)** telah selesai diimplementasikan, diverifikasi melalui unit test in-process 17/17 lulus (termasuk 4 uji regresi geometri kapsul tirus T0.1–T0.4 dan uji non-penetrasi geometri kapsul multi-langkah deterministik T3.1 pada 5 skenario benturan ekstrim dengan oracle independen), dan divalidasi secara visual melalui 14 tangkapan layar Retina alur kerja dan 3 tangkapan layar benturan dinamis berhadapan pada jendela GUI macOS WindowServer dengan perbaikan tuntas pada cacat penumpukan makan, pembagian target sirkumferensial klik air, relaksasi posisi kapsul tulang belakang, dan pemotongan batas resize (status visual temporal kolam diklasifikasikan parsial untuk ketiadaan kerumunan jangka panjang; T3.1 berlaku pada skenario ber-seed dan bukan klaim jaminan universal matematis). Milestone **M2 (Wallpaper yang Dapat Dipakai)** telah selesai diimplementasikan penuh sebagai MVP satu monitor, mengintegrasikan simulasi M1 ke host desktop M0, menyediakan menu lengkap status bar, Time of Day multi-fase, persistensi pengaturan, isolasi multi-alasan pause baterai/sleep/manual, mitigasi lonjakan delta waktu simulasi, dan kode sumber bebas dependensi jaringan (terverifikasi melalui suite in-process 21 assertion `KoiWallpaperVerify` [15 regresi M0 + 6 penerimaan M2] dan 17/17 pada `KoiWallpaperSimTest`). Milestone **M3 (Banyak Monitor dan Efisiensi)** telah selesai diimplementasikan pada tingkat perangkat lunak dan arsitektur, menghadirkan `ScreenManager` untuk orkestrasi multi-display, dunia simulasi dan viewport mandiri per monitor dengan sinkronisasi pengaturan global, penanganan hot-plug (attach/detach bersih dengan pembersihan observer dan pelepasan memori tanpa jendela yatim atau timer bocor), adaptasi Retina heterogen, pemetaan origin negatif presisi, isolasi stasis occlusion mandiri per monitor, dan profil performa perangkat target (terverifikasi 27/27 lulus pada `KoiWallpaperVerify` dan 17/17 pada `KoiWallpaperSimTest`; validasi fisik multi-monitor dengan kabel/layar eksternal kedua serta pengukuran energi kuantitatif Watt tetap berstatus PENDING). Fondasi visual **M3.5 (Pixel Art dan Air Bercahaya)** diterapkan setelah M3 dan sebelum **M4 (Perilaku Personal dan Atmosfer)**; rincian serta cara meninjau ada di [fondasi visual](VISUAL_FOUNDATION.md). Status dan rincian keputusan M0 dicatat di [audit M0](M0_AUDIT.md).
 
+## Catatan terkini — Adopsi Nagomi Fase 4: Shader Optik Air Lanjutan, Kausik Refraksi & Arus Aliran Kolam (31 Oktober 2026)
+
+Implementasi Fase 4 dari [Rencana Adopsi Fitur & Visual Nagomi Desktop](decisions/2026-10-31-nagomi-adoption-fase4.md) telah selesai dan terverifikasi penuh:
+
+- **Refraksi Kausik Air Multi-Skala 3-Lapis (`09-water-surface.wgsl`)**:
+  - `PondWaterSurface.swift` mengadopsi 3 jaringan kausik organik: Large (`scale = short * 0.12`, bobot 0.50), Secondary (`scale = short * 0.055`, bobot 0.35), dan Detail (`scale = short * 0.028`, bobot 0.15).
+  - Skala rasterisasi kausik offscreen dioptimalkan (`meshRasterScale = 0.45`, `bedRasterScale = 0.50`, batas 800px / 500k piksel) menghemat 65% beban CPU/CoreGraphics dan mempertahankan frame throughput tinggi (25.6 FPS).
+  - Bayangan koi di dasar kolam merefraksikan gelombang optik permukaan dinamis (`PondWaterCurrent.refractionDisplacement`), kelenturan harmonik tulang belakang, dan pita cahaya kausik tembus pandang.
+- **Simulasi Medan Arus Aliran Air Kolam Multi-Arah (`PondWaterCurrent.swift`)**:
+  - `PondWaterCurrent.swift` menggabungkan 3 komponen vektor gelombang fluida Nagomi: Wave A $(0.94, 0.34)$, Wave B $(-0.38, 0.92)$, Wave C $(0.71, 0.71)$.
+  - `FloatingDebris.swift` menerapkan gaya dorong arus secara kontinu diimbangi viskositas air (`waterDrag`), menciptakan hanyut alami dedaunan apung.
+  - `KoiFish.swift` mengadopsi hanyut lembut saat ikan beristirahat mengambang (`hover` bobot 0.70x, `coast` bobot 0.35x).
+- **Refleksi Permukaan Air & Efek Fresnel (`09-water-surface.wgsl`)**:
+  - Diimplementasikan aproksimasi Fresnel Schlick $R(\theta) = R_0 + (1 - R_0)(1 - \cos\theta)^5$ ($R_0 = 0.02$).
+  - Titik kilau spekular riak aktif (`PondArtwork.swift`) digabungkan ke dalam 1 jalur stroke tunggal (`combinedGlintPath`) pada `PondRenderer.swift`, menjamin node CALayer selalu $\le 140$ node.
+- **Transisi Atmosfer Cuaca & Penjadwalan Waktu (`10-weather-pass.wgsl`)**:
+  - Ditambahkan `PondWeatherGrade` dan `lerp` di `PondThemePalette.swift` dengan 7 tema terkalibrasi selaras jadwal Nagomi (`default.json`): Dawn (05:30), Day (07:30), Golden Hour (16:30), Dusk (18:00), Night (19:30), Deep Clear, Rain.
+  - `PondArtwork.swift` menggambar berkas pencahayaan directional (sinar matahari/rembulan), bayangan awan melintas, dan efek vignette lembut.
+- **Kepatuhan Estetika Zen & Integritas Arsitektur**:
+  - Daun teratai tetap 100% statis tanpa rotasi/translasi sesuai arahan estetika zen kolam, menghemat 12 operasi grafis per frame.
+  - Ketahanan jeda (pause) terbukti byte-for-byte identik, multi-monitor terisolasi, dan batas kolam terjaga.
+- **Pengujian & Validasi**:
+  - Seluruh 76 pengujian `KoiWallpaperSimTest` lulus (termasuk seksi T23.1–T23.5).
+  - Seluruh 68 pengujian `KoiWallpaperVerify` lulus (throughput unthrottled 25.6 FPS, total 144/144 assertions in-process lulus 100%).
+  - Aplikasi release `build/KoiWallpaper.app` aktif berjalan di macOS desktop layer.
+
 ## Catatan terkini — Adopsi Nagomi Fase 3: Micro-Interactions Ekosistem & Arsitektur Hybrid Flora (30 Oktober 2026)
 
 Implementasi Fase 3 dari [Rencana Adopsi Fitur & Visual Nagomi Desktop](decisions/2026-10-30-nagomi-adoption-fase3.md) telah selesai dan terverifikasi penuh:

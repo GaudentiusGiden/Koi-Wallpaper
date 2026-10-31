@@ -81,9 +81,13 @@ public enum PondLighting {
     /// Baked caustic visibility: strongest near the upper opening and left light
     /// shaft, quieter in the deep central swimming area. Coordinates are 0...1.
     static func causticExposure(at point: CGPoint) -> CGFloat {
-        let top = exp(-1.5 * (pow((point.x - 0.48) / 0.34, 2) + pow((point.y - 0.96) / 0.26, 2)))
-        let shaft = exp(-pow((point.x - (0.025 + point.y * 0.37)) / 0.12, 2))
-        let right = exp(-pow((point.x - 0.94) / 0.18, 2))
+        let dx1 = (point.x - 0.48) / 0.34
+        let dy1 = (point.y - 0.96) / 0.26
+        let top = exp(-1.5 * (dx1 * dx1 + dy1 * dy1))
+        let dx2 = (point.x - (0.025 + point.y * 0.37)) / 0.12
+        let shaft = exp(-(dx2 * dx2))
+        let dx3 = (point.x - 0.94) / 0.18
+        let right = exp(-(dx3 * dx3))
         let depthAtten = 0.08 + point.y * 0.08
         return min(1, depthAtten + top * 0.90 + shaft * 0.64 + right * 0.22)
     }

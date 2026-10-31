@@ -71,7 +71,12 @@ public struct FloatingDebris: Identifiable, Sendable {
         self.bobbingSpeed = Double.random(in: 1.0...2.2, using: &prng)
     }
 
-    public mutating func update(dt: Double, bounds: PondBounds) {
+    public mutating func update(
+        dt: Double,
+        bounds: PondBounds,
+        current: PondVector? = nil,
+        time: Double? = nil
+    ) {
         age += dt
         bobbingPhase += bobbingSpeed * dt
 
@@ -96,10 +101,14 @@ public struct FloatingDebris: Identifiable, Sendable {
         velocity = velocity * drag
         spin *= exp(-1.2 * dt)
 
-        // Subtle ambient water drift (sinusoidal micro-currents)
-        let ambientDriftX = sin(bobbingPhase * 0.4) * 1.5 * dt
-        let ambientDriftY = cos(bobbingPhase * 0.35) * 1.2 * dt
-        position = PondVector(x: position.x + ambientDriftX, y: position.y + ambientDriftY)
+        // Continuous multi-directional water current drift (Nagomi waveDirectionA, waveDirectionB, waveDirectionC)
+        let flowCurrent = current ?? PondWaterCurrent.currentVector(at: position, in: bounds, time: time ?? age)
+        position = position + (flowCurrent * dt)
+
+        // Subtle bobbing micro-oscillations
+        let microBobX = sin(bobbingPhase * 0.4) * 0.4 * dt
+        let microBobY = cos(bobbingPhase * 0.35) * 0.3 * dt
+        position = PondVector(x: position.x + microBobX, y: position.y + microBobY)
     }
 
     /// Receives a physical wave impulse from an expanding water surface ripple,

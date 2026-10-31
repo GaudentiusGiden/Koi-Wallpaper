@@ -2337,6 +2337,187 @@ do {
 }
 
 // -------------------------------------------------------------
+// SECTION 23: NAGOMI DESKTOP PHASE 4 - ADVANCED WATER OPTICS, CAUSTICS REFRACTION & CONTINUOUS CURRENT DRIFT
+// -------------------------------------------------------------
+print("\n--- 23. Nagomi Desktop Phase 4: Water Optics, Caustics Refraction & Continuous Flow Current ---")
+
+do {
+    // T23.1 Multi-Scale 3-Layer Water Caustics & Dynamic Shadow Refraction
+    let water = PondWaterSurface()
+    water.prepare(size: CGSize(width: 800, height: 600), scale: 1.0, theme: PondTheme.day)
+    let has3CausticNetworks = (water.networks.count == 3)
+
+    let bounds = PondBounds(width: 800, height: 600)
+    let p = PondVector(x: 350, y: 250)
+    let ref0 = PondWaterCurrent.refractionDisplacement(at: p, in: bounds, time: 0.0)
+    let ref1 = PondWaterCurrent.refractionDisplacement(at: p, in: bounds, time: 1.5)
+    let refractionVariesWithTime = (ref0.x != ref1.x || ref0.y != ref1.y)
+    let refractionMagnitudeBounded = (hypot(ref0.x, ref0.y) > 0.001 && hypot(ref0.x, ref0.y) < 15.0 &&
+                                      hypot(ref1.x, ref1.y) > 0.001 && hypot(ref1.x, ref1.y) < 15.0)
+
+    // Dynamic wave harmonic flex on koi shadow spine
+    var fish = KoiFish(variety: KoiVariety.allEightVarieties[0], position: p, length: 50.0)
+    fish.depth = 0.5
+    let flex0 = fish.spineCurvature
+    let waveFlex = sin(1.0 * 2.1 + Double(fish.position.x) * 0.015 + Double(fish.position.y) * 0.02) * 0.06 * Double(1.0 - 0.5 * 0.4)
+    let effectiveFlex = flex0 + waveFlex
+    let sHarmonic = KoiFish.localSpinePoints(length: fish.length, flex: effectiveFlex, wigglePhase: fish.wigglePhase)
+    let sNormal = KoiFish.localSpinePoints(length: fish.length, flex: flex0, wigglePhase: fish.wigglePhase)
+    let spineFlexed = (sHarmonic.p6.x != sNormal.p6.x || sHarmonic.p6.y != sNormal.p6.y)
+
+    let t23_1Passed = has3CausticNetworks && refractionVariesWithTime && refractionMagnitudeBounded && spineFlexed
+    recordSimTest(
+        "T23.1 Multi-Scale 3-Layer Water Caustics & Dynamic Shadow Refraction",
+        passed: t23_1Passed,
+        details: "networks=\(water.networks.count), ref0=(\(String(format: "%.2f", ref0.x)), \(String(format: "%.2f", ref0.y))), ref1=(\(String(format: "%.2f", ref1.x)), \(String(format: "%.2f", ref1.y))), spineFlexed=\(spineFlexed)"
+    )
+}
+
+do {
+    // T23.2 Continuous Drift & Multi-Directional Water Current Field
+    let dirA = PondWaterCurrent.waveDirectionA
+    let dirB = PondWaterCurrent.waveDirectionB
+    let dirC = PondWaterCurrent.waveDirectionC
+    let directionsValid = (abs(dirA.x - 0.94) < 0.01 && abs(dirA.y - 0.34) < 0.01 &&
+                           abs(dirB.x - (-0.38)) < 0.01 && abs(dirB.y - 0.92) < 0.01 &&
+                           abs(dirC.x - 0.71) < 0.01 && abs(dirC.y - 0.71) < 0.01)
+
+    let bounds = PondBounds(width: 800, height: 600)
+    let currentVel = PondWaterCurrent.currentVector(at: PondVector(x: 400, y: 300), in: bounds, time: 2.0)
+    let currentSpeed = hypot(currentVel.x, currentVel.y)
+    let currentSpeedBounded = (currentSpeed > 0.1 && currentSpeed < 15.0)
+
+    // Floating debris drift under continuous water current
+    var debris = FloatingDebris(type: .sakuraPetal, position: PondVector(x: 400, y: 300), velocity: .zero, lifespan: 30.0)
+    let initialDebrisPos = debris.position
+    debris.update(dt: 0.1, bounds: bounds, current: currentVel, time: 2.0)
+    let debrisDisplacedByCurrent = (debris.position != initialDebrisPos)
+
+    // Koi fish drift during hover vs burst/glide
+    var fish = KoiFish(variety: KoiVariety.allEightVarieties[3], position: PondVector(x: 400, y: 300), length: 50.0)
+    fish.swimCadence = .hover
+    fish.velocity = .zero
+    fish.worldTime = 2.0
+    let initialFishPos = fish.position
+    fish.update(dt: 0.1, bounds: bounds, allFish: [], nearestFood: nil)
+    let hoverDisplaced = (fish.position != initialFishPos)
+
+    let t23_2Passed = directionsValid && currentSpeedBounded && debrisDisplacedByCurrent && hoverDisplaced
+    recordSimTest(
+        "T23.2 Continuous Drift & Multi-Directional Water Current Field",
+        passed: t23_2Passed,
+        details: "directionsValid=\(directionsValid), currentSpeed=\(String(format: "%.2f", currentSpeed))pt/s, debrisDisplaced=\(debrisDisplacedByCurrent), hoverDisplaced=\(hoverDisplaced)"
+    )
+}
+
+do {
+    // T23.3 Fresnel Specular Glints & Ripple Wave Reflection
+    let normalCos: Double = 1.0 // Perpendicular line of sight (facing surface directly)
+    let glancingCos: Double = 0.0 // Glancing angle (parallel to surface)
+    let fNormal = PondWaterCurrent.fresnelReflectance(cosTheta: normalCos, f0: 0.02)
+    let fGlancing = PondWaterCurrent.fresnelReflectance(cosTheta: glancingCos, f0: 0.02)
+    let fresnelFormulaValid = (abs(fNormal - 0.02) < 0.001 && abs(fGlancing - 1.0) < 0.001)
+
+    // Wave crest specular glint intensity
+    let bounds = PondBounds(width: 800, height: 600)
+    let lightDir = (-0.58, 0.82)
+    let spec0 = PondWaterCurrent.specularIntensity(at: PondVector(x: 400, y: 300), in: bounds, time: 0.0, lightDirection: lightDir)
+    let spec1 = PondWaterCurrent.specularIntensity(at: PondVector(x: 400, y: 300), in: bounds, time: 1.0, lightDirection: lightDir)
+    let specularVaries = (spec0 != spec1)
+    let specularBounded = (spec0 >= 0.0 && spec0 <= 1.0 && spec1 >= 0.0 && spec1 <= 1.0)
+
+    let t23_3Passed = fresnelFormulaValid && specularVaries && specularBounded
+    recordSimTest(
+        "T23.3 Fresnel Specular Glints & Ripple Wave Reflection",
+        passed: t23_3Passed,
+        details: "fNormal=\(String(format: "%.3f", fNormal)), fGlancing=\(String(format: "%.3f", fGlancing)), spec0=\(String(format: "%.3f", spec0)), spec1=\(String(format: "%.3f", spec1))"
+    )
+}
+
+do {
+    // T23.4 Atmospheric Weather Pass Calibration & Time Schedule
+    let themes: [PondTheme] = [.day, .dawn, .goldenHour, .dusk, .night, .deepClear, .rain]
+    let allThemesHaveWeather = themes.allSatisfy { theme in
+        _ = theme.weatherGrade
+        return true
+    }
+
+    // Nagomi default time preset schedule evaluation
+    // Dawn 05:30, Day 07:30, Golden Hour 16:30, Dusk 18:00, Night 19:30
+    func makeDate(hour: Int, minute: Int) -> Date {
+        var comps = DateComponents()
+        comps.year = 2026
+        comps.month = 10
+        comps.day = 31
+        comps.hour = hour
+        comps.minute = minute
+        return Calendar.current.date(from: comps)!
+    }
+
+    let dawnPhase = TimeOfDayController.calculatePhase(mode: .auto, manualPhase: TimeOfDayPhase.day, date: makeDate(hour: 6, minute: 0), isDarkMode: false)
+    let dayPhase = TimeOfDayController.calculatePhase(mode: .auto, manualPhase: TimeOfDayPhase.day, date: makeDate(hour: 12, minute: 0), isDarkMode: false)
+    let goldenPhase = TimeOfDayController.calculatePhase(mode: .auto, manualPhase: TimeOfDayPhase.day, date: makeDate(hour: 17, minute: 0), isDarkMode: false)
+    let duskPhase = TimeOfDayController.calculatePhase(mode: .auto, manualPhase: TimeOfDayPhase.day, date: makeDate(hour: 18, minute: 30), isDarkMode: false)
+    let nightPhase = TimeOfDayController.calculatePhase(mode: .auto, manualPhase: TimeOfDayPhase.day, date: makeDate(hour: 22, minute: 0), isDarkMode: false)
+
+    let scheduleMatchesNagomi = (dawnPhase == .dawn && dayPhase == .day && goldenPhase == .goldenHour &&
+                                duskPhase == .dusk && nightPhase == .night)
+
+    // Smooth weather lerp between Day and Night
+    let dayWeather = PondTheme.day.weatherGrade
+    let nightWeather = PondTheme.night.weatherGrade
+    let midWeather = PondWeatherGrade.lerp(from: dayWeather, to: nightWeather, t: 0.5)
+    let midVignetteInterpolated = (midWeather.vignette > dayWeather.vignette && midWeather.vignette < nightWeather.vignette)
+    let midBrightnessInterpolated = (midWeather.brightness < dayWeather.brightness && midWeather.brightness > nightWeather.brightness)
+
+    let t23_4Passed = allThemesHaveWeather && scheduleMatchesNagomi && midVignetteInterpolated && midBrightnessInterpolated
+    recordSimTest(
+        "T23.4 Atmospheric Weather Pass Calibration & Time Schedule",
+        passed: t23_4Passed,
+        details: "themesCount=\(themes.count), scheduleMatch=\(scheduleMatchesNagomi), midVignette=\(String(format: "%.2f", midWeather.vignette)), midBrightness=\(String(format: "%.2f", midWeather.brightness))"
+    )
+}
+
+do {
+    // T23.5 Continuous Current Multi-Seed Confinement & Stability
+    let testBounds = PondBounds(width: 800, height: 600)
+    var allSeedsStayedInBounds = true
+    var noNaNOrInf = true
+
+    let seeds: [UInt64] = [101, 202, 303, 404]
+    for seed in seeds {
+        let sim = PondSimulation(
+            bounds: testBounds,
+            initialDebris: [
+                FloatingDebris(type: .sakuraPetal, position: PondVector(x: 200, y: 200), velocity: PondVector(x: 5, y: -5), lifespan: 100.0),
+                FloatingDebris(type: .momijiLeaf, position: PondVector(x: 600, y: 400), velocity: PondVector(x: -8, y: 6), lifespan: 100.0)
+            ],
+            seed: seed
+        )
+
+        for _ in 0..<300 {
+            sim.advance(deltaTime: 1.0 / 60.0)
+        }
+
+        for fish in sim.fish {
+            if !testBounds.contains(fish.position) { allSeedsStayedInBounds = false }
+            if !fish.position.x.isFinite || !fish.position.y.isFinite { noNaNOrInf = false }
+        }
+        for debris in sim.floatingDebris {
+            if !testBounds.contains(debris.position, inset: -50.0) { allSeedsStayedInBounds = false }
+            if !debris.position.x.isFinite || !debris.position.y.isFinite { noNaNOrInf = false }
+        }
+    }
+
+    let t23_5Passed = allSeedsStayedInBounds && noNaNOrInf
+    recordSimTest(
+        "T23.5 Continuous Current Multi-Seed Confinement & Stability",
+        passed: t23_5Passed,
+        details: "seedsCount=\(seeds.count), stayedInBounds=\(allSeedsStayedInBounds), noNaNOrInf=\(noNaNOrInf)"
+    )
+}
+
+// -------------------------------------------------------------
 // SUMMARY & RESULTS
 // -------------------------------------------------------------
 print("\n=======================================================")

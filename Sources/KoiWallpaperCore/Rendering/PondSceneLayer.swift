@@ -8,10 +8,10 @@ public final class PondSceneLayer: CALayer {
     public let renderer: PondRenderer
     private let bedLayerA = CALayer()
     private let bedLayerB = CALayer()
-    private let causticContainers = [CALayer(), CALayer()]
-    private let causticSourceLayersA = [CALayer(), CALayer()]
-    private let causticPairLayers = [CALayer(), CALayer()]
-    private let causticLayersB = [CALayer(), CALayer()]
+    private let causticContainers = (0..<3).map { _ in CALayer() }
+    private let causticSourceLayersA = (0..<3).map { _ in CALayer() }
+    private let causticPairLayers = (0..<3).map { _ in CALayer() }
+    private let causticLayersB = (0..<3).map { _ in CALayer() }
     private let swimmerLayer = CALayer()
     private var strokeLayers: [CAShapeLayer] = []
     private let surfaceLayer = CALayer()

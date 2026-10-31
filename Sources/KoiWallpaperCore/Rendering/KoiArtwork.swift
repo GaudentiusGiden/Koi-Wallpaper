@@ -34,24 +34,44 @@ public enum KoiArtwork {
         theme: PondTheme = .day,
         customShadowStyle: PondLighting.ShadowStyle? = nil,
         customFishAmbientStyle: PondLighting.FishAmbientStyle? = nil,
-        paletteMode: KoiPaletteMode = .classic
+        paletteMode: KoiPaletteMode = .classic,
+        time: Double = 0.0,
+        bounds: PondBounds? = nil
     ) {
         context.saveGState()
         let length = CGFloat(fish.length)
         let halfWidth = CGFloat(fish.width / 2)
-        let s = KoiFish.localSpinePoints(length: fish.length, flex: fish.spineCurvature, wigglePhase: fish.wigglePhase)
-        let spine = [s.p0, s.p1, s.p2, s.p3, s.p4, s.p5, s.p6].map { CGPoint(x: $0.x, y: $0.y) }
 
-        // Dynamic Z-Depth shadow offset: as fish dives deeper, shadow shifts closer to under the fish
-        // based on Nagomi depthOffset (-3.0, -7.0) scaled relative to base length 48.0
-        let depthFactor = CGFloat(min(1.0, max(0.0, fish.depth)))
-        let baseOffset = PondLighting.shadowOffset(distance: length * 0.28)
-        let scaleFactor = length / 48.0
-        let shadowDepthShiftX = CGFloat(-3.0) * scaleFactor * depthFactor
-        let shadowDepthShiftY = CGFloat(-7.0) * scaleFactor * depthFactor
-        let shadowOffset = drawShadowOnly
-            ? CGPoint(x: baseOffset.x + shadowDepthShiftX, y: baseOffset.y + shadowDepthShiftY)
-            : .zero
+        // Dynamic optical wave refraction and shadow parameters
+        let effectiveFlex: Double
+        let shadowOffset: CGPoint
+        let depthFactor: CGFloat
+        let resolvedBounds: PondBounds
+        if drawShadowOnly {
+            let res = bounds ?? PondBounds(width: 800.0, height: 600.0)
+            resolvedBounds = res
+            let ref = PondWaterCurrent.refractionDisplacement(at: fish.position, in: res, time: time)
+            let df = CGFloat(min(1.0, max(0.0, fish.depth)))
+            depthFactor = df
+            let waveHarmonic = sin(time * 2.1 + Double(fish.position.x) * 0.015 + Double(fish.position.y) * 0.02) * 0.06 * Double(1.0 - df * 0.4)
+            effectiveFlex = fish.spineCurvature + waveHarmonic
+            let baseOffset = PondLighting.shadowOffset(distance: length * 0.28)
+            let scaleFactor = length / 48.0
+            let shadowDepthShiftX = CGFloat(-3.0) * scaleFactor * df
+            let shadowDepthShiftY = CGFloat(-7.0) * scaleFactor * df
+            shadowOffset = CGPoint(
+                x: baseOffset.x + shadowDepthShiftX + CGFloat(ref.x),
+                y: baseOffset.y + shadowDepthShiftY + CGFloat(ref.y)
+            )
+        } else {
+            resolvedBounds = PondBounds(width: 1, height: 1)
+            depthFactor = 0.0
+            effectiveFlex = fish.spineCurvature
+            shadowOffset = .zero
+        }
+
+        let s = KoiFish.localSpinePoints(length: fish.length, flex: effectiveFlex, wigglePhase: fish.wigglePhase)
+        let spine = [s.p0, s.p1, s.p2, s.p3, s.p4, s.p5, s.p6].map { CGPoint(x: $0.x, y: $0.y) }
 
         context.translateBy(x: CGFloat(fish.position.x) + shadowOffset.x, y: CGFloat(fish.position.y) + shadowOffset.y)
         context.rotate(by: CGFloat(fish.heading))
@@ -91,6 +111,31 @@ public enum KoiArtwork {
                                             side: side, flutter: flutter, turnBias: turnFinBias))
             }
             context.fillPath()
+
+            // 3. Dynamic caustic refraction light veins cutting across shadow silhouette on pond bed
+            let causticExposure = PondLighting.causticExposure(at: CGPoint(
+                x: max(0.0, min(1.0, (fish.position.x + Double(shadowOffset.x)) / max(1.0, resolvedBounds.width))),
+                y: max(0.0, min(1.0, (fish.position.y + Double(shadowOffset.y)) / max(1.0, resolvedBounds.height)))
+            ))
+            let causticAlpha = (0.04 + 0.06 * causticExposure) * theme.renderPalette.caustics.alphaGain
+            if causticAlpha > 0.005 {
+                let cColor = theme.renderPalette.caustics.inner.components
+                context.setStrokeColor(red: cColor.0, green: cColor.1, blue: cColor.2, alpha: causticAlpha)
+                context.setLineWidth(max(0.7, length * 0.03))
+                let veinPath = CGMutablePath()
+                let veinPhase = time * 0.45 + Double(fish.position.x) * 0.03
+                let vOffset1 = CGFloat(sin(veinPhase) * 5.0)
+                let vOffset2 = CGFloat(cos(veinPhase * 0.8) * 6.0)
+                veinPath.move(to: CGPoint(x: spine[1].x + vOffset1, y: -halfWidth * 0.6))
+                veinPath.addQuadCurve(to: CGPoint(x: spine[3].x - vOffset1, y: halfWidth * 0.6),
+                                      control: CGPoint(x: spine[2].x, y: vOffset2))
+                veinPath.move(to: CGPoint(x: spine[3].x + vOffset2, y: -halfWidth * 0.4))
+                veinPath.addQuadCurve(to: CGPoint(x: spine[5].x - vOffset2, y: halfWidth * 0.4),
+                                      control: CGPoint(x: spine[4].x, y: -vOffset1))
+                context.addPath(veinPath)
+                context.strokePath()
+            }
+
             context.restoreGState()
             return
         }

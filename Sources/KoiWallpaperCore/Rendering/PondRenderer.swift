@@ -27,6 +27,7 @@ struct PondRenderFrame {
     let floraTarget: [PondImagePlacement]
     let insects: PondImagePlacement?
     let tint: CGColor?
+    let weatherGrade: PondWeatherGrade?
     let transitionProgress: CGFloat
     let isTransitioning: Bool
 }
@@ -277,6 +278,9 @@ public final class PondRenderer {
             }
             for placement in frame.flora { draw(placement, in: context) }
             if let insects = frame.insects { draw(insects, in: context) }
+            if let grade = frame.weatherGrade {
+                PondArtwork.drawWeatherAtmosphere(in: context, rect: CGRect(origin: .zero, size: rect.size), grade: grade, time: simulation.elapsedTime)
+            }
             if let tint = frame.tint {
                 context.setFillColor(tint)
                 context.fill(CGRect(origin: .zero, size: rect.size))
@@ -350,6 +354,9 @@ public final class PondRenderer {
                 context.restoreGState()
             }
             if let insects = frame.insects { draw(insects, in: context) }
+            if let grade = frame.weatherGrade {
+                PondArtwork.drawWeatherAtmosphere(in: context, rect: CGRect(origin: .zero, size: rect.size), grade: grade, time: simulation.elapsedTime)
+            }
             if let tint = frame.tint {
                 context.setFillColor(tint)
                 context.fill(CGRect(origin: .zero, size: rect.size))
@@ -473,7 +480,9 @@ public final class PondRenderer {
                     in: bitmap,
                     drawShadowOnly: true,
                     theme: toTheme,
-                    customShadowStyle: shadowStyle
+                    customShadowStyle: shadowStyle,
+                    time: simulation.elapsedTime,
+                    bounds: simulation.bounds
                 )
             }
             for visitor in simulation.visitors {
@@ -561,25 +570,9 @@ public final class PondRenderer {
 
         renderFrameIndex &+= 1
 
-        let animateFlora: ([PondImagePlacement]) -> [PondImagePlacement] = { sources in
-            let t = simulation.elapsedTime
-            return sources.enumerated().map { index, source in
-                let dx = (CGFloat(sin(t * 0.18 + Double(index))) * short * 0.0025 * scale).rounded() / scale
-                let dy = (CGFloat(cos(t * 0.15 + Double(index) * 1.3)) * short * 0.0018 * scale).rounded() / scale
-                let rawAngle = CGFloat(sin(t * 0.16 + Double(index))) * 0.005
-                let angle = (rawAngle * 1000).rounded() / 1000
-
-                return PondImagePlacement(
-                    image: source.image,
-                    rect: source.rect.offsetBy(dx: dx, dy: dy),
-                    pixelated: true,
-                    angle: angle
-                )
-            }
-        }
-
-        let floraA = animateFlora(cachedFloraA)
-        let floraB = isTransitioning ? animateFlora(cachedFloraB) : []
+        // Lily pads and lotus flowers remain static in accordance with Zen aesthetic guidelines
+        let floraA = cachedFloraA
+        let floraB = isTransitioning ? cachedFloraB : []
 
         let bedPlacementA = waterA.bed.map { PondImagePlacement(image: $0, rect: CGRect(origin: .zero, size: size), pixelated: false) }
         let bedPlacementB = isTransitioning ? waterB.bed.map { PondImagePlacement(image: $0, rect: CGRect(origin: .zero, size: size), pixelated: false) } : nil
@@ -647,6 +640,10 @@ public final class PondRenderer {
             }
         }
 
+        let gradeA = fromTheme.renderPalette.weather
+        let gradeB = toTheme.renderPalette.weather
+        let blendedWeatherGrade = isTransitioning ? PondWeatherGrade.lerp(from: gradeA, to: gradeB, t: clampedP) : gradeB
+
         return PondRenderFrame(
             size: size,
             bed: bedPlacementA,
@@ -659,16 +656,21 @@ public final class PondRenderer {
             floraTarget: floraB,
             insects: insectPlacement,
             tint: tintColor,
+            weatherGrade: blendedWeatherGrade,
             transitionProgress: clampedP,
             isTransitioning: isTransitioning
         )
     }
 
     private func draw(_ placement: PondImagePlacement, in context: CGContext) {
-        context.saveGState()
         context.interpolationQuality = .none
+        if placement.angle == 0 {
+            context.draw(placement.image, in: placement.rect)
+            return
+        }
+        context.saveGState()
         context.translateBy(x: placement.rect.midX, y: placement.rect.midY)
-        if placement.angle != 0 { context.rotate(by: placement.angle) }
+        context.rotate(by: placement.angle)
         context.draw(placement.image, in: CGRect(x: -placement.rect.width / 2, y: -placement.rect.height / 2,
                                                 width: placement.rect.width, height: placement.rect.height))
         context.restoreGState()
@@ -760,7 +762,7 @@ public final class PondRenderer {
         let gb = gA.color.2 + (gB.color.2 - gA.color.2) * t
         let gAlpha = gA.alpha + (gB.alpha - gA.alpha) * t
 
-        for i in 0..<12 {
+        for i in 0..<11 {
             let seed = Double(i)
             let x = size.width * CGFloat(0.10 + (sin(seed * 7.3) * 0.5 + 0.5) * 0.80) + CGFloat(sin(simulation.elapsedTime * 0.11 + seed)) * unit * 2
             let y = size.height * CGFloat(0.10 + (cos(seed * 4.7) * 0.5 + 0.5) * 0.80)
@@ -772,6 +774,48 @@ public final class PondRenderer {
                 path: path,
                 color: CGColor(red: gr, green: gg, blue: gb, alpha: visibility * gAlpha),
                 width: unit * 0.25
+            ))
+        }
+
+        // Fresnel Specular Glints on active multi-directional wave crests (strictly 1 combined stroke)
+        let gradeA = fromTheme.renderPalette.weather
+        let gradeB = toTheme.renderPalette.weather
+        let blendedGrade = PondWeatherGrade.lerp(from: gradeA, to: gradeB, t: t)
+        let specColor = (t < 0.5 ? fromTheme : toTheme).renderPalette.ripple.specular.components
+
+        let combinedGlintPath = CGMutablePath()
+        var maxGlintAlpha: CGFloat = 0.0
+        let glintCount = 8
+        for i in 0..<glintCount {
+            let seed = Double(i * 19 + 7)
+            let normX = 0.12 + (sin(seed * 4.31) * 0.5 + 0.5) * 0.76
+            let normY = 0.15 + (cos(seed * 5.73) * 0.5 + 0.5) * 0.70
+            let posX = size.width * CGFloat(normX)
+            let posY = size.height * CGFloat(normY)
+
+            let intensity = PondWaterCurrent.specularIntensity(
+                at: PondVector(x: Double(posX), y: Double(posY)),
+                in: PondBounds(width: Double(size.width), height: Double(size.height)),
+                time: simulation.elapsedTime,
+                lightDirection: (Double(blendedGrade.lightDirection.0), Double(blendedGrade.lightDirection.1))
+            )
+
+            guard intensity > 0.08 else { continue }
+            let glintAlpha = CGFloat(intensity) * max(0.12, blendedGrade.lightStrength) * 1.8
+            if glintAlpha > maxGlintAlpha { maxGlintAlpha = glintAlpha }
+            let glintSize = unit * (0.8 + CGFloat(intensity) * 1.5)
+
+            combinedGlintPath.move(to: CGPoint(x: posX - glintSize, y: posY))
+            combinedGlintPath.addLine(to: CGPoint(x: posX + glintSize, y: posY))
+            combinedGlintPath.move(to: CGPoint(x: posX, y: posY - glintSize * 0.7))
+            combinedGlintPath.addLine(to: CGPoint(x: posX, y: posY + glintSize * 0.7))
+        }
+
+        if !combinedGlintPath.isEmpty {
+            strokes.append(PondStroke(
+                path: combinedGlintPath,
+                color: CGColor(red: specColor.0, green: specColor.1, blue: specColor.2, alpha: min(1.0, maxGlintAlpha)),
+                width: max(0.6, unit * 0.22)
             ))
         }
 

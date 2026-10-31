@@ -137,6 +137,90 @@ public enum PondArtwork {
         drawAtmosphere(in: context, rect: rect, theme: phase.theme)
     }
 
+    /// Renders the atmospheric weather pass (directional sun/moonlight beam, cloud shadow wave, and corner vignette)
+    /// conforming directly to Nagomi Desktop `10-weather-pass.wgsl`.
+    public static func drawWeatherAtmosphere(
+        in context: CGContext,
+        rect: CGRect,
+        grade: PondWeatherGrade,
+        time: Double
+    ) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        guard grade.cloudStrength > 0.02 || grade.lightStrength > 0.02 || grade.vignette > 0.02 else { return }
+        let space = CGColorSpaceCreateDeviceRGB()
+        let w = rect.width
+        let h = rect.height
+
+        context.saveGState()
+
+        // 1. Cloud Shadow Wave Modulation (from 10-weather-pass.wgsl)
+        if grade.cloudStrength > 0.005 {
+            let cloudAlpha = grade.cloudStrength * CGFloat(0.08 + 0.05 * sin(time * 0.035))
+            let cloudShiftX = CGFloat(fmod(time * 6.0, Double(w)))
+            let cloudShiftY = CGFloat(fmod(time * 3.5, Double(h)))
+            context.saveGState()
+            context.setBlendMode(.multiply)
+            let cloudGradientColors = [
+                CGColor(red: 0.12, green: 0.18, blue: 0.22, alpha: cloudAlpha * 0.8),
+                CGColor(red: 0.20, green: 0.25, blue: 0.28, alpha: cloudAlpha * 0.3),
+                CGColor(red: 0.12, green: 0.18, blue: 0.22, alpha: cloudAlpha * 0.8)
+            ]
+            if let cloudGrad = CGGradient(colorsSpace: space, colors: cloudGradientColors as CFArray, locations: [0.0, 0.5, 1.0]) {
+                context.drawLinearGradient(
+                    cloudGrad,
+                    start: CGPoint(x: cloudShiftX - w * 0.5, y: cloudShiftY - h * 0.5),
+                    end: CGPoint(x: cloudShiftX + w * 0.5, y: cloudShiftY + h * 0.5),
+                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                )
+            }
+            context.restoreGState()
+        }
+
+        // 2. Directional Sunlight / Moonlight Beam (from 10-weather-pass.wgsl)
+        if grade.lightStrength > 0.01 {
+            context.saveGState()
+            context.setBlendMode(.plusLighter)
+            let dirX = CGFloat(grade.lightDirection.0)
+            let dirY = CGFloat(grade.lightDirection.1)
+            let dirLen = max(0.001, hypot(dirX, dirY))
+            let normDirX = dirX / dirLen
+            let normDirY = dirY / dirLen
+
+            let beamAlpha = grade.lightStrength * 0.45
+            let lightColors = [
+                CGColor(red: grade.lightColor.0, green: grade.lightColor.1, blue: grade.lightColor.2, alpha: 0.0),
+                CGColor(red: grade.lightColor.0, green: grade.lightColor.1, blue: grade.lightColor.2, alpha: beamAlpha * 0.5),
+                CGColor(red: grade.lightColor.0, green: grade.lightColor.1, blue: grade.lightColor.2, alpha: beamAlpha)
+            ]
+            let startP = CGPoint(x: rect.midX - normDirX * w * 0.55, y: rect.midY - normDirY * h * 0.55)
+            let endP = CGPoint(x: rect.midX + normDirX * w * 0.55, y: rect.midY + normDirY * h * 0.55)
+            if let grad = CGGradient(colorsSpace: space, colors: lightColors as CFArray, locations: [0.0, 0.45, 1.0]) {
+                context.drawLinearGradient(grad, start: startP, end: endP, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+            }
+            context.restoreGState()
+        }
+
+        // 3. Atmospheric Edge Vignette (from 10-weather-pass.wgsl)
+        if grade.vignette > 0.01 {
+            context.saveGState()
+            context.setBlendMode(.multiply)
+            let vigAlpha = grade.vignette * 0.50
+            let vigColors = [
+                CGColor(red: 0.02, green: 0.04, blue: 0.06, alpha: 0.0),
+                CGColor(red: 0.02, green: 0.04, blue: 0.06, alpha: vigAlpha * 0.35),
+                CGColor(red: 0.02, green: 0.04, blue: 0.06, alpha: vigAlpha)
+            ]
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let maxR = max(w, h) * 0.72
+            if let vigGrad = CGGradient(colorsSpace: space, colors: vigColors as CFArray, locations: [0.0, 0.65, 1.0]) {
+                context.drawRadialGradient(vigGrad, startCenter: center, startRadius: maxR * 0.35, endCenter: center, endRadius: maxR, options: [.drawsAfterEndLocation])
+            }
+            context.restoreGState()
+        }
+
+        context.restoreGState()
+    }
+
     // MARK: - Food Pellets
 
     public static func drawPellets(_ pellets: [FoodPellet], in context: CGContext) {
@@ -830,16 +914,21 @@ public enum PondArtwork {
 
         let themePalette = theme.renderPalette
         let palette = (ripple.type == .foodDrop) ? PondThemePalette.foodRipple : themePalette.ripple
+        let lightDir = themePalette.weather.lightDirection
+        let lightAngle = atan2(CGFloat(lightDir.1), CGFloat(lightDir.0))
 
         switch ripple.type {
         case .eatingNibble:
-            // Delicate koi nibble with soft surface reflection
+            // Delicate koi nibble with directional Fresnel specular arc (strictly 1 stroke)
             let nibblePath = CGMutablePath()
             nibblePath.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
             if radius >= 8.0 {
                 let rInner = radius * 0.55
                 nibblePath.addEllipse(in: CGRect(x: center.x - rInner, y: center.y - rInner, width: rInner * 2, height: rInner * 2))
             }
+            // Fresnel specular glint arc facing the light direction
+            nibblePath.addArc(center: center, radius: radius * 1.02, startAngle: lightAngle - .pi / 3.5, endAngle: lightAngle + .pi / 3.5, clockwise: false)
+
             return [
                 PondStroke(
                     path: nibblePath,
@@ -849,7 +938,7 @@ public enum PondArtwork {
             ]
 
         case .padBump:
-            // Organic lily pad contact wake wave with soft green-cyan crest
+            // Organic lily pad contact wake wave with soft green-cyan crest and Fresnel glint (strictly 1 stroke)
             let bumpPath = CGMutablePath()
             let rx = radius * 1.04
             let ry = radius * 0.96
@@ -858,6 +947,8 @@ public enum PondArtwork {
                 let rInner = radius * 0.58
                 bumpPath.addEllipse(in: CGRect(x: center.x - rInner, y: center.y - rInner, width: rInner * 2.0, height: rInner * 2.0))
             }
+            bumpPath.addArc(center: center, radius: rx * 1.01, startAngle: lightAngle - .pi / 4.0, endAngle: lightAngle + .pi / 4.0, clockwise: false)
+
             return [
                 PondStroke(
                     path: bumpPath,

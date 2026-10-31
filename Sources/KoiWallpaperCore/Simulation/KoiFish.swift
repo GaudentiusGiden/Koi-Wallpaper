@@ -62,13 +62,16 @@ public struct KoiFish: Identifiable, Sendable {
     public var depthTransitionDuration: Double
 
     // MARK: - 5-State Swimming Cadence
-    public private(set) var swimCadence: KoiSwimCadence
-    public private(set) var cadenceTimer: Double
+    public var swimCadence: KoiSwimCadence
+    public var cadenceTimer: Double
 
     // MARK: - 4 Approach Styles
     public private(set) var approachStyle: KoiApproachStyle
     public private(set) var approachTimer: Double
     public private(set) var approachSinPhase: Double
+
+    // MARK: - Water Current & Simulation Clock
+    public var worldTime: Double = 0.0
 
     public init(
         id: UUID = UUID(),
@@ -640,9 +643,31 @@ public struct KoiFish: Identifiable, Sendable {
         let maxSpeedStep = speedChangeRate * dt
         speed += min(max(speedDiff, -maxSpeedStep), maxSpeedStep)
 
+        worldTime += dt
+
         // 5. Update Position and Hard Clamp
         velocity = PondVector.fromAngle(heading, length: speed)
-        position += velocity * dt
+        var currentDrift = PondVector.zero
+        if state == .wandering {
+            let driftMultiplier: Double
+            switch swimCadence {
+            case .hover:
+                driftMultiplier = 0.70 // drifting lazily with the continuous pond current
+            case .coast:
+                driftMultiplier = 0.35 // gliding smoothly with current assistance
+            default:
+                driftMultiplier = 0.0
+            }
+            if driftMultiplier > 0.0 {
+                let current = PondWaterCurrent.currentVector(at: position, in: bounds, time: worldTime)
+                currentDrift = current * driftMultiplier
+                if swimCadence == .hover {
+                    let streamDiff = normalizeAngle(current.angle - heading)
+                    heading = normalizeAngle(heading + streamDiff * 0.12 * dt)
+                }
+            }
+        }
+        position += (velocity + currentDrift) * dt
 
         // Keep strictly inside bounds based on full fish artwork extent (mouth, tail, and fins)
         let maxAllowedInset = min(bounds.width * 0.45, bounds.height * 0.45)

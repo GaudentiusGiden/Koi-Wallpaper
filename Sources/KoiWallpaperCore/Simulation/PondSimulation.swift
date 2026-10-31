@@ -1259,9 +1259,10 @@ public final class PondSimulation: @unchecked Sendable {
             }
         }
 
-        // Update debris kinematics and drag
+        // Update debris kinematics and drag with continuous water current
         for i in 0..<floatingDebris.count {
-            floatingDebris[i].update(dt: dt, bounds: bounds)
+            let current = PondWaterCurrent.currentVector(at: floatingDebris[i].position, in: bounds, time: elapsedTime)
+            floatingDebris[i].update(dt: dt, bounds: bounds, current: current, time: elapsedTime)
         }
 
         // Remove expired debris or debris that drifted beyond margin
